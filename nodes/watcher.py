@@ -13,6 +13,9 @@ class BaseWatcherNode(threading.Thread, ABC):
         self.resource_event = threading.Event()
         super().__init__(name=name)
     
+    def set_successor_queue(self, successor_name: str, queue: Queue):
+        self.successor_queues[successor_name] = queue
+    
     def exit(self):
         self.stop_monitoring()
         self.resource_event.set()

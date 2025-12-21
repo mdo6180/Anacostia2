@@ -1,17 +1,23 @@
 import threading
 from queue import Queue
-from typing import Dict
+from typing import Dict, List
 import time
 
 
 
 class BaseStageNode(threading.Thread):
-    def __init__(self, name: str):
+    def __init__(self, name: str, predecessors: List['BaseStageNode'] = None):
         self.predecessor_queues: Dict[str, Queue] = {}
         self.successor_queues: Dict[str, Queue] = {}
         self.exit_event = threading.Event()
 
         super().__init__(name=name)
+    
+    def set_predecessor_queue(self, predecessor_name: str, queue: Queue):
+        self.predecessor_queues[predecessor_name] = queue
+    
+    def set_successor_queue(self, successor_name: str, queue: Queue):
+        self.successor_queues[successor_name] = queue
     
     def wait_predecessors(self):
         # Wait until all predecessor queues have at least one item
