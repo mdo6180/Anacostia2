@@ -2,17 +2,35 @@ import threading
 from queue import Queue
 from typing import Dict
 from abc import ABC, abstractmethod
-from utils import Result
+from logging import Logger
 
 
 
 class BaseWatcherNode(threading.Thread, ABC):
-    def __init__(self, name: str):
+    def __init__(self, name: str, logger: Logger = None):
         self.successor_queues: Dict[str, Queue] = {}
         self.exit_event = threading.Event()
         self.resource_event = threading.Event()
+        self.logger = logger
         super().__init__(name=name)
     
+    def log(self, message: str, level="DEBUG") -> None:
+        if self.logger is not None:
+            if level == "DEBUG":
+                self.logger.debug(message)
+            elif level == "INFO":
+                self.logger.info(message)
+            elif level == "WARNING":
+                self.logger.warning(message)
+            elif level == "ERROR":
+                self.logger.error(message)
+            elif level == "CRITICAL":
+                self.logger.critical(message)
+            else:
+                raise ValueError(f"Invalid log level: {level}")
+        else:
+            print(message)
+
     def set_successor_queue(self, successor_name: str, queue: Queue):
         self.successor_queues[successor_name] = queue
     
