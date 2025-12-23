@@ -16,7 +16,7 @@ class BaseStageNode(threading.Thread):
 
         for predecessor in self.predecessors:
             queue = Queue()
-            predecessor.set_successor_queue(self.name, queue)
+            predecessor.set_successor_queue(name, queue)
             self.set_predecessor_queue(predecessor.name, queue)
 
         super().__init__(name=name)
