@@ -3,11 +3,17 @@ from queue import Queue
 from typing import Dict
 from abc import ABC, abstractmethod
 from logging import Logger
+import os
+import time
+import traceback
+from threading import Thread
+
 
 
 
 class BaseWatcherNode(threading.Thread, ABC):
-    def __init__(self, name: str, logger: Logger = None):
+    def __init__(self, name: str, path: str, logger: Logger = None):
+        self.path = path
         self.successor_queues: Dict[str, Queue] = {}
         self.exit_event = threading.Event()
         self.resource_event = threading.Event()
@@ -38,15 +44,44 @@ class BaseWatcherNode(threading.Thread, ABC):
         self.stop_monitoring()
         self.resource_event.set()
     
-    @abstractmethod
     def start_monitoring(self) -> None:
         """
         Override to specify how the resource is monitored. 
         Typically, this method will be used to start an observer that runs in a child thread spawned by the thread running the node.
+        def _monitor_thread_func():
+            self.log(f"Starting observer thread for node '{self.name}'", level="INFO")
+            while self.exit_event.is_set() is False:
+                for root, dirnames, filenames in os.walk(self.path):
+                    for filename in filenames:
+                        filepath = os.path.join(root, filename)
+                        
+                        try:
+                            self.log(f"detected file {filepath}", level="INFO")
+                        
+                        except Exception as e:
+                            self.log(f"Unexpected error in monitoring logic for '{self.name}': {traceback.format_exc()}", level="ERROR")
+
+                if self.exit_event.is_set() is True: 
+                    self.log(f"Observer thread for node '{self.name}' exiting", level="INFO")
+                    return
+                try:
+                    self.trigger()
+                
+                except Exception as e:
+                    self.log(f"Error checking resource in node '{self.name}': {traceback.format_exc()}", level="ERROR")
+
+                # sleep for a while before checking again
+                time.sleep(0.1)
+
+            self.log(f"Observer thread for node '{self.name}' exited", level="INFO")
+
+        # since we are using asyncio.run, we need to create a new thread to run the event loop 
+        # because we can't run an event loop in the same thread as the FilesystemStoreNode
+        self.observer_thread = Thread(name=f"{self.name}_observer", target=_monitor_thread_func, daemon=True)
+        self.observer_thread.start()
         """
         pass
     
-    @abstractmethod
     def stop_monitoring(self) -> None:
         """
         Override to specify how the resource is monitored. 
