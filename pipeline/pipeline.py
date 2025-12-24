@@ -3,6 +3,8 @@ from logging import Logger
 import os
 import sqlite3
 
+from pipeline.queries import create_events_table
+
 from nodes.stage import BaseStageNode
 from nodes.watcher import BaseWatcherNode
 
@@ -18,9 +20,10 @@ class Pipeline:
             os.makedirs(self.db_folder)
         
         db_path = os.path.join(self.db_folder, 'anacostia.db')
-        self.conn = sqlite3.connect(db_path, check_same_thread=False)
+        self.conn = sqlite3.connect(db_path, check_same_thread=False, detect_types=sqlite3.PARSE_DECLTYPES)
         self.conn.execute("PRAGMA journal_mode=WAL;")
         self.cursor = self.conn.cursor()
+        self.cursor.execute(create_events_table)
         #self.cursor.execute('PRAGMA journal_mode=DELETE')
     
     def log(self, message: str, level="DEBUG") -> None:
