@@ -25,3 +25,25 @@ class Result(Enum):
     
     def __hash__(self) -> int:
         return super().__hash__()
+
+
+class EventType(Enum):
+    FILE_DETECTED = 0,
+    
+    def __repr__(self) -> str:
+        status_words = {
+            EventType.FILE_DETECTED: "FILE_DETECTED",
+        }
+        return status_words[self]
+
+    def __int__(self) -> int:
+        return self.value
+    
+    def __eq__(self, other: 'EventType') -> bool:
+        if other.value == self.value:
+            return True
+        else:
+            return False
+    
+    def __hash__(self) -> int:
+        return super().__hash__()

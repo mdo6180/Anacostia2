@@ -3,6 +3,7 @@ from queue import Queue
 from typing import Dict, List
 import time
 from logging import Logger
+from sqlite3 import Cursor
 
 
 
@@ -13,6 +14,7 @@ class BaseStageNode(threading.Thread):
         self.exit_event = threading.Event()
         self.predecessors = predecessors if predecessors is not None else []
         self.logger = logger
+        self.cursor: Cursor = None
 
         for predecessor in self.predecessors:
             queue = Queue()
@@ -37,6 +39,9 @@ class BaseStageNode(threading.Thread):
                 raise ValueError(f"Invalid log level: {level}")
         else:
             print(message)
+
+    def set_db_cursor(self, cursor: Cursor):
+        self.cursor = cursor
 
     def set_predecessor_queue(self, predecessor_name: str, queue: Queue):
         self.predecessor_queues[predecessor_name] = queue

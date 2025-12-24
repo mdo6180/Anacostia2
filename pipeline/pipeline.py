@@ -25,6 +25,9 @@ class Pipeline:
         self.cursor = self.conn.cursor()
         self.cursor.execute(create_events_table)
         #self.cursor.execute('PRAGMA journal_mode=DELETE')
+
+        for node in self.nodes:
+            node.set_db_cursor(self.cursor)
     
     def log(self, message: str, level="DEBUG") -> None:
         if self.logger is not None:

@@ -7,17 +7,24 @@ import os
 import time
 import traceback
 from threading import Thread
+from sqlite3 import Cursor
+from datetime import datetime
 
+from nodes.utils import EventType
 
 
 
 class BaseWatcherNode(threading.Thread, ABC):
     def __init__(self, name: str, path: str, logger: Logger = None):
         self.path = path
+        if os.path.exists(self.path) is False:
+            os.makedirs(self.path)
+
         self.successor_queues: Dict[str, Queue] = {}
         self.exit_event = threading.Event()
         self.resource_event = threading.Event()
         self.logger = logger
+        self.cursor: Cursor = None
         super().__init__(name=name)
     
     def log(self, message: str, level="DEBUG") -> None:
@@ -40,6 +47,9 @@ class BaseWatcherNode(threading.Thread, ABC):
     def set_successor_queue(self, successor_name: str, queue: Queue):
         self.successor_queues[successor_name] = queue
     
+    def set_db_cursor(self, cursor: Cursor):
+        self.cursor = cursor
+
     def exit(self):
         self.stop_monitoring()
         self.resource_event.set()
@@ -48,6 +58,8 @@ class BaseWatcherNode(threading.Thread, ABC):
         """
         Override to specify how the resource is monitored. 
         Typically, this method will be used to start an observer that runs in a child thread spawned by the thread running the node.
+        """
+
         def _monitor_thread_func():
             self.log(f"Starting observer thread for node '{self.name}'", level="INFO")
             while self.exit_event.is_set() is False:
@@ -57,6 +69,12 @@ class BaseWatcherNode(threading.Thread, ABC):
                         
                         try:
                             self.log(f"detected file {filepath}", level="INFO")
+                            '''
+                            self.cursor.execute(
+                                "INSERT INTO events (node_id, event_type, timestamp) VALUES (?, ?, ?);",
+                                (self.name, EventType.FILE_DETECTED, datetime.now())
+                            )
+                            '''
                         
                         except Exception as e:
                             self.log(f"Unexpected error in monitoring logic for '{self.name}': {traceback.format_exc()}", level="ERROR")
@@ -79,8 +97,6 @@ class BaseWatcherNode(threading.Thread, ABC):
         # because we can't run an event loop in the same thread as the FilesystemStoreNode
         self.observer_thread = Thread(name=f"{self.name}_observer", target=_monitor_thread_func, daemon=True)
         self.observer_thread.start()
-        """
-        pass
     
     def stop_monitoring(self) -> None:
         """
