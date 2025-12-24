@@ -37,11 +37,8 @@ if __name__ == "__main__":
     stage_node2 = BaseStageNode(name="StageNode2", predecessors=[stage_node], logger=logger)
 
     pipeline = Pipeline(name="TestPipeline", nodes=[watcher_node, watcher_node2, stage_node, stage_node2], db_folder=db_folder_path, logger=logger)
-    """
     try:
         pipeline.launch_nodes()
     except KeyboardInterrupt:
+        print("KeyboardInterrupt received. Terminating pipeline...")
         pipeline.terminate_nodes()
-    finally:
-        pipeline.terminate_nodes()
-    """

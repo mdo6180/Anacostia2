@@ -27,6 +27,9 @@ class BaseWatcherNode(threading.Thread, ABC):
         self.cursor: Cursor = None
         super().__init__(name=name)
     
+    def __hash__(self):
+        return hash(f"{self.name}_{self.path}")
+    
     def log(self, message: str, level="DEBUG") -> None:
         if self.logger is not None:
             if level == "DEBUG":
@@ -49,6 +52,19 @@ class BaseWatcherNode(threading.Thread, ABC):
     
     def set_db_cursor(self, cursor: Cursor):
         self.cursor = cursor
+        self.cursor.execute(
+            f"""
+            CREATE TABLE IF NOT EXISTS {self.name}_{abs(hash(self))} (
+                artifact_id INTEGER PRIMARY KEY AUTOINCREMENT, 
+                artifact_path TEXT, 
+                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+                hash TEXT,
+                hash_algorithm TEXT,
+                content_type TEXT,
+                size_bytes INTEGER
+            );
+            """
+        )
 
     def exit(self):
         self.stop_monitoring()
@@ -58,7 +74,6 @@ class BaseWatcherNode(threading.Thread, ABC):
         """
         Override to specify how the resource is monitored. 
         Typically, this method will be used to start an observer that runs in a child thread spawned by the thread running the node.
-        """
 
         def _monitor_thread_func():
             self.log(f"Starting observer thread for node '{self.name}'", level="INFO")
@@ -97,6 +112,8 @@ class BaseWatcherNode(threading.Thread, ABC):
         # because we can't run an event loop in the same thread as the FilesystemStoreNode
         self.observer_thread = Thread(name=f"{self.name}_observer", target=_monitor_thread_func, daemon=True)
         self.observer_thread.start()
+        """
+        pass
     
     def stop_monitoring(self) -> None:
         """
