@@ -1,13 +1,14 @@
+from contextlib import contextmanager
 import threading
 from queue import Queue
 from typing import Dict
-from abc import ABC, abstractmethod
+from abc import ABC
 from logging import Logger
 import os
 import time
 import traceback
 from threading import Thread
-from sqlite3 import Cursor
+import sqlite3
 from datetime import datetime
 import hashlib
 
@@ -25,14 +26,39 @@ class BaseWatcherNode(threading.Thread, ABC):
         self.exit_event = threading.Event()
         self.resource_event = threading.Event()
         self.logger = logger
-        self.cursor: Cursor = None
+        self.conn: sqlite3.Connection = None
         self.hash_chunk_size = hash_chunk_size
-        self.artifact_table_name = f"{name}_{abs(hash(self))}"
+        self.artifact_table_name = f"{name}_{abs(hash(f'{name}_{path}'))}"
         super().__init__(name=name)
     
-    def __hash__(self):
-        return hash(f"{self.name}_{self.path}")
-    
+    @contextmanager
+    def read_cursor(self):
+        """
+        Read-only cursor.
+        No commit, no rollback.
+        """
+        cur = self.conn.cursor()
+        try:
+            yield cur
+        finally:
+            cur.close()
+
+    @contextmanager
+    def write_cursor(self):
+        """
+        Write cursor.
+        Commits on success, rolls back on error.
+        """
+        cur = self.conn.cursor()
+        try:
+            yield cur
+            self.conn.commit()
+        except Exception:
+            self.conn.rollback()
+            raise
+        finally:
+            cur.close()
+            
     def log(self, message: str, level="DEBUG") -> None:
         if self.logger is not None:
             if level == "DEBUG":
@@ -53,21 +79,27 @@ class BaseWatcherNode(threading.Thread, ABC):
     def set_successor_queue(self, successor_name: str, queue: Queue):
         self.successor_queues[successor_name] = queue
     
-    def set_db_cursor(self, cursor: Cursor):
-        self.cursor = cursor
-        self.cursor.execute(
-            f"""
-            CREATE TABLE IF NOT EXISTS {self.artifact_table_name} (
-                artifact_id INTEGER PRIMARY KEY AUTOINCREMENT, 
-                artifact_path TEXT, 
-                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-                hash TEXT,
-                hash_algorithm TEXT
-            );
-            """
-        )
+    def initialize_db_connection(self, filename: str):
+        self.conn = sqlite3.connect(filename, check_same_thread=False, detect_types=sqlite3.PARSE_DECLTYPES)
+        self.conn.execute("PRAGMA journal_mode=WAL;")
+        self.create_artifact_table()
+    
+    def create_artifact_table(self):
+        with self.write_cursor() as cursor:
+            cursor.execute(
+                f"""
+                CREATE TABLE IF NOT EXISTS {self.artifact_table_name} (
+                    artifact_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    artifact_path TEXT UNIQUE,
+                    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    hash TEXT,
+                    hash_algorithm TEXT
+                );
+                """
+            )
 
     def exit(self):
+        self.conn.close()
         self.stop_monitoring()
         self.resource_event.set()
     
@@ -88,14 +120,15 @@ class BaseWatcherNode(threading.Thread, ABC):
                             if self.artifact_exists(self.artifact_table_name, filepath) is False:
                                 timestamp = datetime.now()
                                 self.log(f"detected file {filepath}", level="INFO")
-                                self.cursor.execute(
-                                    "INSERT INTO events (node_id, event_type, timestamp) VALUES (?, ?, ?);",
-                                    (self.name, EventType.FILE_DETECTED, timestamp)
-                                )
-                                self.cursor.execute(
-                                    f"INSERT INTO {self.artifact_table_name} (artifact_path, timestamp, hash, hash_algorithm) VALUES (?, ?, ?, ?);",
-                                    (filepath, timestamp, self.hash_file(filepath), "sha256")
-                                )
+                                with self.write_cursor() as cursor:
+                                    cursor.execute(
+                                        "INSERT INTO events (node_id, event_type, timestamp) VALUES (?, ?, ?);",
+                                        (self.name, EventType.FILE_DETECTED, timestamp)
+                                    )
+                                    cursor.execute(
+                                        f"INSERT INTO {self.artifact_table_name} (artifact_path, timestamp, hash, hash_algorithm) VALUES (?, ?, ?, ?);",
+                                        (filepath, timestamp, self.hash_file(filepath), "sha256")
+                                    )
                         
                         except Exception as e:
                             self.log(f"Unexpected error in monitoring logic for '{self.name}': {traceback.format_exc()}", level="ERROR")
@@ -120,11 +153,12 @@ class BaseWatcherNode(threading.Thread, ABC):
         self.observer_thread.start()
     
     def artifact_exists(self, table_name: str, filepath: str) -> bool:
-        self.cursor.execute(
-            f"SELECT 1 FROM {table_name} WHERE artifact_path = ? LIMIT 1;",
-            (filepath,)
-        )
-        return self.cursor.fetchone() is not None
+        with self.read_cursor() as cursor:
+            cursor.execute(
+                f"SELECT 1 FROM {table_name} WHERE artifact_path = ? LIMIT 1;",
+                (filepath,)
+            )
+            return cursor.fetchone() is not None
 
     def hash_file(self, filepath: str) -> str:
         sha256 = hashlib.sha256()

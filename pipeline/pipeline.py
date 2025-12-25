@@ -1,9 +1,8 @@
+from contextlib import contextmanager
 from typing import List, Union
 from logging import Logger
 import os
 import sqlite3
-
-from pipeline.queries import create_events_table
 
 from nodes.stage import BaseStageNode
 from nodes.watcher import BaseWatcherNode
@@ -22,13 +21,49 @@ class Pipeline:
         db_path = os.path.join(self.db_folder, 'anacostia.db')
         self.conn = sqlite3.connect(db_path, check_same_thread=False, detect_types=sqlite3.PARSE_DECLTYPES)
         self.conn.execute("PRAGMA journal_mode=WAL;")
-        self.cursor = self.conn.cursor()
-        self.cursor.execute(create_events_table)
-        #self.cursor.execute('PRAGMA journal_mode=DELETE')
+        with self.write_cursor() as cursor:
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS events (
+                    event_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    node_id INTEGER,
+                    event_type TEXT,
+                    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+                );
+                """
+            )
 
         for node in self.nodes:
-            node.set_db_cursor(self.cursor)
+            node.initialize_db_connection(db_path)
     
+    @contextmanager
+    def read_cursor(self):
+        """
+        Read-only cursor.
+        No commit, no rollback.
+        """
+        cur = self.conn.cursor()
+        try:
+            yield cur
+        finally:
+            cur.close()
+
+    @contextmanager
+    def write_cursor(self):
+        """
+        Write cursor.
+        Commits on success, rolls back on error.
+        """
+        cur = self.conn.cursor()
+        try:
+            yield cur
+            self.conn.commit()
+        except Exception:
+            self.conn.rollback()
+            raise
+        finally:
+            cur.close()
+            
     def log(self, message: str, level="DEBUG") -> None:
         if self.logger is not None:
             if level == "DEBUG":

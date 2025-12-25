@@ -1,9 +1,10 @@
+from contextlib import contextmanager
 import threading
 from queue import Queue
 from typing import Dict, List
 import time
 from logging import Logger
-from sqlite3 import Cursor
+import sqlite3
 
 
 
@@ -14,7 +15,7 @@ class BaseStageNode(threading.Thread):
         self.exit_event = threading.Event()
         self.predecessors = predecessors if predecessors is not None else []
         self.logger = logger
-        self.cursor: Cursor = None
+        self.conn: sqlite3.Connection = None
 
         for predecessor in self.predecessors:
             queue = Queue()
@@ -23,6 +24,34 @@ class BaseStageNode(threading.Thread):
 
         super().__init__(name=name)
     
+    @contextmanager
+    def read_cursor(self):
+        """
+        Read-only cursor.
+        No commit, no rollback.
+        """
+        cur = self.conn.cursor()
+        try:
+            yield cur
+        finally:
+            cur.close()
+
+    @contextmanager
+    def write_cursor(self):
+        """
+        Write cursor.
+        Commits on success, rolls back on error.
+        """
+        cur = self.conn.cursor()
+        try:
+            yield cur
+            self.conn.commit()
+        except Exception:
+            self.conn.rollback()
+            raise
+        finally:
+            cur.close()
+            
     def log(self, message: str, level="DEBUG") -> None:
         if self.logger is not None:
             if level == "DEBUG":
@@ -40,8 +69,9 @@ class BaseStageNode(threading.Thread):
         else:
             print(message)
 
-    def set_db_cursor(self, cursor: Cursor):
-        self.cursor = cursor
+    def initialize_db_connection(self, filename: str):
+        self.conn = sqlite3.connect(filename, check_same_thread=False, detect_types=sqlite3.PARSE_DECLTYPES)
+        self.conn.execute("PRAGMA journal_mode=WAL;")
 
     def set_predecessor_queue(self, predecessor_name: str, queue: Queue):
         self.predecessor_queues[predecessor_name] = queue
@@ -56,16 +86,19 @@ class BaseStageNode(threading.Thread):
 
         for signal_name, queue in self.predecessor_queues.items():
             signal = queue.get()
-            print(f"{self.name} consumed signal: {signal_name} with value {signal}")
+            self.log(f"{self.name} consumed signal: {signal_name} with value {signal}", level="INFO")
     
     def signal_successors(self):
         for signal_name, queue in self.successor_queues.items():
             queue.put(f"Signal from {self.name}")
-            print(f"{self.name} produced signal: {signal_name}")
+            self.log(f"{self.name} produced signal: {signal_name}", level="INFO")
     
     def execute(self):
-        print(f"{self.name} executing")
+        self.log(f"{self.name} executing", level="INFO")
     
+    def exit(self):
+        self.conn.close()
+
     def run(self):
         while not self.exit_event.is_set():
             if self.exit_event.is_set(): return
