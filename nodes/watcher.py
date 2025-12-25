@@ -9,13 +9,14 @@ import traceback
 from threading import Thread
 from sqlite3 import Cursor
 from datetime import datetime
+import hashlib
 
 from nodes.utils import EventType
 
 
 
 class BaseWatcherNode(threading.Thread, ABC):
-    def __init__(self, name: str, path: str, logger: Logger = None):
+    def __init__(self, name: str, path: str, hash_chunk_size: int = 1_048_576, logger: Logger = None):
         self.path = path
         if os.path.exists(self.path) is False:
             os.makedirs(self.path)
@@ -25,6 +26,8 @@ class BaseWatcherNode(threading.Thread, ABC):
         self.resource_event = threading.Event()
         self.logger = logger
         self.cursor: Cursor = None
+        self.hash_chunk_size = hash_chunk_size
+        self.artifact_table_name = f"{name}_{abs(hash(self))}"
         super().__init__(name=name)
     
     def __hash__(self):
@@ -54,14 +57,12 @@ class BaseWatcherNode(threading.Thread, ABC):
         self.cursor = cursor
         self.cursor.execute(
             f"""
-            CREATE TABLE IF NOT EXISTS {self.name}_{abs(hash(self))} (
+            CREATE TABLE IF NOT EXISTS {self.artifact_table_name} (
                 artifact_id INTEGER PRIMARY KEY AUTOINCREMENT, 
                 artifact_path TEXT, 
                 timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
                 hash TEXT,
-                hash_algorithm TEXT,
-                content_type TEXT,
-                size_bytes INTEGER
+                hash_algorithm TEXT
             );
             """
         )
@@ -74,6 +75,7 @@ class BaseWatcherNode(threading.Thread, ABC):
         """
         Override to specify how the resource is monitored. 
         Typically, this method will be used to start an observer that runs in a child thread spawned by the thread running the node.
+        """
 
         def _monitor_thread_func():
             self.log(f"Starting observer thread for node '{self.name}'", level="INFO")
@@ -83,13 +85,17 @@ class BaseWatcherNode(threading.Thread, ABC):
                         filepath = os.path.join(root, filename)
                         
                         try:
-                            self.log(f"detected file {filepath}", level="INFO")
-                            '''
-                            self.cursor.execute(
-                                "INSERT INTO events (node_id, event_type, timestamp) VALUES (?, ?, ?);",
-                                (self.name, EventType.FILE_DETECTED, datetime.now())
-                            )
-                            '''
+                            if self.artifact_exists(self.artifact_table_name, filepath) is False:
+                                timestamp = datetime.now()
+                                self.log(f"detected file {filepath}", level="INFO")
+                                self.cursor.execute(
+                                    "INSERT INTO events (node_id, event_type, timestamp) VALUES (?, ?, ?);",
+                                    (self.name, EventType.FILE_DETECTED, timestamp)
+                                )
+                                self.cursor.execute(
+                                    f"INSERT INTO {self.artifact_table_name} (artifact_path, timestamp, hash, hash_algorithm) VALUES (?, ?, ?, ?);",
+                                    (filepath, timestamp, self.hash_file(filepath), "sha256")
+                                )
                         
                         except Exception as e:
                             self.log(f"Unexpected error in monitoring logic for '{self.name}': {traceback.format_exc()}", level="ERROR")
@@ -98,7 +104,7 @@ class BaseWatcherNode(threading.Thread, ABC):
                     self.log(f"Observer thread for node '{self.name}' exiting", level="INFO")
                     return
                 try:
-                    self.trigger()
+                    self.resource_trigger()
                 
                 except Exception as e:
                     self.log(f"Error checking resource in node '{self.name}': {traceback.format_exc()}", level="ERROR")
@@ -112,28 +118,42 @@ class BaseWatcherNode(threading.Thread, ABC):
         # because we can't run an event loop in the same thread as the FilesystemStoreNode
         self.observer_thread = Thread(name=f"{self.name}_observer", target=_monitor_thread_func, daemon=True)
         self.observer_thread.start()
-        """
-        pass
+    
+    def artifact_exists(self, table_name: str, filepath: str) -> bool:
+        self.cursor.execute(
+            f"SELECT 1 FROM {table_name} WHERE artifact_path = ? LIMIT 1;",
+            (filepath,)
+        )
+        return self.cursor.fetchone() is not None
+
+    def hash_file(self, filepath: str) -> str:
+        sha256 = hashlib.sha256()
+        with open(filepath, 'rb') as f:
+            while chunk := f.read(self.hash_chunk_size):
+                sha256.update(chunk)
+        return sha256.hexdigest()
     
     def stop_monitoring(self) -> None:
         """
         Override to specify how the resource is monitored. 
         Typically, this method will be used to start an observer that runs in a child thread spawned by the thread running the node.
         """
-        pass
+        self.log(f"Stopping observer thread for node '{self.name}'", level="INFO")
+        self.observer_thread.join()
+        self.log(f"Observer stopped for node '{self.name}'", level="INFO")
 
-    def trigger(self, message: str = None) -> None:
+    def resource_trigger(self, message: str = None) -> None:
         if self.resource_event.is_set() is False:
             self.resource_event.set()
-            print(f"{self.name} triggered with message: {message}")
+            self.log(f"{self.name} triggered with message: {message}", level="INFO")
     
     def signal_successors(self):
         for signal_name, queue in self.successor_queues.items():
             queue.put(f"Signal from {self.name}")
-            print(f"{self.name} produced signal: {signal_name}")
+            self.log(f"{self.name} produced signal: {signal_name}", level="INFO")
     
     def execute(self):
-        print(f"{self.name} executing")
+        self.log(f"{self.name} executing", level="INFO")
     
     def run(self):
         self.start_monitoring()     # Start monitoring the resource in a separate thread
