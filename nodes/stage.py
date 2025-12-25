@@ -93,6 +93,9 @@ class BaseStageNode(threading.Thread):
             queue.put(f"Signal from {self.name}")
             self.log(f"{self.name} produced signal: {signal_name}", level="INFO")
     
+    def setup(self):
+        pass
+
     def execute(self):
         self.log(f"{self.name} executing", level="INFO")
     

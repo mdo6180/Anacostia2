@@ -1,6 +1,7 @@
 import os
 import shutil
 import logging
+import time
 
 from nodes.stage import BaseStageNode
 from nodes.watcher import BaseWatcherNode
@@ -28,13 +29,36 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+class DelayWatcherNode(BaseWatcherNode):
+    def __init__(self, name, path, delay: int, hash_chunk_size = 1048576, logger = None):
+        super().__init__(name, path, hash_chunk_size, logger)
+        self.delay = delay
+
+    def resource_trigger(self, message: str = None) -> None:
+        if self.resource_event.is_set() is False:
+            time.sleep(self.delay)  # slight delay to ensure stability
+            self.resource_event.set()
+            self.log(f"{self.name} triggered with message: {message}", level="INFO")
+
+
+class DelayStageNode(BaseStageNode):
+    def __init__(self, name, predecessors = None, delay: int = 3, logger = None):
+        super().__init__(name, predecessors, logger)
+        self.delay = delay
+
+    def execute(self):
+        self.log(f"{self.name} started delay of {self.delay} seconds", level="INFO")
+        time.sleep(self.delay)
+        self.log(f"{self.name} finished delay of {self.delay} seconds", level="INFO")
+
+
 
 if __name__ == "__main__":
     # Example usage of BaseStageNode and BaseWatcherNode
-    watcher_node = BaseWatcherNode(name="WatcherNode1", path=data_store_path1, logger=logger)
-    watcher_node2 = BaseWatcherNode(name="WatcherNode2", path=data_store_path2, logger=logger)
-    stage_node = BaseStageNode(name="StageNode1", predecessors=[watcher_node, watcher_node2], logger=logger)
-    stage_node2 = BaseStageNode(name="StageNode2", predecessors=[stage_node], logger=logger)
+    watcher_node = DelayWatcherNode(name="WatcherNode1", path=data_store_path1, delay=6, logger=logger)
+    watcher_node2 = DelayWatcherNode(name="WatcherNode2", path=data_store_path2, delay=3, logger=logger)
+    stage_node = DelayStageNode(name="StageNode1", predecessors=[watcher_node, watcher_node2], delay=4, logger=logger)
+    stage_node2 = DelayStageNode(name="StageNode2", predecessors=[stage_node], delay=2, logger=logger)
 
     pipeline = Pipeline(name="TestPipeline", nodes=[watcher_node, watcher_node2, stage_node, stage_node2], db_folder=db_folder_path, logger=logger)
     try:
@@ -42,3 +66,6 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         print("KeyboardInterrupt received. Terminating pipeline...")
         pipeline.terminate_nodes()
+    
+    # Note: in theory we should see watcher_node2 triggering twice for every time watcher_node1 triggers 
+    # and then stage_node should trigger after both watchers have triggered.

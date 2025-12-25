@@ -35,6 +35,7 @@ class Pipeline:
 
         for node in self.nodes:
             node.initialize_db_connection(db_path)
+            node.setup()
     
     @contextmanager
     def read_cursor(self):

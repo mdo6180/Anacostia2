@@ -82,9 +82,8 @@ class BaseWatcherNode(threading.Thread, ABC):
     def initialize_db_connection(self, filename: str):
         self.conn = sqlite3.connect(filename, check_same_thread=False, detect_types=sqlite3.PARSE_DECLTYPES)
         self.conn.execute("PRAGMA journal_mode=WAL;")
-        self.create_artifact_table()
     
-    def create_artifact_table(self):
+    def setup(self):
         with self.write_cursor() as cursor:
             cursor.execute(
                 f"""
