@@ -22,6 +22,8 @@ class BaseStageNode(threading.Thread):
             predecessor.set_successor_queue(name, queue)
             self.set_predecessor_queue(predecessor.name, queue)
 
+        self.run_id = 0
+
         super().__init__(name=name)
     
     def __hash__(self):
@@ -112,6 +114,7 @@ class BaseStageNode(threading.Thread):
             
             if self.exit_event.is_set(): return
             self.execute()
+            self.run_id += 1
             
             if self.exit_event.is_set(): return
             self.signal_successors()
