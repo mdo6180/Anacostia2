@@ -29,16 +29,20 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-class DelayWatcherNode(BaseWatcherNode):
-    def __init__(self, name, path, delay: int, hash_chunk_size = 1048576, logger = None):
+class FolderWatcherNode(BaseWatcherNode):
+    def __init__(self, name, path, hash_chunk_size = 1048576, logger = None):
         super().__init__(name, path, hash_chunk_size, logger)
-        self.delay = delay
 
-    def resource_trigger(self, message: str = None) -> None:
-        if self.resource_event.is_set() is False:
-            time.sleep(self.delay)  # slight delay to ensure stability
-            self.resource_event.set()
-            self.log(f"{self.name} triggered with message: {message}", level="INFO")
+    def resource_trigger(self) -> None:
+        if len(self.get_unused_artifacts()) > 0:
+            self.trigger(message="New artifact detected")
+    
+    def execute(self):
+        unused_artifacts = self.get_unused_artifacts()
+        for artifact, hash in unused_artifacts:
+            self.log(f"{self.name} processing artifact: {artifact} with hash: {hash}", level="INFO")
+            self.mark_artifact_used(artifact, hash)
+            self.log(f"{self.name} finished processing artifact: {artifact}", level="INFO")
 
 
 class DelayStageNode(BaseStageNode):
@@ -55,8 +59,8 @@ class DelayStageNode(BaseStageNode):
 
 if __name__ == "__main__":
     # Example usage of BaseStageNode and BaseWatcherNode
-    watcher_node = DelayWatcherNode(name="WatcherNode1", path=data_store_path1, delay=6, logger=logger)
-    watcher_node2 = DelayWatcherNode(name="WatcherNode2", path=data_store_path2, delay=3, logger=logger)
+    watcher_node = FolderWatcherNode(name="WatcherNode1", path=data_store_path1, logger=logger)
+    watcher_node2 = FolderWatcherNode(name="WatcherNode2", path=data_store_path2, logger=logger)
     stage_node = DelayStageNode(name="StageNode1", predecessors=[watcher_node, watcher_node2], delay=4, logger=logger)
     stage_node2 = DelayStageNode(name="StageNode2", predecessors=[stage_node], delay=2, logger=logger)
 

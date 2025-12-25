@@ -24,11 +24,33 @@ class Pipeline:
         with self.write_cursor() as cursor:
             cursor.execute(
                 """
+                CREATE TABLE IF NOT EXISTS nodes (
+                    node_id TEXT PRIMARY KEY,
+                    node_name TEXT UNIQUE,
+                    node_type TEXT,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                );
+                """
+            )
+            cursor.execute(
+                """
                 CREATE TABLE IF NOT EXISTS events (
                     event_id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    node_id INTEGER,
+                    node_id TEXT,
                     event_type TEXT,
                     timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+                );
+                """
+            )
+            cursor.execute(
+                f"""
+                CREATE TABLE IF NOT EXISTS artifact_usage_events (
+                    artifact_path TEXT,
+                    hash TEXT,
+                    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    node_id TEXT,
+                    run_id INTEGER,
+                    usage_type TEXT
                 );
                 """
             )
@@ -36,6 +58,15 @@ class Pipeline:
         for node in self.nodes:
             node.initialize_db_connection(db_path)
             node.setup()
+
+            with self.write_cursor() as cursor:
+                cursor.execute(
+                    """
+                    INSERT INTO nodes (node_id, node_name, node_type)
+                    VALUES (?, ?, ?);
+                    """,
+                    (hash(node), node.name, type(node).__name__)
+                )
     
     @contextmanager
     def read_cursor(self):

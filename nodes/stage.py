@@ -24,6 +24,9 @@ class BaseStageNode(threading.Thread):
 
         super().__init__(name=name)
     
+    def __hash__(self):
+        return abs(hash(f"{self.name}"))
+    
     @contextmanager
     def read_cursor(self):
         """

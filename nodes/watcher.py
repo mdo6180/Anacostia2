@@ -2,7 +2,7 @@ from contextlib import contextmanager
 import threading
 from queue import Queue
 from typing import Dict
-from abc import ABC
+from abc import ABC, abstractmethod
 from logging import Logger
 import os
 import time
@@ -11,8 +11,6 @@ from threading import Thread
 import sqlite3
 from datetime import datetime
 import hashlib
-
-from nodes.utils import EventType
 
 
 
@@ -28,8 +26,15 @@ class BaseWatcherNode(threading.Thread, ABC):
         self.logger = logger
         self.conn: sqlite3.Connection = None
         self.hash_chunk_size = hash_chunk_size
-        self.artifact_table_name = f"{name}_{abs(hash(f'{name}_{path}'))}"
+        self.artifact_table_name = f"{name}_{abs(hash(f'{name}_{path}'))}_artifacts"
+        self.usage_table_name = f"{name}_{abs(hash(f'{name}_{path}'))}_usage"
+
+        self.run_id = 0
+
         super().__init__(name=name)
+    
+    def __hash__(self):
+        return abs(hash(f"{self.name}_{self.path}"))
     
     @contextmanager
     def read_cursor(self):
@@ -88,11 +93,22 @@ class BaseWatcherNode(threading.Thread, ABC):
             cursor.execute(
                 f"""
                 CREATE TABLE IF NOT EXISTS {self.artifact_table_name} (
-                    artifact_id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    artifact_path TEXT UNIQUE,
+                    artifact_path TEXT UNIQUE NOT NULL,
                     timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-                    hash TEXT,
+                    hash TEXT PRIMARY KEY,
                     hash_algorithm TEXT
+                );
+                """
+            )
+            cursor.execute(
+                f"""
+                CREATE TABLE IF NOT EXISTS {self.usage_table_name} (
+                    artifact_path TEXT NOT NULL,
+                    hash TEXT NOT NULL,
+                    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    node_id TEXT NOT NULL,
+                    run_id INTEGER NOT NULL,
+                    usage_type TEXT NOT NULL CHECK (usage_type IN ('read', 'write'))
                 );
                 """
             )
@@ -120,10 +136,12 @@ class BaseWatcherNode(threading.Thread, ABC):
                                 timestamp = datetime.now()
                                 self.log(f"detected file {filepath}", level="INFO")
                                 with self.write_cursor() as cursor:
+                                    """
                                     cursor.execute(
                                         "INSERT INTO events (node_id, event_type, timestamp) VALUES (?, ?, ?);",
                                         (self.name, EventType.FILE_DETECTED, timestamp)
                                     )
+                                    """
                                     cursor.execute(
                                         f"INSERT INTO {self.artifact_table_name} (artifact_path, timestamp, hash, hash_algorithm) VALUES (?, ?, ?, ?);",
                                         (filepath, timestamp, self.hash_file(filepath), "sha256")
@@ -158,6 +176,26 @@ class BaseWatcherNode(threading.Thread, ABC):
                 (filepath,)
             )
             return cursor.fetchone() is not None
+    
+    def get_unused_artifacts(self) -> list:
+        with self.read_cursor() as cursor:
+            cursor.execute(
+                f"""
+                SELECT artifact_path, hash FROM {self.artifact_table_name}
+                WHERE hash NOT IN (SELECT DISTINCT hash FROM {self.usage_table_name});
+                """
+            )
+            return cursor.fetchall()
+    
+    def mark_artifact_used(self, filepath: str, artifact_hash: str) -> None:
+        with self.write_cursor() as cursor:
+            cursor.execute(
+                f"""
+                INSERT INTO {self.usage_table_name} (artifact_path, hash, node_id, run_id, usage_type)
+                VALUES (?, ?, ?, ?, ?);
+                """,
+                (filepath, artifact_hash, hash(self), self.run_id, "read")
+            )
 
     def hash_file(self, filepath: str) -> str:
         sha256 = hashlib.sha256()
@@ -175,7 +213,16 @@ class BaseWatcherNode(threading.Thread, ABC):
         self.observer_thread.join()
         self.log(f"Observer stopped for node '{self.name}'", level="INFO")
 
-    def resource_trigger(self, message: str = None) -> None:
+    @abstractmethod
+    def resource_trigger(self) -> None:
+        """
+        Override to specify how the resource triggers the node.
+        This method is called periodically by the monitoring thread.
+        When the resource condition is met, this method should set the resource_event.
+        """
+        pass
+
+    def trigger(self, message: str = None) -> None:
         if self.resource_event.is_set() is False:
             self.resource_event.set()
             self.log(f"{self.name} triggered with message: {message}", level="INFO")
@@ -185,8 +232,13 @@ class BaseWatcherNode(threading.Thread, ABC):
             queue.put(f"Signal from {self.name}")
             self.log(f"{self.name} produced signal: {signal_name}", level="INFO")
     
+    @abstractmethod
     def execute(self):
-        self.log(f"{self.name} executing", level="INFO")
+        """
+        Override to specify what the node does when triggered.
+        This method is called when the resource_event is set.
+        """
+        pass
     
     def run(self):
         self.start_monitoring()     # Start monitoring the resource in a separate thread
@@ -198,6 +250,7 @@ class BaseWatcherNode(threading.Thread, ABC):
 
             if self.exit_event.is_set(): return
             self.execute()
+            self.run_id += 1
 
             if self.exit_event.is_set(): return
             self.signal_successors()
