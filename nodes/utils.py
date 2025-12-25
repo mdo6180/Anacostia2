@@ -1,49 +1,25 @@
-from enum import Enum
+import os
+import io
+from dataclasses import dataclass
+from typing import Optional, Any, Iterable
 
 
-class Result(Enum):
-    FAILURE = 0,
-    SUCCESS = 1,
-    ERROR = 2,
-    
-    def __repr__(self) -> str:
-        status_words = {
-            Result.FAILURE: "FAILURE",
-            Result.SUCCESS: "SUCCESS",
-            Result.ERROR: "ERROR",
-        }
-        return status_words[self]
+@dataclass(frozen=True)
+class ArtifactPath(os.PathLike):
+    base_path: str
+    path: str
+    event: str
 
-    def __int__(self) -> int:
-        return self.value
-    
-    def __eq__(self, other: 'Result') -> bool:
-        if other.value == self.value:
-            return True
-        else:
-            return False
-    
-    def __hash__(self) -> int:
-        return super().__hash__()
+    def __fspath__(self) -> str:
+        # Critical: makes this object path-like
+        # Optional: mark as USED on any implicit filesystem usage.
+        print(f"{self.path} marked as {self.event}")
+        return os.path.join(self.base_path, self.path)
 
 
-class EventType(Enum):
-    FILE_DETECTED = 0,
-    
-    def __repr__(self) -> str:
-        status_words = {
-            EventType.FILE_DETECTED: "FILE_DETECTED",
-        }
-        return status_words[self]
-
-    def __int__(self) -> int:
-        return self.value
-    
-    def __eq__(self, other: 'EventType') -> bool:
-        if other.value == self.value:
-            return True
-        else:
-            return False
-    
-    def __hash__(self) -> int:
-        return super().__hash__()
+"""
+if __name__ == "__main__":
+    ap = ArtifactPath("base_dir", "artifact.txt", "CREATED")
+    with open(ap, 'w') as f:
+        f.write("Test content.")
+"""
