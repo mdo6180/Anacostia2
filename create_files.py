@@ -16,7 +16,7 @@ if __name__ == "__main__":
     data_store2 = f"{path}/data_store2"
 
     for i in range(10):
-        create_file(f"{data_store1}/test_file{i}.txt", f"test file {i}")
+        create_file(f"{data_store1}/test_file{i}.txt", f"test file data_store1 {i}")
         time.sleep(1.5)
-        create_file(f"{data_store2}/test_file{i}.txt", f"test file {i}")
+        create_file(f"{data_store2}/test_file{i}.txt", f"test file data_store2 {i}")
         time.sleep(1.5)

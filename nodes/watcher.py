@@ -179,7 +179,7 @@ class BaseWatcherNode(threading.Thread, ABC):
         with self.write_cursor() as cursor:
             cursor.execute(
                 f"""
-                INSERT INTO {self.global_usage_table_name} (artifact_path, hash, node_id, run_id, usage_type)
+                INSERT OR IGNORE INTO {self.global_usage_table_name} (artifact_path, hash, node_id, run_id, usage_type)
                 VALUES (?, ?, ?, ?, ?);
                 """,
                 (filepath, artifact_hash, hash(self), self.run_id, "read")
