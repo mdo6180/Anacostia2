@@ -27,7 +27,7 @@ class BaseWatcherNode(threading.Thread, ABC):
         self.conn: sqlite3.Connection = None
         self.hash_chunk_size = hash_chunk_size
         self.artifact_table_name = f"{name}_{abs(hash(f'{name}_{path}'))}_artifacts"
-        self.usage_table_name = f"{name}_{abs(hash(f'{name}_{path}'))}_usage"
+
         self.global_usage_table_name = "artifact_usage_events"
 
         self.run_id = 0
@@ -101,18 +101,6 @@ class BaseWatcherNode(threading.Thread, ABC):
                 );
                 """
             )
-            cursor.execute(
-                f"""
-                CREATE TABLE IF NOT EXISTS {self.usage_table_name} (
-                    artifact_path TEXT NOT NULL,
-                    hash TEXT NOT NULL,
-                    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-                    node_id TEXT NOT NULL,
-                    run_id INTEGER NOT NULL,
-                    usage_type TEXT NOT NULL CHECK (usage_type IN ('read', 'write'))
-                );
-                """
-            )
 
     def exit(self):
         self.conn.close()
@@ -181,8 +169,9 @@ class BaseWatcherNode(threading.Thread, ABC):
             cursor.execute(
                 f"""
                 SELECT artifact_path, hash FROM {self.artifact_table_name}
-                WHERE hash NOT IN (SELECT DISTINCT hash FROM {self.usage_table_name});
-                """
+                WHERE hash NOT IN (SELECT DISTINCT hash FROM {self.global_usage_table_name} WHERE node_id = ?);
+                """,
+                (hash(self),)
             )
             return cursor.fetchall()
     
@@ -190,7 +179,7 @@ class BaseWatcherNode(threading.Thread, ABC):
         with self.write_cursor() as cursor:
             cursor.execute(
                 f"""
-                INSERT INTO {self.usage_table_name} (artifact_path, hash, node_id, run_id, usage_type)
+                INSERT INTO {self.global_usage_table_name} (artifact_path, hash, node_id, run_id, usage_type)
                 VALUES (?, ?, ?, ?, ?);
                 """,
                 (filepath, artifact_hash, hash(self), self.run_id, "read")
