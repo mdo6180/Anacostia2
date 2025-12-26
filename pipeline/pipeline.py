@@ -50,7 +50,7 @@ class Pipeline:
                     timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
                     node_id TEXT,
                     run_id INTEGER,
-                    usage_type TEXT
+                    usage_type TEXT NOT NULL CHECK (usage_type IN ('read', 'write'))
                 );
                 """
             )

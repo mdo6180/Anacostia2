@@ -28,6 +28,7 @@ class BaseWatcherNode(threading.Thread, ABC):
         self.hash_chunk_size = hash_chunk_size
         self.artifact_table_name = f"{name}_{abs(hash(f'{name}_{path}'))}_artifacts"
         self.usage_table_name = f"{name}_{abs(hash(f'{name}_{path}'))}_usage"
+        self.global_usage_table_name = "artifact_usage_events"
 
         self.run_id = 0
 
@@ -132,20 +133,9 @@ class BaseWatcherNode(threading.Thread, ABC):
                         filepath = os.path.join(root, filename)
                         
                         try:
-                            if self.artifact_exists(self.artifact_table_name, filepath) is False:
-                                timestamp = datetime.now()
-                                self.log(f"detected file {filepath}", level="INFO")
-                                with self.write_cursor() as cursor:
-                                    """
-                                    cursor.execute(
-                                        "INSERT INTO events (node_id, event_type, timestamp) VALUES (?, ?, ?);",
-                                        (self.name, EventType.FILE_DETECTED, timestamp)
-                                    )
-                                    """
-                                    cursor.execute(
-                                        f"INSERT INTO {self.artifact_table_name} (artifact_path, timestamp, hash, hash_algorithm) VALUES (?, ?, ?, ?);",
-                                        (filepath, timestamp, self.hash_file(filepath), "sha256")
-                                    )
+                            if self.artifact_exists(filepath) is False:
+                                self.log(f"{self.name} detected file {filepath}", level="INFO")
+                                self.register_artifact(filepath)
                         
                         except Exception as e:
                             self.log(f"Unexpected error in monitoring logic for '{self.name}': {traceback.format_exc()}", level="ERROR")
@@ -169,10 +159,19 @@ class BaseWatcherNode(threading.Thread, ABC):
         self.observer_thread = Thread(name=f"{self.name}_observer", target=_monitor_thread_func, daemon=True)
         self.observer_thread.start()
     
-    def artifact_exists(self, table_name: str, filepath: str) -> bool:
+    def register_artifact(self, filepath: str) -> None:
+        timestamp = datetime.now()
+
+        with self.write_cursor() as cursor:
+            cursor.execute(
+                f"INSERT INTO {self.artifact_table_name} (artifact_path, timestamp, hash, hash_algorithm) VALUES (?, ?, ?, ?);",
+                (filepath, timestamp, self.hash_file(filepath), "sha256")
+            )
+    
+    def artifact_exists(self, filepath: str) -> bool:
         with self.read_cursor() as cursor:
             cursor.execute(
-                f"SELECT 1 FROM {table_name} WHERE artifact_path = ? LIMIT 1;",
+                f"SELECT 1 FROM {self.artifact_table_name} WHERE artifact_path = ? LIMIT 1;",
                 (filepath,)
             )
             return cursor.fetchone() is not None
