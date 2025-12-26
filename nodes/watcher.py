@@ -96,7 +96,7 @@ class BaseWatcherNode(threading.Thread, ABC):
                 CREATE TABLE IF NOT EXISTS {self.artifact_table_name} (
                     artifact_path TEXT UNIQUE NOT NULL,
                     timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-                    hash TEXT PRIMARY KEY,
+                    artifact_hash TEXT PRIMARY KEY,
                     hash_algorithm TEXT
                 );
                 """
@@ -152,7 +152,7 @@ class BaseWatcherNode(threading.Thread, ABC):
 
         with self.write_cursor() as cursor:
             cursor.execute(
-                f"INSERT INTO {self.artifact_table_name} (artifact_path, timestamp, hash, hash_algorithm) VALUES (?, ?, ?, ?);",
+                f"INSERT INTO {self.artifact_table_name} (artifact_path, timestamp, artifact_hash, hash_algorithm) VALUES (?, ?, ?, ?);",
                 (filepath, timestamp, self.hash_file(filepath), "sha256")
             )
     
@@ -168,8 +168,8 @@ class BaseWatcherNode(threading.Thread, ABC):
         with self.read_cursor() as cursor:
             cursor.execute(
                 f"""
-                SELECT artifact_path, hash FROM {self.artifact_table_name}
-                WHERE hash NOT IN (SELECT DISTINCT hash FROM {self.global_usage_table_name} WHERE node_id = ?);
+                SELECT artifact_path, artifact_hash FROM {self.artifact_table_name}
+                WHERE artifact_hash NOT IN (SELECT DISTINCT artifact_hash FROM {self.global_usage_table_name} WHERE node_id = ?);
                 """,
                 (hash(self),)
             )
@@ -179,7 +179,7 @@ class BaseWatcherNode(threading.Thread, ABC):
         with self.write_cursor() as cursor:
             cursor.execute(
                 f"""
-                INSERT OR IGNORE INTO {self.global_usage_table_name} (artifact_path, hash, node_id, run_id, usage_type)
+                INSERT OR IGNORE INTO {self.global_usage_table_name} (artifact_path, artifact_hash, node_id, run_id, usage_type)
                 VALUES (?, ?, ?, ?, ?);
                 """,
                 (filepath, artifact_hash, hash(self), self.run_id, "read")

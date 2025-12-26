@@ -46,12 +46,12 @@ class Pipeline:
                 f"""
                 CREATE TABLE IF NOT EXISTS artifact_usage_events (
                     artifact_path TEXT,
-                    hash TEXT,
+                    artifact_hash TEXT,
                     timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
                     node_id TEXT,
                     run_id INTEGER,
                     usage_type TEXT NOT NULL CHECK (usage_type IN ('read', 'write')),
-                    UNIQUE(artifact_path, hash, node_id, run_id, usage_type)
+                    UNIQUE(artifact_path, artifact_hash, node_id, run_id, usage_type)
                 );
                 """
             )
