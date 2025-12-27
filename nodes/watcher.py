@@ -1,4 +1,3 @@
-from contextlib import contextmanager
 import threading
 from queue import Queue
 from typing import Dict
@@ -8,9 +7,10 @@ import os
 import time
 import traceback
 from threading import Thread
-import sqlite3
 from datetime import datetime
 import hashlib
+
+from connection import ConnectionManager
 
 
 
@@ -24,7 +24,7 @@ class BaseWatcherNode(threading.Thread, ABC):
         self.exit_event = threading.Event()
         self.resource_event = threading.Event()
         self.logger = logger
-        self.conn: sqlite3.Connection = None
+        self.conn_manager: ConnectionManager = None
         self.hash_chunk_size = hash_chunk_size
         self.artifact_table_name = f"{name}_{abs(hash(f'{name}_{path}'))}_artifacts"
 
@@ -37,34 +37,6 @@ class BaseWatcherNode(threading.Thread, ABC):
     def __hash__(self):
         return abs(hash(f"{self.name}_{self.path}"))
     
-    @contextmanager
-    def read_cursor(self):
-        """
-        Read-only cursor.
-        No commit, no rollback.
-        """
-        cur = self.conn.cursor()
-        try:
-            yield cur
-        finally:
-            cur.close()
-
-    @contextmanager
-    def write_cursor(self):
-        """
-        Write cursor.
-        Commits on success, rolls back on error.
-        """
-        cur = self.conn.cursor()
-        try:
-            yield cur
-            self.conn.commit()
-        except Exception:
-            self.conn.rollback()
-            raise
-        finally:
-            cur.close()
-            
     def log(self, message: str, level="DEBUG") -> None:
         if self.logger is not None:
             if level == "DEBUG":
@@ -86,11 +58,10 @@ class BaseWatcherNode(threading.Thread, ABC):
         self.successor_queues[successor_name] = queue
     
     def initialize_db_connection(self, filename: str):
-        self.conn = sqlite3.connect(filename, check_same_thread=False, detect_types=sqlite3.PARSE_DECLTYPES)
-        self.conn.execute("PRAGMA journal_mode=WAL;")
+        self.conn_manager = ConnectionManager(filename)
     
     def setup(self):
-        with self.write_cursor() as cursor:
+        with self.conn_manager.write_cursor() as cursor:
             cursor.execute(
                 f"""
                 CREATE TABLE IF NOT EXISTS {self.artifact_table_name} (
@@ -103,7 +74,7 @@ class BaseWatcherNode(threading.Thread, ABC):
             )
 
     def exit(self):
-        self.conn.close()
+        self.conn_manager.close()
         self.stop_monitoring()
         self.resource_event.set()
     
@@ -150,14 +121,14 @@ class BaseWatcherNode(threading.Thread, ABC):
     def register_artifact(self, filepath: str) -> None:
         timestamp = datetime.now()
 
-        with self.write_cursor() as cursor:
+        with self.conn_manager.write_cursor() as cursor:
             cursor.execute(
                 f"INSERT INTO {self.artifact_table_name} (artifact_path, timestamp, artifact_hash, hash_algorithm) VALUES (?, ?, ?, ?);",
                 (filepath, timestamp, self.hash_file(filepath), "sha256")
             )
     
     def artifact_exists(self, filepath: str) -> bool:
-        with self.read_cursor() as cursor:
+        with self.conn_manager.read_cursor() as cursor:
             cursor.execute(
                 f"SELECT 1 FROM {self.artifact_table_name} WHERE artifact_path = ? LIMIT 1;",
                 (filepath,)
@@ -165,7 +136,7 @@ class BaseWatcherNode(threading.Thread, ABC):
             return cursor.fetchone() is not None
     
     def get_unused_artifacts(self) -> list:
-        with self.read_cursor() as cursor:
+        with self.conn_manager.read_cursor() as cursor:
             cursor.execute(
                 f"""
                 SELECT artifact_path, artifact_hash FROM {self.artifact_table_name}
@@ -176,7 +147,7 @@ class BaseWatcherNode(threading.Thread, ABC):
             return cursor.fetchall()
     
     def mark_artifact_used(self, filepath: str, artifact_hash: str) -> None:
-        with self.write_cursor() as cursor:
+        with self.conn_manager.write_cursor() as cursor:
             cursor.execute(
                 f"""
                 INSERT OR IGNORE INTO {self.global_usage_table_name} (artifact_path, artifact_hash, node_id, run_id, usage_type)
@@ -219,7 +190,7 @@ class BaseWatcherNode(threading.Thread, ABC):
         for successor_name, queue in self.successor_queues.items():
             queue.put(f"Signal from {self.name}")
             
-            with self.write_cursor() as cursor:
+            with self.conn_manager.write_cursor() as cursor:
                 cursor.execute(
                     f"""
                     INSERT INTO run_graph (source_node_name, source_run_id, target_node_name, target_run_id, trigger_timestamp)

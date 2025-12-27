@@ -7,6 +7,9 @@ class ConnectionManager:
         self.connection = sqlite3.connect(db_path, check_same_thread=False, detect_types=sqlite3.PARSE_DECLTYPES)
         self.connection.execute("PRAGMA journal_mode=WAL;")
     
+    def close(self) -> None:
+        self.connection.close()
+    
     @contextmanager
     def read_cursor(self):
         """

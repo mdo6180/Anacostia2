@@ -1,11 +1,9 @@
-from contextlib import contextmanager
 from datetime import datetime
 import threading
 from queue import Queue
 from typing import Dict, List
 import time
 from logging import Logger
-import sqlite3
 
 from connection import ConnectionManager
 
@@ -18,7 +16,7 @@ class BaseStageNode(threading.Thread):
         self.exit_event = threading.Event()
         self.predecessors = predecessors if predecessors is not None else []
         self.logger = logger
-        self.conn: sqlite3.Connection = None
+        self.conn_manager: ConnectionManager = None
 
         for predecessor in self.predecessors:
             queue = Queue()
@@ -32,34 +30,6 @@ class BaseStageNode(threading.Thread):
     def __hash__(self):
         return abs(hash(f"{self.name}"))
     
-    @contextmanager
-    def read_cursor(self):
-        """
-        Read-only cursor.
-        No commit, no rollback.
-        """
-        cur = self.conn.cursor()
-        try:
-            yield cur
-        finally:
-            cur.close()
-
-    @contextmanager
-    def write_cursor(self):
-        """
-        Write cursor.
-        Commits on success, rolls back on error.
-        """
-        cur = self.conn.cursor()
-        try:
-            yield cur
-            self.conn.commit()
-        except Exception:
-            self.conn.rollback()
-            raise
-        finally:
-            cur.close()
-            
     def log(self, message: str, level="DEBUG") -> None:
         if self.logger is not None:
             if level == "DEBUG":
@@ -78,8 +48,7 @@ class BaseStageNode(threading.Thread):
             print(message)
 
     def initialize_db_connection(self, filename: str):
-        self.conn = sqlite3.connect(filename, check_same_thread=False, detect_types=sqlite3.PARSE_DECLTYPES)
-        self.conn.execute("PRAGMA journal_mode=WAL;")
+        self.conn_manager = ConnectionManager(filename)
 
     def set_predecessor_queue(self, predecessor_name: str, queue: Queue):
         self.predecessor_queues[predecessor_name] = queue
@@ -100,7 +69,7 @@ class BaseStageNode(threading.Thread):
         for successor_name, queue in self.successor_queues.items():
             queue.put(f"Signal from {self.name}")
 
-            with self.write_cursor() as cursor:
+            with self.conn_manager.write_cursor() as cursor:
                 cursor.execute(
                     f"""
                     INSERT INTO run_graph (source_node_name, source_run_id, target_node_name, target_run_id, trigger_timestamp)
@@ -118,7 +87,7 @@ class BaseStageNode(threading.Thread):
         self.log(f"{self.name} executing", level="INFO")
     
     def exit(self):
-        self.conn.close()
+        self.conn_manager.close()
 
     def run(self):
         while not self.exit_event.is_set():

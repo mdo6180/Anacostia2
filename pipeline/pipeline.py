@@ -20,9 +20,8 @@ class Pipeline:
             os.makedirs(self.db_folder)
         
         db_path = os.path.join(self.db_folder, 'anacostia.db')
-        self.conn = sqlite3.connect(db_path, check_same_thread=False, detect_types=sqlite3.PARSE_DECLTYPES)
-        self.conn.execute("PRAGMA journal_mode=WAL;")
-        with self.write_cursor() as cursor:
+        self.conn_manager = ConnectionManager(db_path)
+        with self.conn_manager.write_cursor() as cursor:
             cursor.execute(
                 """
                 CREATE TABLE IF NOT EXISTS nodes (
@@ -74,7 +73,7 @@ class Pipeline:
             node.initialize_db_connection(db_path)
             node.setup()
 
-            with self.write_cursor() as cursor:
+            with self.conn_manager.write_cursor() as cursor:
                 cursor.execute(
                     """
                     INSERT INTO nodes (node_id, node_name, node_type)
@@ -82,35 +81,7 @@ class Pipeline:
                     """,
                     (hash(node), node.name, type(node).__name__)
                 )
-    
-    @contextmanager
-    def read_cursor(self):
-        """
-        Read-only cursor.
-        No commit, no rollback.
-        """
-        cur = self.conn.cursor()
-        try:
-            yield cur
-        finally:
-            cur.close()
 
-    @contextmanager
-    def write_cursor(self):
-        """
-        Write cursor.
-        Commits on success, rolls back on error.
-        """
-        cur = self.conn.cursor()
-        try:
-            yield cur
-            self.conn.commit()
-        except Exception:
-            self.conn.rollback()
-            raise
-        finally:
-            cur.close()
-            
     def log(self, message: str, level="DEBUG") -> None:
         if self.logger is not None:
             if level == "DEBUG":
