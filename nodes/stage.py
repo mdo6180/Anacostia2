@@ -96,7 +96,9 @@ class BaseStageNode(threading.Thread):
             self.wait_predecessors()
             
             if self.exit_event.is_set(): return
+            self.conn_manager.start_run(self.name, self.run_id)
             self.execute()
+            self.conn_manager.end_run(self.name, self.run_id)
             
             if self.exit_event.is_set(): return
             self.signal_successors()

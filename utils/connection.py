@@ -49,3 +49,29 @@ class ConnectionManager:
                 return result[0]
             else:
                 raise ValueError(f"Node with name {node_name} not found in database.")
+    
+    def start_run(self, node_name: str, run_id: int) -> int:
+        node_id = self.get_node_id(node_name)
+
+        with self.write_cursor() as cursor:
+            cursor.execute(
+                """
+                INSERT INTO run_events (node_name, node_id, run_id, timestamp, event_type)
+                VALUES (?, ?, ?, CURRENT_TIMESTAMP, 'start');
+                """,
+                (node_name, node_id, run_id)
+            )
+            return cursor.lastrowid
+    
+    def end_run(self, node_name: str, run_id: int) -> int:
+        node_id = self.get_node_id(node_name)
+
+        with self.write_cursor() as cursor:
+            cursor.execute(
+                """
+                INSERT INTO run_events (node_name, node_id, run_id, timestamp, event_type)
+                VALUES (?, ?, ?, CURRENT_TIMESTAMP, 'end');
+                """,
+                (node_name, node_id, run_id)
+            )
+            return cursor.lastrowid

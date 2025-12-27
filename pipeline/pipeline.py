@@ -58,11 +58,12 @@ class Pipeline:
             cursor.execute(
                 """
                 CREATE TABLE IF NOT EXISTS run_events (
+                    node_name TEXT,
                     node_id TEXT,
                     run_id INTEGER,
                     timestamp DATETIME,
                     event_type TEXT NOT NULL CHECK (event_type IN ('start', 'end', 'error')),
-                    PRIMARY KEY (node_id, run_id)
+                    PRIMARY KEY (node_id, run_id, event_type)
                 );
                 """
             )

@@ -210,7 +210,9 @@ class BaseWatcherNode(threading.Thread, ABC):
             self.resource_event.wait()      # Wait until the resource event is set
 
             if self.exit_event.is_set(): return
+            self.conn_manager.start_run(self.name, self.run_id)
             self.execute()
+            self.conn_manager.end_run(self.name, self.run_id)
 
             if self.exit_event.is_set(): return
             self.signal_successors()
