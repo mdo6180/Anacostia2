@@ -5,7 +5,8 @@ from typing import Dict, List
 import time
 from logging import Logger
 
-from connection import ConnectionManager
+from utils.connection import ConnectionManager
+from utils.signal import Signal
 
 
 
@@ -61,24 +62,24 @@ class BaseStageNode(threading.Thread):
         while any(q.empty() for q in self.predecessor_queues.values()):
             time.sleep(0.1)  # Avoid busy waiting
 
-        for signal_name, queue in self.predecessor_queues.items():
-            signal = queue.get()
-            self.log(f"{self.name} consumed signal: {signal_name} with value {signal}", level="INFO")
-    
-    def signal_successors(self):
-        for successor_name, queue in self.successor_queues.items():
-            queue.put(f"Signal from {self.name}")
-
+        for predecessor_name, queue in self.predecessor_queues.items():
+            signal: Signal = queue.get()
             with self.conn_manager.write_cursor() as cursor:
                 cursor.execute(
                     f"""
                     INSERT INTO run_graph (source_node_name, source_run_id, target_node_name, target_run_id, trigger_timestamp)
                     VALUES (?, ?, ?, ?, ?);
                     """,
-                    (self.name, self.run_id, successor_name, None, datetime.now())
+                    (signal.source_node_name, signal.source_run_id, self.name, self.run_id, signal.timestamp)
                 )
 
-            self.log(f"{self.name} produced signal: {successor_name}", level="INFO")
+            self.log(f"{self.name} consumed signal: {predecessor_name} with value {signal}", level="INFO")
+    
+    def signal_successors(self):
+        for successor_name, queue in self.successor_queues.items():
+            signal = Signal(source_node_name=self.name, source_run_id=self.run_id, timestamp=datetime.now())
+            queue.put(signal)
+            self.log(f"{self.name} signalled {successor_name}", level="INFO")
     
     def setup(self):
         pass

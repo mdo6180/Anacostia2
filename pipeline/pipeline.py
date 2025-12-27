@@ -1,12 +1,10 @@
-from contextlib import contextmanager
 from typing import List, Union
 from logging import Logger
 import os
-import sqlite3
 
 from nodes.stage import BaseStageNode
 from nodes.watcher import BaseWatcherNode
-from connection import ConnectionManager
+from utils.connection import ConnectionManager
 
 
 class Pipeline:

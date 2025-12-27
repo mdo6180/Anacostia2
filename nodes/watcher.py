@@ -10,7 +10,8 @@ from threading import Thread
 from datetime import datetime
 import hashlib
 
-from connection import ConnectionManager
+from utils.connection import ConnectionManager
+from utils.signal import Signal
 
 
 
@@ -188,18 +189,9 @@ class BaseWatcherNode(threading.Thread, ABC):
     
     def signal_successors(self):
         for successor_name, queue in self.successor_queues.items():
-            queue.put(f"Signal from {self.name}")
-            
-            with self.conn_manager.write_cursor() as cursor:
-                cursor.execute(
-                    f"""
-                    INSERT INTO run_graph (source_node_name, source_run_id, target_node_name, target_run_id, trigger_timestamp)
-                    VALUES (?, ?, ?, ?, ?);
-                    """,
-                    (self.name, self.run_id, successor_name, None, datetime.now())
-                )
-
-            self.log(f"{self.name} produced signal: {successor_name}", level="INFO")
+            signal = Signal(source_node_name=self.name, source_run_id=self.run_id, timestamp=datetime.now())
+            queue.put(signal)
+            self.log(f"{self.name} signalled {successor_name}", level="INFO")
     
     @abstractmethod
     def execute(self):
