@@ -6,6 +6,7 @@ import sqlite3
 
 from nodes.stage import BaseStageNode
 from nodes.watcher import BaseWatcherNode
+from connection import ConnectionManager
 
 
 class Pipeline:
@@ -33,16 +34,6 @@ class Pipeline:
                 """
             )
             cursor.execute(
-                """
-                CREATE TABLE IF NOT EXISTS events (
-                    event_id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    node_id TEXT,
-                    event_type TEXT,
-                    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
-                );
-                """
-            )
-            cursor.execute(
                 f"""
                 CREATE TABLE IF NOT EXISTS artifact_usage_events (
                     artifact_path TEXT,
@@ -52,6 +43,29 @@ class Pipeline:
                     run_id INTEGER,
                     usage_type TEXT NOT NULL CHECK (usage_type IN ('read', 'write')),
                     UNIQUE(artifact_path, artifact_hash, node_id, run_id, usage_type)
+                );
+                """
+            )
+            # in the future, replace source_node_name and target_node_name with node_id foreign keys
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS run_graph (
+                    source_node_name TEXT,
+                    source_run_id INTEGER,
+                    target_node_name TEXT,
+                    target_run_id INTEGER,
+                    trigger_timestamp DATETIME
+                );
+                """
+            )
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS run_events (
+                    node_id TEXT,
+                    run_id INTEGER,
+                    timestamp DATETIME,
+                    event_type TEXT NOT NULL CHECK (event_type IN ('start', 'end', 'error')),
+                    PRIMARY KEY (node_id, run_id)
                 );
                 """
             )
