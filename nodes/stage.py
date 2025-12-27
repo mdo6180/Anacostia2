@@ -7,6 +7,8 @@ import time
 from logging import Logger
 import sqlite3
 
+from connection import ConnectionManager
+
 
 
 class BaseStageNode(threading.Thread):
@@ -125,7 +127,8 @@ class BaseStageNode(threading.Thread):
             
             if self.exit_event.is_set(): return
             self.execute()
-            self.run_id += 1
             
             if self.exit_event.is_set(): return
             self.signal_successors()
+
+            self.run_id += 1
