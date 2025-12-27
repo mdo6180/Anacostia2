@@ -1,4 +1,5 @@
 from contextlib import contextmanager
+from datetime import datetime
 import threading
 from queue import Queue
 from typing import Dict, List
@@ -94,9 +95,19 @@ class BaseStageNode(threading.Thread):
             self.log(f"{self.name} consumed signal: {signal_name} with value {signal}", level="INFO")
     
     def signal_successors(self):
-        for signal_name, queue in self.successor_queues.items():
+        for successor_name, queue in self.successor_queues.items():
             queue.put(f"Signal from {self.name}")
-            self.log(f"{self.name} produced signal: {signal_name}", level="INFO")
+
+            with self.write_cursor() as cursor:
+                cursor.execute(
+                    f"""
+                    INSERT INTO run_graph (source_node_name, source_run_id, target_node_name, target_run_id, trigger_timestamp)
+                    VALUES (?, ?, ?, ?, ?);
+                    """,
+                    (self.name, self.run_id, successor_name, None, datetime.now())
+                )
+
+            self.log(f"{self.name} produced signal: {successor_name}", level="INFO")
     
     def setup(self):
         pass
