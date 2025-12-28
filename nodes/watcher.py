@@ -6,7 +6,6 @@ from logging import Logger
 import os
 import time
 import traceback
-from threading import Thread
 from datetime import datetime
 import hashlib
 
@@ -116,7 +115,7 @@ class BaseWatcherNode(threading.Thread, ABC):
 
         # since we are using asyncio.run, we need to create a new thread to run the event loop 
         # because we can't run an event loop in the same thread as the FilesystemStoreNode
-        self.observer_thread = Thread(name=f"{self.name}_observer", target=_monitor_thread_func, daemon=True)
+        self.observer_thread = threading.Thread(name=f"{self.name}_observer", target=_monitor_thread_func, daemon=True)
         self.observer_thread.start()
     
     def register_artifact(self, filepath: str) -> None:
