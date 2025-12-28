@@ -26,16 +26,16 @@ class BaseWatcherNode(threading.Thread, ABC):
         self.logger = logger
         self.conn_manager: ConnectionManager = None
         self.hash_chunk_size = hash_chunk_size
-        self.artifact_table_name = f"{name}_{abs(hash(f'{name}_{path}'))}_artifacts"
+        
+        self.node_id = f"{name}|{self.path}"
+        self.node_id = hashlib.sha256(self.node_id.encode("utf-8")).hexdigest()
+        self.artifact_table_name = f"{name}_{self.node_id}_artifacts"
 
         self.global_usage_table_name = "artifact_usage_events"
 
         self.run_id = 0
 
         super().__init__(name=name)
-    
-    def __hash__(self):
-        return abs(hash(f"{self.name}_{self.path}"))
     
     def log(self, message: str, level="DEBUG") -> None:
         if self.logger is not None:
@@ -58,7 +58,12 @@ class BaseWatcherNode(threading.Thread, ABC):
         self.successor_queues[successor_name] = queue
     
     def initialize_db_connection(self, filename: str):
-        self.conn_manager = ConnectionManager(filename)
+        self.conn_manager = ConnectionManager(db_path=filename, logger=self.logger)
+        latest_run_id = self.conn_manager.get_latest_run_id(node_name=self.name)
+        if latest_run_id == 0:
+            self.run_id = 0
+        else:
+            self.run_id = latest_run_id + 1
     
     def setup(self):
         with self.conn_manager.write_cursor() as cursor:
@@ -68,7 +73,8 @@ class BaseWatcherNode(threading.Thread, ABC):
                     artifact_path TEXT UNIQUE NOT NULL,
                     timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
                     artifact_hash TEXT PRIMARY KEY,
-                    hash_algorithm TEXT
+                    hash_algorithm TEXT,
+                    UNIQUE(artifact_path, artifact_hash)
                 );
                 """
             )
@@ -123,7 +129,7 @@ class BaseWatcherNode(threading.Thread, ABC):
 
         with self.conn_manager.write_cursor() as cursor:
             cursor.execute(
-                f"INSERT INTO {self.artifact_table_name} (artifact_path, timestamp, artifact_hash, hash_algorithm) VALUES (?, ?, ?, ?);",
+                f"INSERT OR IGNORE INTO {self.artifact_table_name} (artifact_path, timestamp, artifact_hash, hash_algorithm) VALUES (?, ?, ?, ?);",
                 (filepath, timestamp, self.hash_file(filepath), "sha256")
             )
     
@@ -142,7 +148,7 @@ class BaseWatcherNode(threading.Thread, ABC):
                 SELECT artifact_path, artifact_hash FROM {self.artifact_table_name}
                 WHERE artifact_hash NOT IN (SELECT DISTINCT artifact_hash FROM {self.global_usage_table_name} WHERE node_id = ?);
                 """,
-                (hash(self),)
+                (self.node_id,)
             )
             return cursor.fetchall()
     
@@ -150,10 +156,10 @@ class BaseWatcherNode(threading.Thread, ABC):
         with self.conn_manager.write_cursor() as cursor:
             cursor.execute(
                 f"""
-                INSERT OR IGNORE INTO {self.global_usage_table_name} (artifact_path, artifact_hash, node_id, run_id, usage_type)
-                VALUES (?, ?, ?, ?, ?);
+                INSERT OR IGNORE INTO {self.global_usage_table_name} (artifact_path, artifact_hash, node_id, node_name, run_id, usage_type)
+                VALUES (?, ?, ?, ?, ?, ?);
                 """,
-                (filepath, artifact_hash, hash(self), self.run_id, "read")
+                (filepath, artifact_hash, self.node_id, self.name, self.run_id, "used")
             )
 
     def hash_file(self, filepath: str) -> str:
@@ -209,8 +215,12 @@ class BaseWatcherNode(threading.Thread, ABC):
             self.resource_event.wait()      # Wait until the resource event is set
 
             if self.exit_event.is_set(): return
+            self.log(f"{self.name} starting run {self.run_id}", level="INFO")
             self.conn_manager.start_run(self.name, self.run_id)
+
             self.execute()
+            
+            self.log(f"{self.name} finished run {self.run_id}", level="INFO")
             self.conn_manager.end_run(self.name, self.run_id)
 
             if self.exit_event.is_set(): return

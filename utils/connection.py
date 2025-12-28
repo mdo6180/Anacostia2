@@ -1,12 +1,31 @@
 import sqlite3
 from contextlib import contextmanager
+import logging
 
 
 class ConnectionManager:
-    def __init__(self, db_path: str) -> None:
+    def __init__(self, db_path: str, logger: logging.Logger = None) -> None:
         self.connection = sqlite3.connect(db_path, check_same_thread=False, detect_types=sqlite3.PARSE_DECLTYPES)
         self.connection.execute("PRAGMA journal_mode=WAL;")
+        self.logger = logger
     
+    def log(self, message: str, level="DEBUG") -> None:
+        if self.logger is not None:
+            if level == "DEBUG":
+                self.logger.debug(message)
+            elif level == "INFO":
+                self.logger.info(message)
+            elif level == "WARNING":
+                self.logger.warning(message)
+            elif level == "ERROR":
+                self.logger.error(message)
+            elif level == "CRITICAL":
+                self.logger.critical(message)
+            else:
+                raise ValueError(f"Invalid log level: {level}")
+        else:
+            print(message)
+
     def close(self) -> None:
         self.connection.close()
     
@@ -36,6 +55,20 @@ class ConnectionManager:
         finally:
             cur.close()
     
+    def get_latest_run_id(self, node_name: str) -> int:
+        with self.read_cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT MAX(run_id) FROM run_events WHERE node_name = ?;
+                """,
+                (node_name,)
+            )
+            result = cursor.fetchone()
+            if result and result[0] is not None:
+                return result[0]
+            else:
+                return 0
+    
     def get_node_id(self, node_name: str) -> int:
         with self.read_cursor() as cursor:
             cursor.execute(
@@ -53,25 +86,40 @@ class ConnectionManager:
     def start_run(self, node_name: str, run_id: int) -> int:
         node_id = self.get_node_id(node_name)
 
-        with self.write_cursor() as cursor:
-            cursor.execute(
-                """
-                INSERT INTO run_events (node_name, node_id, run_id, timestamp, event_type)
-                VALUES (?, ?, ?, CURRENT_TIMESTAMP, 'start');
-                """,
-                (node_name, node_id, run_id)
-            )
-            return cursor.lastrowid
+        try:
+            with self.write_cursor() as cursor:
+                cursor.execute(
+                    """
+                    INSERT INTO run_events (node_name, node_id, run_id, timestamp, event_type)
+                    VALUES (?, ?, ?, CURRENT_TIMESTAMP, 'start');
+                    """,
+                    (node_name, node_id, run_id)
+                )
+                return run_id
     
+        except sqlite3.IntegrityError as e:
+            if "UNIQUE constraint failed" in str(e):
+                # Run already started, ignore
+                self.log(f"Run {run_id} for node '{node_name}' already started. Ignoring duplicate start.", level="WARNING")
+                return -1
+
     def end_run(self, node_name: str, run_id: int) -> int:
         node_id = self.get_node_id(node_name)
 
         with self.write_cursor() as cursor:
-            cursor.execute(
-                """
-                INSERT INTO run_events (node_name, node_id, run_id, timestamp, event_type)
-                VALUES (?, ?, ?, CURRENT_TIMESTAMP, 'end');
-                """,
-                (node_name, node_id, run_id)
-            )
-            return cursor.lastrowid
+            try:
+                cursor.execute(
+                    """
+                    INSERT INTO run_events (node_name, node_id, run_id, timestamp, event_type)
+                    VALUES (?, ?, ?, CURRENT_TIMESTAMP, 'end');
+                    """,
+                    (node_name, node_id, run_id)
+                )
+                return run_id
+            
+            except sqlite3.IntegrityError as e:
+                if "UNIQUE constraint failed" in str(e):
+                    # Run already ended, ignore
+                    self.log(f"Run {run_id} for node '{node_name}' already ended. Ignoring duplicate end.", level="WARNING")
+                    return -1
+                

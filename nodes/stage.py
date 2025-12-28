@@ -4,6 +4,7 @@ from queue import Queue
 from typing import Dict, List
 import time
 from logging import Logger
+import hashlib
 
 from utils.connection import ConnectionManager
 from utils.signal import Signal
@@ -19,6 +20,10 @@ class BaseStageNode(threading.Thread):
         self.logger = logger
         self.conn_manager: ConnectionManager = None
 
+        self.predecessors_names = "|".join([predecessor.name for predecessor in self.predecessors])
+        self.node_id = f"{name}|{self.predecessors_names}"
+        self.node_id = hashlib.sha256(self.node_id.encode("utf-8")).hexdigest()
+
         for predecessor in self.predecessors:
             queue = Queue()
             predecessor.set_successor_queue(name, queue)
@@ -27,9 +32,6 @@ class BaseStageNode(threading.Thread):
         self.run_id = 0
 
         super().__init__(name=name)
-    
-    def __hash__(self):
-        return abs(hash(f"{self.name}"))
     
     def log(self, message: str, level="DEBUG") -> None:
         if self.logger is not None:
@@ -49,7 +51,12 @@ class BaseStageNode(threading.Thread):
             print(message)
 
     def initialize_db_connection(self, filename: str):
-        self.conn_manager = ConnectionManager(filename)
+        self.conn_manager = ConnectionManager(db_path=filename, logger=self.logger)
+        latest_run_id = self.conn_manager.get_latest_run_id(node_name=self.name)
+        if latest_run_id == 0:
+            self.run_id = 0
+        else:
+            self.run_id = latest_run_id + 1
 
     def set_predecessor_queue(self, predecessor_name: str, queue: Queue):
         self.predecessor_queues[predecessor_name] = queue
@@ -97,7 +104,11 @@ class BaseStageNode(threading.Thread):
             
             if self.exit_event.is_set(): return
             self.conn_manager.start_run(self.name, self.run_id)
+            self.log(f"{self.name} starting run {self.run_id}", level="INFO")
+
             self.execute()
+            
+            self.log(f"{self.name} finished run {self.run_id}", level="INFO")
             self.conn_manager.end_run(self.name, self.run_id)
             
             if self.exit_event.is_set(): return

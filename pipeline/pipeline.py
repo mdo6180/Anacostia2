@@ -7,6 +7,7 @@ from nodes.watcher import BaseWatcherNode
 from utils.connection import ConnectionManager
 
 
+
 class Pipeline:
     def __init__(self, name: str, nodes: List[Union[BaseStageNode, BaseWatcherNode]], db_folder: str = ".anacostia", logger: Logger = None) -> None:
         self.name = name
@@ -37,8 +38,9 @@ class Pipeline:
                     artifact_hash TEXT,
                     timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
                     node_id TEXT,
+                    node_name TEXT,
                     run_id INTEGER,
-                    usage_type TEXT NOT NULL CHECK (usage_type IN ('read', 'write')),
+                    usage_type TEXT NOT NULL CHECK (usage_type IN ('read', 'write', 'used')),
                     UNIQUE(artifact_path, artifact_hash, node_id, run_id, usage_type)
                 );
                 """
@@ -75,10 +77,10 @@ class Pipeline:
             with self.conn_manager.write_cursor() as cursor:
                 cursor.execute(
                     """
-                    INSERT INTO nodes (node_id, node_name, node_type)
+                    INSERT OR IGNORE INTO nodes (node_id, node_name, node_type)
                     VALUES (?, ?, ?);
                     """,
-                    (hash(node), node.name, type(node).__name__)
+                    (node.node_id, node.name, type(node).__name__)
                 )
 
     def log(self, message: str, level="DEBUG") -> None:
