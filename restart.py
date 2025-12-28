@@ -79,5 +79,12 @@ if __name__ == "__main__":
         print("KeyboardInterrupt received. Terminating pipeline...")
         pipeline.terminate_nodes()
     
+    # How to run the test:
+    # 1. Run this script without the --restart flag in one terminal to start the pipeline.
+    # 2. Add some files to data_store_path1 and data_store_path2 to trigger the watchers.
+    # 3. After some time, stop the script (Ctrl+C).
+    # 4. Run this script again with the --restart flag to simulate a restart.
+    # 5. Observe the logs to verify that the pipeline resumes correctly from where it left off.
+
     # Note: in theory we should see watcher_node2 triggering twice for every time watcher_node1 triggers 
     # and then stage_node should trigger after both watchers have triggered.
