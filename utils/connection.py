@@ -65,9 +65,11 @@ class ConnectionManager:
             )
             result = cursor.fetchone()
             if result and result[0] is not None:
+                # if there is at least one run, return the latest run_id
                 return result[0]
             else:
-                return 0
+                # no runs found, return -1
+                return -1
     
     def get_node_id(self, node_name: str) -> int:
         with self.read_cursor() as cursor:
@@ -98,8 +100,8 @@ class ConnectionManager:
                 return run_id
     
         except sqlite3.IntegrityError as e:
+            # Run already started, ignore
             if "UNIQUE constraint failed" in str(e):
-                # Run already started, ignore
                 self.log(f"Run {run_id} for node '{node_name}' already started. Ignoring duplicate start.", level="WARNING")
                 return -1
 
@@ -122,4 +124,26 @@ class ConnectionManager:
                     # Run already ended, ignore
                     self.log(f"Run {run_id} for node '{node_name}' already ended. Ignoring duplicate end.", level="WARNING")
                     return -1
+    
+    def run_ended(self, node_name: str, run_id: int) -> bool:
+        with self.read_cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT 1 FROM run_events WHERE node_name = ? AND run_id = ? AND event_type = 'end' LIMIT 1;
+                """,
+                (node_name, run_id)
+            )
+            return cursor.fetchone() is not None
+    
+    def resume_run(self, node_name: str, run_id: int) -> None:
+        node_id = self.get_node_id(node_name)
+
+        with self.write_cursor() as cursor:
+            cursor.execute(
+                """
+                INSERT INTO run_events (node_name, node_id, run_id, timestamp, event_type)
+                VALUES (?, ?, ?, CURRENT_TIMESTAMP, 'restart');
+                """,
+                (node_name, node_id, run_id)
+            )
                 

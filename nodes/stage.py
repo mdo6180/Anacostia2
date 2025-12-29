@@ -98,13 +98,35 @@ class BaseStageNode(threading.Thread):
         self.conn_manager.close()
 
     def run(self):
+        latest_run_id = self.conn_manager.get_latest_run_id(node_name=self.name)
+
+        if latest_run_id == -1:
+            self.run_id = 0
+
+        elif self.conn_manager.run_ended(self.name, latest_run_id) is True:
+            # upon restart, if the latest run has ended, start a new run
+            self.run_id = latest_run_id + 1
+        else:
+            # upon restart, if the latest run has not ended, resume from that run
+            self.run_id = latest_run_id
+
+            self.log(f"{self.name} resuming run {self.run_id}", level="INFO")
+            self.conn_manager.resume_run(self.name, self.run_id)
+            
+            self.execute()
+            
+            self.log(f"{self.name} finished run {self.run_id}", level="INFO")
+            self.conn_manager.end_run(self.name, self.run_id)
+
+            self.run_id += 1
+
         while not self.exit_event.is_set():
             if self.exit_event.is_set(): return
             self.wait_predecessors()
             
             if self.exit_event.is_set(): return
             self.conn_manager.start_run(self.name, self.run_id)
-            self.log(f"{self.name} starting run {self.run_id}", level="INFO")
+            self.log(f"{self.name} starting new run {self.run_id}", level="INFO")
 
             self.execute()
             

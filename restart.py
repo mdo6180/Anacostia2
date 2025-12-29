@@ -46,11 +46,11 @@ class FolderWatcherNode(BaseWatcherNode):
             self.trigger(message="New artifact detected")
     
     def execute(self):
-        unused_artifacts = self.get_unused_artifacts()
-        for artifact, hash in unused_artifacts:
-            self.log(f"{self.name} processing artifact: {artifact} with hash: {hash}", level="INFO")
-            self.mark_artifact_used(artifact, hash)
-            self.log(f"{self.name} finished processing artifact: {artifact}", level="INFO")
+        # Process one artifact at a time
+        artifact, hash = self.get_unused_artifacts()[0]
+        self.log(f"{self.name} processing artifact: {artifact} with hash: {hash}", level="INFO")
+        self.mark_artifact_used(artifact, hash)
+        self.log(f"{self.name} finished processing artifact: {artifact}", level="INFO")
 
 
 class DelayStageNode(BaseStageNode):

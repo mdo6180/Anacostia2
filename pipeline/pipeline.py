@@ -19,6 +19,9 @@ class Pipeline:
             os.makedirs(self.db_folder)
         
         db_path = os.path.join(self.db_folder, 'anacostia.db')
+        if os.path.exists(db_path) is True:
+            self.log(f"Database found at {db_path}. Connecting...", level="INFO")
+
         self.conn_manager = ConnectionManager(db_path)
         with self.conn_manager.write_cursor() as cursor:
             cursor.execute(
@@ -64,7 +67,7 @@ class Pipeline:
                     node_id TEXT,
                     run_id INTEGER,
                     timestamp DATETIME,
-                    event_type TEXT NOT NULL CHECK (event_type IN ('start', 'end', 'error')),
+                    event_type TEXT NOT NULL CHECK (event_type IN ('start', 'end', 'error', 'restart')),
                     PRIMARY KEY (node_id, run_id, event_type)
                 );
                 """

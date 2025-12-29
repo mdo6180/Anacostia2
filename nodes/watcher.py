@@ -59,11 +59,6 @@ class BaseWatcherNode(threading.Thread, ABC):
     
     def initialize_db_connection(self, filename: str):
         self.conn_manager = ConnectionManager(db_path=filename, logger=self.logger)
-        latest_run_id = self.conn_manager.get_latest_run_id(node_name=self.name)
-        if latest_run_id == 0:
-            self.run_id = 0
-        else:
-            self.run_id = latest_run_id + 1
     
     def setup(self):
         with self.conn_manager.write_cursor() as cursor:
@@ -207,6 +202,28 @@ class BaseWatcherNode(threading.Thread, ABC):
         pass
     
     def run(self):
+        latest_run_id = self.conn_manager.get_latest_run_id(node_name=self.name)
+
+        if latest_run_id == -1:
+            self.run_id = 0
+
+        elif self.conn_manager.run_ended(self.name, latest_run_id) is True:
+            # upon restart, if the latest run has ended, start a new run
+            self.run_id = latest_run_id + 1
+        else:
+            # upon restart, if the latest run has not ended, resume from that run
+            self.run_id = latest_run_id
+
+            self.log(f"{self.name} resuming run {self.run_id}", level="INFO")
+            self.conn_manager.resume_run(self.name, self.run_id)
+
+            self.execute()
+
+            self.log(f"{self.name} finished run {self.run_id}", level="INFO")
+            self.conn_manager.end_run(self.name, self.run_id)
+
+            self.run_id += 1
+
         self.start_monitoring()     # Start monitoring the resource in a separate thread
 
         while not self.exit_event.is_set():
@@ -215,8 +232,8 @@ class BaseWatcherNode(threading.Thread, ABC):
             self.resource_event.wait()      # Wait until the resource event is set
 
             if self.exit_event.is_set(): return
-            self.log(f"{self.name} starting run {self.run_id}", level="INFO")
             self.conn_manager.start_run(self.name, self.run_id)
+            self.log(f"{self.name} starting new run {self.run_id}", level="INFO")
 
             self.execute()
             
