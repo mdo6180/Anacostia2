@@ -20,15 +20,18 @@ class BaseStageNode(threading.Thread):
         self.logger = logger
         self.conn_manager: ConnectionManager = None
 
-        self.predecessors_names = "|".join([predecessor.name for predecessor in self.predecessors])
-        self.node_id = f"{name}|{self.predecessors_names}"
+        self.successors = []
+        self.predecessors_names = {predecessor.name for predecessor in self.predecessors}
+        self.predecessors_names_str = "|".join([predecessor.name for predecessor in self.predecessors])
+        self.node_id = f"{name}|{self.predecessors_names_str}"
         self.node_id = hashlib.sha256(self.node_id.encode("utf-8")).hexdigest()
 
         for predecessor in self.predecessors:
             queue = Queue()
+            predecessor.successors.append(self)
             predecessor.set_successor_queue(name, queue)
             self.set_predecessor_queue(predecessor.name, queue)
-
+        
         self.run_id = 0
 
         super().__init__(name=name)
@@ -65,29 +68,41 @@ class BaseStageNode(threading.Thread):
         self.successor_queues[successor_name] = queue
     
     def wait_predecessors(self):
-        # Wait until all predecessor queues have at least one item
-        while any(q.empty() for q in self.predecessor_queues.values()):
+        # Wait until all predecessors have sent their signals via the database
+        while not self.predecessors_names == self.conn_manager.get_unconsumed_signals(self.name):
             time.sleep(0.1)  # Avoid busy waiting
 
         for predecessor_name, queue in self.predecessor_queues.items():
             signal: Signal = queue.get()
+            self.log(f"{self.name} consumed signal: {predecessor_name} with value {signal}", level="INFO")
+
+            self.conn_manager.consume_signal(
+                source_node_name=signal.source_node_name,
+                source_run_id=signal.source_run_id,
+                target_node_name=self.name,
+                target_run_id=self.run_id
+            )
+
+    def signal_successors(self):
+        for successor in self.successors:
+            signal = Signal(
+                source_node_name=self.name, source_run_id=self.run_id, 
+                target_node_name=successor.name, target_run_id=successor.run_id, 
+                timestamp=datetime.now()
+            )
+            successor.predecessor_queues[self.name].put(signal)
+
             with self.conn_manager.write_cursor() as cursor:
                 cursor.execute(
                     f"""
-                    INSERT INTO run_graph (source_node_name, source_run_id, target_node_name, target_run_id, trigger_timestamp)
-                    VALUES (?, ?, ?, ?, ?);
+                    INSERT INTO run_graph (source_node_name, source_run_id, target_node_name, trigger_timestamp)
+                    VALUES (?, ?, ?, ?);
                     """,
-                    (signal.source_node_name, signal.source_run_id, self.name, self.run_id, signal.timestamp)
+                    (self.name, self.run_id, successor.name, signal.timestamp)
                 )
 
-            self.log(f"{self.name} consumed signal: {predecessor_name} with value {signal}", level="INFO")
-    
-    def signal_successors(self):
-        for successor_name, queue in self.successor_queues.items():
-            signal = Signal(source_node_name=self.name, source_run_id=self.run_id, timestamp=datetime.now())
-            queue.put(signal)
-            self.log(f"{self.name} signalled {successor_name}", level="INFO")
-    
+            self.log(f"{self.name} signalled {successor.name}", level="INFO")
+
     def setup(self):
         pass
 
@@ -96,8 +111,31 @@ class BaseStageNode(threading.Thread):
     
     def exit(self):
         self.conn_manager.close()
+    
+    def load_signals(self) -> List[Signal]:
+        with self.conn_manager.read_cursor() as cursor:
+            # Get all distinct source_node_names for the target node
+            cursor.execute(
+                """
+                SELECT source_node_name, source_run_id, trigger_timestamp FROM run_graph WHERE target_node_name = ? AND target_run_id IS NULL;
+                """,
+                (self.name,)
+            )
+            rows = cursor.fetchall()
+
+            for row in rows:
+                signal = Signal(
+                    source_node_name=row[0],
+                    source_run_id=row[1],
+                    target_node_name=self.name,
+                    target_run_id=self.run_id,
+                    timestamp=row[2]
+                )
+                self.predecessor_queues[signal.source_node_name].put(signal)
 
     def run(self):
+        self.load_signals()
+
         latest_run_id = self.conn_manager.get_latest_run_id(node_name=self.name)
 
         if latest_run_id == -1:
@@ -117,6 +155,8 @@ class BaseStageNode(threading.Thread):
             
             self.log(f"{self.name} finished run {self.run_id}", level="INFO")
             self.conn_manager.end_run(self.name, self.run_id)
+
+            self.signal_successors()
 
             self.run_id += 1
 

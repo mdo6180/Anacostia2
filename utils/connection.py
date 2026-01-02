@@ -1,6 +1,7 @@
 import sqlite3
 from contextlib import contextmanager
 import logging
+from typing import List
 
 
 class ConnectionManager:
@@ -145,5 +146,67 @@ class ConnectionManager:
                 VALUES (?, ?, ?, CURRENT_TIMESTAMP, 'restart');
                 """,
                 (node_name, node_id, run_id)
+            )
+    
+    def get_unconsumed_signals(self, target_node_name: str) -> tuple:
+        with self.read_cursor() as cursor:
+            # Get all distinct source_node_names for the target node
+            cursor.execute(
+                """
+                SELECT DISTINCT source_node_name FROM run_graph WHERE target_node_name = ?;
+                """,
+                (target_node_name,)
+            )
+            source_nodes = {row[0] for row in cursor.fetchall()}
+            return source_nodes
+    
+    def get_unconsumed_signals_details(self, target_node_name: str) -> List[tuple]:
+        with self.read_cursor() as cursor:
+            # Get all distinct source_node_names for the target node
+            cursor.execute(
+                """
+                SELECT source_node_name, source_run_id, trigger_timestamp FROM run_graph WHERE target_node_name = ? AND target_run_id IS NULL;
+                """,
+                (target_node_name,)
+            )
+            rows = cursor.fetchall()
+            return rows
+    
+    def consume_signal(self, source_node_name: str, source_run_id: int, target_node_name: str, target_run_id: int) -> None:
+        """
+        Consumes a signal by updating the target_run_id for a pending edge in the run graph.
+
+        This method finds the oldest pending edge (where target_run_id is NULL) that matches
+        the given source node, source run, and target node, then sets its target_run_id to
+        complete the connection.
+
+        Args:
+            source_node_name (str): The name of the source node that emitted the signal.
+            source_run_id (int): The run ID of the source node execution.
+            target_node_name (str): The name of the target node that should consume the signal.
+            target_run_id (int): The run ID of the target node execution consuming the signal.
+
+        Returns:
+            None
+
+        Note:
+            Uses SQLite's rowid (an implicit column that exists for every table unless specified
+            as WITHOUT ROWID) to efficiently update a specific row. The rowid does not need to
+            be explicitly created in the CREATE TABLE schema - it's automatically available in
+            SQLite tables.
+        """
+
+        with self.write_cursor() as cursor:
+            cursor.execute(
+                """
+                UPDATE run_graph SET target_run_id = ? 
+                WHERE rowid = (
+                    SELECT rowid FROM run_graph 
+                    WHERE source_node_name = ? AND source_run_id = ? AND target_node_name = ? AND target_run_id IS NULL 
+                    ORDER BY trigger_timestamp ASC 
+                    LIMIT 1
+                );
+                """,
+                (target_run_id, source_node_name, source_run_id, target_node_name,)
             )
                 

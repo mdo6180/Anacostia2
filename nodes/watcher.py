@@ -20,6 +20,7 @@ class BaseWatcherNode(threading.Thread, ABC):
         if os.path.exists(self.path) is False:
             os.makedirs(self.path)
 
+        self.successors = []
         self.successor_queues: Dict[str, Queue] = {}
         self.exit_event = threading.Event()
         self.resource_event = threading.Event()
@@ -188,11 +189,25 @@ class BaseWatcherNode(threading.Thread, ABC):
             self.log(f"{self.name} triggered with message: {message}", level="INFO")
     
     def signal_successors(self):
-        for successor_name, queue in self.successor_queues.items():
-            signal = Signal(source_node_name=self.name, source_run_id=self.run_id, timestamp=datetime.now())
-            queue.put(signal)
-            self.log(f"{self.name} signalled {successor_name}", level="INFO")
-    
+        for successor in self.successors:
+            signal = Signal(
+                source_node_name=self.name, source_run_id=self.run_id, 
+                target_node_name=successor.name, target_run_id=successor.run_id, 
+                timestamp=datetime.now()
+            )
+            successor.predecessor_queues[self.name].put(signal)
+
+            with self.conn_manager.write_cursor() as cursor:
+                cursor.execute(
+                    f"""
+                    INSERT INTO run_graph (source_node_name, source_run_id, target_node_name, trigger_timestamp)
+                    VALUES (?, ?, ?, ?);
+                    """,
+                    (self.name, self.run_id, successor.name, signal.timestamp)
+                )
+
+            self.log(f"{self.name} signalled {successor.name}", level="INFO")
+
     @abstractmethod
     def execute(self):
         """
@@ -221,6 +236,8 @@ class BaseWatcherNode(threading.Thread, ABC):
 
             self.log(f"{self.name} finished run {self.run_id}", level="INFO")
             self.conn_manager.end_run(self.name, self.run_id)
+
+            self.signal_successors()
 
             self.run_id += 1
 
