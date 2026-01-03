@@ -63,7 +63,6 @@ class BaseStageNode(threading.Thread):
         else:
             print(message)
 
-
     def initialize_db_connection(self, filename: str):
         self.conn_manager = ConnectionManager(db_path=filename, logger=self.logger)
 

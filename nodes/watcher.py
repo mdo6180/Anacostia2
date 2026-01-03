@@ -256,7 +256,8 @@ class BaseWatcherNode(threading.Thread, ABC):
             self.log(f"{self.name} finished run {self.run_id}", level="INFO")
             self.conn_manager.end_run(self.name, self.run_id)
 
-            if self.exit_event.is_set(): return
+            # we don't wait for the exit event here to allow successors to be signalled even if we are terminating
+            # if the node exits, we want it to exit before the end_run is called, otherwise, we want to log the run into the run graph
             self.signal_successors()
 
             self.run_id += 1
