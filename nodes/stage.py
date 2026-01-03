@@ -69,29 +69,26 @@ class BaseStageNode(threading.Thread):
     
     def wait_predecessors(self):
         # Wait until all predecessors have sent their signals via the database
-        while not self.predecessors_names == self.conn_manager.get_unconsumed_signals(self.name):
+
+        def _get_unconsumed_signals_names():
+            uncomsuned_signals = self.conn_manager.get_unconsumed_signals(self.name)
+            uncomsuned_signals_names = set(source_node_name for source_node_name, _, _ in uncomsuned_signals)
+            return uncomsuned_signals_names
+
+        while not self.predecessors_names == _get_unconsumed_signals_names():
             time.sleep(0.1)  # Avoid busy waiting
 
         for predecessor_name, queue in self.predecessor_queues.items():
-            signal: Signal = queue.get()
-            self.log(f"{self.name} consumed signal: {predecessor_name} with value {signal}", level="INFO")
-
             self.conn_manager.consume_signal(
-                source_node_name=signal.source_node_name,
-                source_run_id=signal.source_run_id,
+                source_node_name=predecessor_name,
                 target_node_name=self.name,
                 target_run_id=self.run_id
             )
+            self.log(f"{self.name} received signal from {predecessor_name}", level="INFO")
 
     def signal_successors(self):
         for successor in self.successors:
             timestamp = datetime.now()
-            signal = Signal(
-                source_node_name=self.name, source_run_id=self.run_id, 
-                target_node_name=successor.name, target_run_id=successor.run_id, 
-                timestamp=timestamp
-            )
-            successor.predecessor_queues[self.name].put(signal)
 
             with self.conn_manager.write_cursor() as cursor:
                 cursor.execute(
@@ -173,6 +170,8 @@ class BaseStageNode(threading.Thread):
             self.log(f"{self.name} finished run {self.run_id}", level="INFO")
             self.conn_manager.end_run(self.name, self.run_id)
             
+            # we don't wait for the exit event here to allow successors to be signalled even if we are terminating
+            # if the node exits, we want it to exit before the end_run is called, otherwise, we want to log the run into the run graph
             self.signal_successors()
 
             self.run_id += 1

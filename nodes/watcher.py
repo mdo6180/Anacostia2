@@ -190,20 +190,13 @@ class BaseWatcherNode(threading.Thread, ABC):
     
     def signal_successors(self):
         for successor in self.successors:
-            signal = Signal(
-                source_node_name=self.name, source_run_id=self.run_id, 
-                target_node_name=successor.name, target_run_id=successor.run_id, 
-                timestamp=datetime.now()
-            )
-            successor.predecessor_queues[self.name].put(signal)
-
             with self.conn_manager.write_cursor() as cursor:
                 cursor.execute(
                     f"""
                     INSERT INTO run_graph (source_node_name, source_run_id, target_node_name, trigger_timestamp)
                     VALUES (?, ?, ?, ?);
                     """,
-                    (self.name, self.run_id, successor.name, signal.timestamp)
+                    (self.name, self.run_id, successor.name, datetime.now())
                 )
 
             self.log(f"{self.name} signalled {successor.name}", level="INFO")
