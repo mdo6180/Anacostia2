@@ -34,7 +34,24 @@ class BaseWatcherNode(threading.Thread, ABC):
 
         super().__init__(name=name)
     
-    def log(self, message: str, level="DEBUG") -> None:
+    def log(self, message: str, level="DEBUG", color: str | None = None) -> None:
+        ANSI_COLORS = {
+            "black": "\033[30m",
+            "red": "\033[31m",
+            "green": "\033[32m",
+            "yellow": "\033[33m",
+            "blue": "\033[34m",
+            "magenta": "\033[35m",
+            "cyan": "\033[36m",
+            "white": "\033[37m",
+            "reset": "\033[0m",
+        }
+
+        if color is not None:
+            if color not in ANSI_COLORS:
+                raise ValueError(f"Invalid color: {color}")
+            message = f"{ANSI_COLORS[color]}{message}{ANSI_COLORS['reset']}"
+
         if self.logger is not None:
             if level == "DEBUG":
                 self.logger.debug(message)
