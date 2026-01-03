@@ -75,16 +75,11 @@ class BaseStageNode(threading.Thread):
 
     def signal_successors(self):
         for successor in self.successors:
-            timestamp = datetime.now()
-
-            with self.conn_manager.write_cursor() as cursor:
-                cursor.execute(
-                    f"""
-                    INSERT INTO run_graph (source_node_name, source_run_id, target_node_name, trigger_timestamp)
-                    VALUES (?, ?, ?, ?);
-                    """,
-                    (self.name, self.run_id, successor.name, timestamp)
-                )
+            self.conn_manager.signal_successor(
+                source_node_name=self.name,
+                source_run_id=self.run_id,
+                target_node_name=successor.name
+            )
             self.log(f"{self.name} signalled {successor.name}", level="INFO")
 
     def setup(self):

@@ -1,3 +1,4 @@
+from datetime import datetime
 import sqlite3
 from contextlib import contextmanager
 import logging
@@ -200,3 +201,12 @@ class ConnectionManager:
                 (target_run_id, source_node_name, target_node_name,)
             )
                 
+    def signal_successor(self, source_node_name: str, source_run_id: int, target_node_name: str) -> None:
+        with self.write_cursor() as cursor:
+            cursor.execute(
+                """
+                INSERT INTO run_graph (source_node_name, source_run_id, target_node_name, trigger_timestamp)
+                VALUES (?, ?, ?, ?);
+                """,
+                (source_node_name, source_run_id, target_node_name, datetime.now())
+            )
