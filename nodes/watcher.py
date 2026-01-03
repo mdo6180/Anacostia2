@@ -186,9 +186,9 @@ class BaseWatcherNode(threading.Thread, ABC):
             self.conn_manager.signal_successor(
                 source_node_name=self.name,
                 source_run_id=self.run_id,
-                target_node_name=successor.name
+                target_node_name=successor
             )
-            self.log(f"{self.name} signalled {successor.name}", level="INFO")
+            self.log(f"{self.name} signalled {successor}", level="INFO")
 
     @abstractmethod
     def execute(self):

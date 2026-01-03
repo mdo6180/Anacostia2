@@ -10,9 +10,9 @@ from utils.connection import ConnectionManager
 
 
 class BaseStageNode(threading.Thread):
-    def __init__(self, name: str, predecessors: List['BaseStageNode'] = None, logger: Logger = None):
+    def __init__(self, name: str, predecessors: List['BaseStageNode'], logger: Logger = None):
         self.exit_event = threading.Event()
-        self.predecessors = predecessors if predecessors is not None else []
+        self.predecessors = predecessors
         self.logger = logger
         self.conn_manager: ConnectionManager = None
 
@@ -23,7 +23,7 @@ class BaseStageNode(threading.Thread):
         self.node_id = hashlib.sha256(self.node_id.encode("utf-8")).hexdigest()
 
         for predecessor in self.predecessors:
-            predecessor.successors.append(self)
+            predecessor.successors.append(name)
         
         self.run_id = 0
 
@@ -48,11 +48,6 @@ class BaseStageNode(threading.Thread):
 
     def initialize_db_connection(self, filename: str):
         self.conn_manager = ConnectionManager(db_path=filename, logger=self.logger)
-        latest_run_id = self.conn_manager.get_latest_run_id(node_name=self.name)
-        if latest_run_id == 0:
-            self.run_id = 0
-        else:
-            self.run_id = latest_run_id + 1
 
     def wait_predecessors(self):
         # Wait until all predecessors have sent their signals via the database
@@ -78,9 +73,9 @@ class BaseStageNode(threading.Thread):
             self.conn_manager.signal_successor(
                 source_node_name=self.name,
                 source_run_id=self.run_id,
-                target_node_name=successor.name
+                target_node_name=successor
             )
-            self.log(f"{self.name} signalled {successor.name}", level="INFO")
+            self.log(f"{self.name} signalled {successor}", level="INFO")
 
     def setup(self):
         pass
