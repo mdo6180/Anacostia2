@@ -1,20 +1,16 @@
 from datetime import datetime
 import threading
-from queue import Queue
-from typing import Dict, List
+from typing import List
 import time
 from logging import Logger
 import hashlib
 
 from utils.connection import ConnectionManager
-from utils.signal import Signal
 
 
 
 class BaseStageNode(threading.Thread):
     def __init__(self, name: str, predecessors: List['BaseStageNode'] = None, logger: Logger = None):
-        self.predecessor_queues: Dict[str, Queue] = {}
-        self.successor_queues: Dict[str, Queue] = {}
         self.exit_event = threading.Event()
         self.predecessors = predecessors if predecessors is not None else []
         self.logger = logger
@@ -27,10 +23,7 @@ class BaseStageNode(threading.Thread):
         self.node_id = hashlib.sha256(self.node_id.encode("utf-8")).hexdigest()
 
         for predecessor in self.predecessors:
-            queue = Queue()
             predecessor.successors.append(self)
-            predecessor.set_successor_queue(name, queue)
-            self.set_predecessor_queue(predecessor.name, queue)
         
         self.run_id = 0
 
@@ -61,12 +54,6 @@ class BaseStageNode(threading.Thread):
         else:
             self.run_id = latest_run_id + 1
 
-    def set_predecessor_queue(self, predecessor_name: str, queue: Queue):
-        self.predecessor_queues[predecessor_name] = queue
-    
-    def set_successor_queue(self, successor_name: str, queue: Queue):
-        self.successor_queues[successor_name] = queue
-    
     def wait_predecessors(self):
         # Wait until all predecessors have sent their signals via the database
 

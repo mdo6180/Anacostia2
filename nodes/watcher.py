@@ -1,6 +1,4 @@
 import threading
-from queue import Queue
-from typing import Dict
 from abc import ABC, abstractmethod
 from logging import Logger
 import os
@@ -10,7 +8,6 @@ from datetime import datetime
 import hashlib
 
 from utils.connection import ConnectionManager
-from utils.signal import Signal
 
 
 
@@ -21,7 +18,6 @@ class BaseWatcherNode(threading.Thread, ABC):
             os.makedirs(self.path)
 
         self.successors = []
-        self.successor_queues: Dict[str, Queue] = {}
         self.exit_event = threading.Event()
         self.resource_event = threading.Event()
         self.logger = logger
@@ -55,9 +51,6 @@ class BaseWatcherNode(threading.Thread, ABC):
         else:
             print(message)
 
-    def set_successor_queue(self, successor_name: str, queue: Queue):
-        self.successor_queues[successor_name] = queue
-    
     def initialize_db_connection(self, filename: str):
         self.conn_manager = ConnectionManager(db_path=filename, logger=self.logger)
     
@@ -222,7 +215,7 @@ class BaseWatcherNode(threading.Thread, ABC):
             # upon restart, if the latest run has not ended, resume from that run
             self.run_id = latest_run_id
 
-            self.log(f"{self.name} resuming run {self.run_id}", level="INFO")
+            self.log(f"{self.name} restarting run {self.run_id}", level="INFO")
             self.conn_manager.resume_run(self.name, self.run_id)
 
             self.execute()
