@@ -153,7 +153,7 @@ class ConnectionManager:
             # Get all distinct source_node_names for the target node
             cursor.execute(
                 """
-                SELECT DISTINCT source_node_name FROM run_graph WHERE target_node_name = ?;
+                SELECT DISTINCT source_node_name FROM run_graph WHERE target_node_name = ? AND target_run_id IS NULL;
                 """,
                 (target_node_name,)
             )

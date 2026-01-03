@@ -85,10 +85,11 @@ class BaseStageNode(threading.Thread):
 
     def signal_successors(self):
         for successor in self.successors:
+            timestamp = datetime.now()
             signal = Signal(
                 source_node_name=self.name, source_run_id=self.run_id, 
                 target_node_name=successor.name, target_run_id=successor.run_id, 
-                timestamp=datetime.now()
+                timestamp=timestamp
             )
             successor.predecessor_queues[self.name].put(signal)
 
@@ -98,9 +99,8 @@ class BaseStageNode(threading.Thread):
                     INSERT INTO run_graph (source_node_name, source_run_id, target_node_name, trigger_timestamp)
                     VALUES (?, ?, ?, ?);
                     """,
-                    (self.name, self.run_id, successor.name, signal.timestamp)
+                    (self.name, self.run_id, successor.name, timestamp)
                 )
-
             self.log(f"{self.name} signalled {successor.name}", level="INFO")
 
     def setup(self):
@@ -173,7 +173,6 @@ class BaseStageNode(threading.Thread):
             self.log(f"{self.name} finished run {self.run_id}", level="INFO")
             self.conn_manager.end_run(self.name, self.run_id)
             
-            if self.exit_event.is_set(): return
             self.signal_successors()
 
             self.run_id += 1
