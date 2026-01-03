@@ -78,7 +78,7 @@ class BaseStageNode(threading.Thread):
         while not self.predecessors_names == _get_unconsumed_signals_names():
             time.sleep(0.1)  # Avoid busy waiting
 
-        for predecessor_name, queue in self.predecessor_queues.items():
+        for predecessor_name in self.predecessors_names:
             self.conn_manager.consume_signal(
                 source_node_name=predecessor_name,
                 target_node_name=self.name,
@@ -109,30 +109,7 @@ class BaseStageNode(threading.Thread):
     def exit(self):
         self.conn_manager.close()
     
-    def load_signals(self) -> List[Signal]:
-        with self.conn_manager.read_cursor() as cursor:
-            # Get all distinct source_node_names for the target node
-            cursor.execute(
-                """
-                SELECT source_node_name, source_run_id, trigger_timestamp FROM run_graph WHERE target_node_name = ? AND target_run_id IS NULL;
-                """,
-                (self.name,)
-            )
-            rows = cursor.fetchall()
-
-            for row in rows:
-                signal = Signal(
-                    source_node_name=row[0],
-                    source_run_id=row[1],
-                    target_node_name=self.name,
-                    target_run_id=self.run_id,
-                    timestamp=row[2]
-                )
-                self.predecessor_queues[signal.source_node_name].put(signal)
-
     def run(self):
-        self.load_signals()
-
         latest_run_id = self.conn_manager.get_latest_run_id(node_name=self.name)
 
         if latest_run_id == -1:
@@ -145,7 +122,7 @@ class BaseStageNode(threading.Thread):
             # upon restart, if the latest run has not ended, resume from that run
             self.run_id = latest_run_id
 
-            self.log(f"{self.name} resuming run {self.run_id}", level="INFO")
+            self.log(f"{self.name} restarting run {self.run_id}", level="INFO")
             self.conn_manager.resume_run(self.name, self.run_id)
             
             self.execute()
