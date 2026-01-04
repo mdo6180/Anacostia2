@@ -216,6 +216,8 @@ class BaseWatcherNode(threading.Thread, ABC):
         pass
     
     def run(self):
+        self.start_monitoring()     # Start monitoring the resource in a separate thread
+
         latest_run_id = self.conn_manager.get_latest_run_id(node_name=self.name)
 
         if latest_run_id == -1:
@@ -228,9 +230,14 @@ class BaseWatcherNode(threading.Thread, ABC):
             # upon restart, if the latest run has not ended, resume from that run
             self.run_id = latest_run_id
 
+            self.resource_event.wait()      # Wait until the resource event is set
+
             self.log(f"{self.name} restarting run {self.run_id}", level="INFO")
             self.conn_manager.resume_run(self.name, self.run_id)
 
+            # there is a problem on the restart where it wasn't done processing all artifacts that were detected before the restart
+            # but then on the restart it skipped ahead to the next artifact instead of re-processing the previous one
+            # so we need to re-execute to process all unused artifacts
             self.execute()
 
             self.log(f"{self.name} finished run {self.run_id}", level="INFO")
@@ -239,8 +246,7 @@ class BaseWatcherNode(threading.Thread, ABC):
             self.signal_successors()
 
             self.run_id += 1
-
-        self.start_monitoring()     # Start monitoring the resource in a separate thread
+            self.resource_event.clear()     # Reset the event for the next cycle
 
         while not self.exit_event.is_set():
 

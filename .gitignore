@@ -2,3 +2,4 @@ __pycache__/
 testing_artifacts/
 artifact.txt
 virtualenv/
+queries.py
