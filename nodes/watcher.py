@@ -152,20 +152,45 @@ class BaseWatcherNode(threading.Thread, ABC):
             cursor.execute(
                 f"""
                 SELECT artifact_path, artifact_hash FROM {self.artifact_table_name}
-                WHERE artifact_hash NOT IN (SELECT DISTINCT artifact_hash FROM {self.global_usage_table_name} WHERE node_id = ?);
+                WHERE artifact_hash NOT IN (
+                SELECT DISTINCT artifact_hash FROM {self.global_usage_table_name} WHERE node_id = ? AND state = 'used'
+                );
                 """,
                 (self.node_id,)
             )
             return cursor.fetchall()
     
+    def get_unseen_artifacts(self) -> list:
+        with self.conn_manager.read_cursor() as cursor:
+            cursor.execute(
+                f"""
+                SELECT artifact_path, artifact_hash FROM {self.artifact_table_name}
+                WHERE artifact_hash NOT IN (
+                SELECT DISTINCT artifact_hash FROM {self.global_usage_table_name} WHERE node_id = ?
+                );
+                """,
+                (self.node_id,)
+            )
+            return cursor.fetchall()
+    
+    def mark_artifact_using(self, filepath: str, artifact_hash: str) -> None:
+        with self.conn_manager.write_cursor() as cursor:
+            cursor.execute(
+                f"""
+                INSERT OR IGNORE INTO {self.global_usage_table_name} (artifact_path, artifact_hash, node_id, node_name, run_id, state, source, details)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+                """,
+                (filepath, artifact_hash, self.node_id, self.name, self.run_id, "using", "detected", None)
+            )
+    
     def mark_artifact_used(self, filepath: str, artifact_hash: str) -> None:
         with self.conn_manager.write_cursor() as cursor:
             cursor.execute(
                 f"""
-                INSERT OR IGNORE INTO {self.global_usage_table_name} (artifact_path, artifact_hash, node_id, node_name, run_id, usage_type)
-                VALUES (?, ?, ?, ?, ?, ?);
+                INSERT OR IGNORE INTO {self.global_usage_table_name} (artifact_path, artifact_hash, node_id, node_name, run_id, state, source, details)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?);
                 """,
-                (filepath, artifact_hash, self.node_id, self.name, self.run_id, "used")
+                (filepath, artifact_hash, self.node_id, self.name, self.run_id, "used", "detected", None)
             )
 
     def hash_file(self, filepath: str) -> str:
@@ -230,7 +255,7 @@ class BaseWatcherNode(threading.Thread, ABC):
             # upon restart, if the latest run has not ended, resume from that run
             self.run_id = latest_run_id
 
-            self.resource_event.wait()      # Wait until the resource event is set
+            #self.resource_event.wait()      # Wait until the resource event is set
 
             self.log(f"{self.name} restarting run {self.run_id}", level="INFO")
             self.conn_manager.resume_run(self.name, self.run_id)

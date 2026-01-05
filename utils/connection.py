@@ -7,8 +7,16 @@ from typing import List
 
 class ConnectionManager:
     def __init__(self, db_path: str, logger: logging.Logger = None) -> None:
-        self.connection = sqlite3.connect(db_path, check_same_thread=False, detect_types=sqlite3.PARSE_DECLTYPES)
+        self.connection = sqlite3.connect(
+            db_path, 
+            check_same_thread=False, 
+            timeout=5.0,                            # wait up to 5 seconds for lock
+            detect_types=sqlite3.PARSE_DECLTYPES
+        )
         self.connection.execute("PRAGMA journal_mode=WAL;")
+        self.connection.execute("PRAGMA synchronous=NORMAL;")
+        self.connection.execute("PRAGMA busy_timeout=5000;")
+
         self.logger = logger
     
     def log(self, message: str, level="DEBUG") -> None:

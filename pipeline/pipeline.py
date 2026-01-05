@@ -43,10 +43,10 @@ class Pipeline:
                     node_id TEXT,
                     node_name TEXT,
                     run_id INTEGER,
-                    usage_type TEXT NOT NULL CHECK (usage_type IN ('read', 'write', 'used')),
+                    state TEXT NOT NULL CHECK (state IN ('using', 'used', 'ignored')),
                     source TEXT,
                     details TEXT,
-                    UNIQUE(artifact_path, artifact_hash, node_id, run_id, usage_type)
+                    UNIQUE(artifact_path, artifact_hash, node_id, run_id, state)
                 );
                 """
             )
