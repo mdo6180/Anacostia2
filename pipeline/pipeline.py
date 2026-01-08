@@ -45,7 +45,6 @@ class Pipeline:
                     run_id INTEGER,
                     state TEXT NOT NULL CHECK (state IN ('using', 'used', 'ignored')),
                     source TEXT,
-                    details TEXT,
                     UNIQUE(artifact_path, artifact_hash, node_id, run_id, state)
                 );
                 """
@@ -88,7 +87,24 @@ class Pipeline:
                     (node.node_id, node.name, type(node).__name__)
                 )
 
-    def log(self, message: str, level="DEBUG") -> None:
+    def log(self, message: str, level="DEBUG", color: str | None = None) -> None:
+        ANSI_COLORS = {
+            "black": "\033[30m",
+            "red": "\033[31m",
+            "green": "\033[32m",
+            "yellow": "\033[33m",
+            "blue": "\033[34m",
+            "magenta": "\033[35m",
+            "cyan": "\033[36m",
+            "white": "\033[37m",
+            "reset": "\033[0m",
+        }
+
+        if color is not None:
+            if color not in ANSI_COLORS:
+                raise ValueError(f"Invalid color: {color}")
+            message = f"{ANSI_COLORS[color]}{message}{ANSI_COLORS['reset']}"
+
         if self.logger is not None:
             if level == "DEBUG":
                 self.logger.debug(message)
@@ -106,14 +122,14 @@ class Pipeline:
             print(message)
 
     def launch_nodes(self):
-        self.log(f"Launching nodes for pipeline: {self.name}", level="INFO")
+        self.log(f"Launching nodes for pipeline: {self.name}", level="INFO", color="green")
         for node in self.nodes:
             node.start()
-        self.log("All nodes launched", level="INFO")
+        self.log("All nodes launched", level="INFO", color="green")
     
     def terminate_nodes(self) -> None:
-        self.log("Terminating nodes", level="INFO")
+        self.log("Terminating nodes", level="INFO", color="yellow")
         for node in self.nodes:
             node.exit()
             node.join()
-        self.log("All nodes terminated", level="INFO")
+        self.log("All nodes terminated", level="INFO", color="yellow")

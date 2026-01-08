@@ -53,10 +53,10 @@ class BaseWatcherNode:
         with self.conn_manager.write_cursor() as cursor:
             cursor.execute(
                 f"""
-                INSERT INTO {self.global_usage_table_name} (artifact_path, artifact_hash, node_id, node_name, run_id, state, source, details)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+                INSERT INTO {self.global_usage_table_name} (artifact_path, artifact_hash, node_id, node_name, run_id, state, source)
+                VALUES (?, ?, ?, ?, ?, ?, ?);
                 """,
-                (filepath, artifact_hash, self.node_id, self.name, self.run_id, "using", "detected", None)
+                (filepath, artifact_hash, self.node_id, self.name, self.run_id, "using", "detected")
             )
     
     def mark_artifact_used(self, filepath: str, artifact_hash: str) -> None:
@@ -64,10 +64,10 @@ class BaseWatcherNode:
             with self.conn_manager.write_cursor() as cursor:
                 cursor.execute(
                     f"""
-                    INSERT INTO {self.global_usage_table_name} (artifact_path, artifact_hash, node_id, node_name, run_id, state, source, details)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+                    INSERT INTO {self.global_usage_table_name} (artifact_path, artifact_hash, node_id, node_name, run_id, state, source)
+                    VALUES (?, ?, ?, ?, ?, ?, ?);
                     """,
-                    (filepath, artifact_hash, self.node_id, self.name, self.run_id, "used", "detected", None)
+                    (filepath, artifact_hash, self.node_id, self.name, self.run_id, "used", "detected")
                 )
         except Exception as e:
             print(f"filepath {filepath}, node id {self.node_id}, node name {self.name}, run id {self.run_id} error: {e}")
