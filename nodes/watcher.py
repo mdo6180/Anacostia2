@@ -80,6 +80,7 @@ class BaseWatcherNode(threading.Thread, ABC):
                     timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
                     artifact_hash TEXT PRIMARY KEY,
                     hash_algorithm TEXT,
+                    source TEXT,
                     UNIQUE(artifact_path, artifact_hash)
                 );
                 """
@@ -135,8 +136,8 @@ class BaseWatcherNode(threading.Thread, ABC):
 
         with self.conn_manager.write_cursor() as cursor:
             cursor.execute(
-                f"INSERT OR IGNORE INTO {self.artifact_table_name} (artifact_path, timestamp, artifact_hash, hash_algorithm) VALUES (?, ?, ?, ?);",
-                (filepath, timestamp, self.hash_file(filepath), "sha256")
+                f"INSERT OR IGNORE INTO {self.artifact_table_name} (artifact_path, timestamp, artifact_hash, hash_algorithm, source) VALUES (?, ?, ?, ?, ?);",
+                (filepath, timestamp, self.hash_file(filepath), "sha256", "detected")
             )
     
     def artifact_exists(self, filepath: str) -> bool:

@@ -71,6 +71,19 @@ class BaseWatcherNode:
                 )
         except Exception as e:
             print(f"filepath {filepath}, node id {self.node_id}, node name {self.name}, run id {self.run_id} error: {e}")
+    
+    def mark_artifact_saved(self, filepath: str, artifact_hash: str) -> None:
+        try:
+            with self.conn_manager.write_cursor() as cursor:
+                cursor.execute(
+                    f"""
+                    INSERT INTO {self.artifact_table_name} (artifact_path, artifact_hash, node_id, node_name, run_id, state, source)
+                    VALUES (?, ?, ?, ?, ?, ?, ?);
+                    """,
+                    (filepath, artifact_hash, self.node_id, self.name, self.run_id, "used", "saved")
+                )
+        except Exception as e:
+            print(f"filepath {filepath}, node id {self.node_id}, node name {self.name}, run id {self.run_id} error: {e}")
 
     def hash_file(self, filepath: str) -> str:
         sha256 = hashlib.sha256()
@@ -85,6 +98,17 @@ class BaseWatcherNode:
             self.mark_artifact_using(path, hash)
             with open(path, mode) as f:
                 return f.read()
+        except Exception as e:
+            raise e
+        finally:
+            self.mark_artifact_used(path, hash)
+    
+    def save(self, path: str, data, mode: str = 'w'):
+        try:
+            with open(path, mode) as f:
+                f.write(data)
+            hash = self.hash_file(path)
+            self.mark_artifact_using(path, hash)
         except Exception as e:
             raise e
         finally:
