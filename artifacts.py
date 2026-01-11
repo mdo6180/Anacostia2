@@ -1,5 +1,6 @@
 from typing import List
 import hashlib
+import time
 
 from utils.connection import ConnectionManager
 
@@ -9,7 +10,7 @@ class BaseWatcherNode:
     def __init__(self, name: str, path: str):
         self.name = name
         self.conn_manager = ConnectionManager(db_path="./testing_artifacts/.anacostia/anacostia.db")
-        self.run_id = 15
+        self.run_id = 16
         self.global_usage_table_name = "artifact_usage_events"
         self.node_id = "a48a3c4568f3751bb4540f96fa707dc30200dec0833aec491590cc978f08a221"
         self.artifact_table_name = f"{name}_{self.node_id}_artifacts"
@@ -77,13 +78,22 @@ class BaseWatcherNode:
             with self.conn_manager.write_cursor() as cursor:
                 cursor.execute(
                     f"""
-                    INSERT INTO {self.artifact_table_name} (artifact_path, artifact_hash, node_id, node_name, run_id, state, source)
-                    VALUES (?, ?, ?, ?, ?, ?, ?);
+                    INSERT INTO {self.global_usage_table_name} (artifact_path, artifact_hash, node_id, node_name, run_id, source)
+                    VALUES (?, ?, ?, ?, ?, ?);
                     """,
-                    (filepath, artifact_hash, self.node_id, self.name, self.run_id, "used", "saved")
+                    (filepath, artifact_hash, self.node_id, self.name, self.run_id, "generated")
                 )
         except Exception as e:
             print(f"filepath {filepath}, node id {self.node_id}, node name {self.name}, run id {self.run_id} error: {e}")
+
+
+
+class ArtifactManager:
+    def __init__(self, node: BaseWatcherNode, path: str, hash_chunk_size: int = 1_048_576):
+        self.node: BaseWatcherNode = node
+        self.path = path
+        self.hash_chunk_size = hash_chunk_size
+        self.file_hash = self.hash_file(self.path)
 
     def hash_file(self, filepath: str) -> str:
         sha256 = hashlib.sha256()
@@ -92,27 +102,24 @@ class BaseWatcherNode:
                 sha256.update(chunk)
         return sha256.hexdigest()
 
+    def __enter__(self):
+        print(f"Loading artifact from {self.path}")
+        self.node.mark_artifact_using(self.path, self.file_hash)
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        self.node.mark_artifact_used(self.path, self.file_hash)
+        print(f"Finished loading artifact from {self.path}")
+
     def load(self, path: str, mode: str = 'r'):
-        try:
-            hash = self.hash_file(path)
-            self.mark_artifact_using(path, hash)
-            with open(path, mode) as f:
-                return f.read()
-        except Exception as e:
-            raise e
-        finally:
-            self.mark_artifact_used(path, hash)
+        with open(path, mode) as f:
+            return f.read()
     
     def save(self, path: str, data, mode: str = 'w'):
-        try:
-            with open(path, mode) as f:
-                f.write(data)
-            hash = self.hash_file(path)
-            self.mark_artifact_using(path, hash)
-        except Exception as e:
-            raise e
-        finally:
-            self.mark_artifact_used(path, hash)
+        with open(path, mode) as f:
+            f.write(data)
+
+
 
 if __name__ == "__main__":
     def filter_func(artifact):
@@ -124,8 +131,10 @@ if __name__ == "__main__":
     
     artifacts = node.get_artifacts(filter=filter_func, limit=5)
     for artifact in artifacts:
-        content = node.load(artifact)
-        print(f"Artifact: {artifact}, Content: {content}")
+        with ArtifactManager(node, artifact) as am:
+            content = am.load(artifact)
+            print(f"Artifact: {artifact}, Content: {content}")
+            time.sleep(2)
 
 
 
