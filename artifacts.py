@@ -10,7 +10,7 @@ class BaseWatcherNode:
     def __init__(self, name: str, path: str):
         self.name = name
         self.conn_manager = ConnectionManager(db_path="./testing_artifacts/.anacostia/anacostia.db")
-        self.run_id = 16
+        self.run_id = 17
         self.global_usage_table_name = "artifact_usage_events"
         self.node_id = "a48a3c4568f3751bb4540f96fa707dc30200dec0833aec491590cc978f08a221"
         self.artifact_table_name = f"{name}_{self.node_id}_artifacts"
@@ -54,24 +54,77 @@ class BaseWatcherNode:
         with self.conn_manager.write_cursor() as cursor:
             cursor.execute(
                 f"""
-                INSERT INTO {self.global_usage_table_name} (artifact_path, artifact_hash, node_id, node_name, run_id, state, source)
-                VALUES (?, ?, ?, ?, ?, ?, ?);
+                INSERT INTO {self.global_usage_table_name} (
+                    artifact_path,
+                    artifact_hash,
+                    node_id,
+                    node_name,
+                    run_id,
+                    state,
+                    source
+                )
+                SELECT
+                    artifact_path,
+                    artifact_hash,
+                    node_id,
+                    node_name,
+                    ?,          -- new run_id (current run)
+                    ?,          -- new state
+                    source      -- copy source from the prior row
+                FROM {self.global_usage_table_name}
+                WHERE artifact_path = ?
+                AND artifact_hash = ?
+                AND node_id = ?
+                ORDER BY rowid DESC
+                LIMIT 1;
                 """,
-                (filepath, artifact_hash, self.node_id, self.name, self.run_id, "using", "detected")
+                (
+                    self.run_id,
+                    "using",
+                    filepath,
+                    artifact_hash,
+                    self.node_id,
+                ),
             )
+
     
     def mark_artifact_used(self, filepath: str, artifact_hash: str) -> None:
-        try:
-            with self.conn_manager.write_cursor() as cursor:
-                cursor.execute(
-                    f"""
-                    INSERT INTO {self.global_usage_table_name} (artifact_path, artifact_hash, node_id, node_name, run_id, state, source)
-                    VALUES (?, ?, ?, ?, ?, ?, ?);
-                    """,
-                    (filepath, artifact_hash, self.node_id, self.name, self.run_id, "used", "detected")
+        with self.conn_manager.write_cursor() as cursor:
+            cursor.execute(
+                f"""
+                INSERT INTO {self.global_usage_table_name} (
+                    artifact_path,
+                    artifact_hash,
+                    node_id,
+                    node_name,
+                    run_id,
+                    state,
+                    source
                 )
-        except Exception as e:
-            print(f"filepath {filepath}, node id {self.node_id}, node name {self.name}, run id {self.run_id} error: {e}")
+                SELECT
+                    artifact_path,
+                    artifact_hash,
+                    node_id,
+                    node_name,
+                    ?,          -- new run_id (current run)
+                    ?,          -- new state
+                    source      -- copy source from the prior row
+                FROM {self.global_usage_table_name}
+                WHERE artifact_path = ?
+                AND artifact_hash = ?
+                AND node_id = ?
+                ORDER BY rowid DESC
+                LIMIT 1;
+                """,
+                (
+                    self.run_id,
+                    "used",
+                    filepath,
+                    artifact_hash,
+                    self.node_id,
+                ),
+            )
+
     
     def mark_artifact_saved(self, filepath: str, artifact_hash: str) -> None:
         try:
