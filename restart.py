@@ -48,7 +48,6 @@ class FolderWatcherNode(BaseWatcherNode):
     
     def execute(self):
         # Process one artifact at a time
-        # artifact, hash = self.get_unused_artifacts()[0]
         artifact, hash = self.get_filtered_artifacts()[0]
         self.log(f"{self.name} processing artifact: {artifact} with hash: {hash}", level="INFO")
 

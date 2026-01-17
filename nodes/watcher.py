@@ -166,19 +166,6 @@ class BaseWatcherNode(threading.Thread, ABC):
             )
             return cursor.fetchone() is not None
     
-    def get_unused_artifacts(self) -> list:
-        with self.conn_manager.read_cursor() as cursor:
-            cursor.execute(
-                f"""
-                SELECT artifact_path, artifact_hash FROM {self.artifact_table_name}
-                WHERE artifact_hash NOT IN (
-                SELECT DISTINCT artifact_hash FROM {self.global_usage_table_name} WHERE node_id = ? AND state = 'used'
-                );
-                """,
-                (self.node_id,)
-            )
-            return cursor.fetchall()
-    
     def __get_detected_artifacts(self) -> list:
         with self.conn_manager.read_cursor() as cursor:
             cursor.execute(
