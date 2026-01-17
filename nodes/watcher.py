@@ -115,10 +115,13 @@ class BaseWatcherNode(threading.Thread, ABC):
                         except Exception as e:
                             self.log(f"Unexpected error in monitoring logic for '{self.name}': {traceback.format_exc()}", level="ERROR")
                 
-                filtered_artifacts_hashes = set(artifact_hash for artifact_path, artifact_hash in self.get_filtered_artifacts())
-                all_detected_artifacts_hashes = set(artifact_hash for artifact_path, artifact_hash in self.__get_detected_artifacts())
-                if filtered_artifacts_hashes != all_detected_artifacts_hashes:
-                    self.filtered_artifacts_list = self.__get_detected_artifacts()
+                previous_filtered_artifacts_hashes = set(artifact_hash for artifact_path, artifact_hash in self.get_filtered_artifacts())
+                
+                current_detected_artifacts = self.__get_detected_artifacts()
+                current_detected_artifacts_hashes = set(artifact_hash for artifact_path, artifact_hash in current_detected_artifacts)
+                
+                if previous_filtered_artifacts_hashes != current_detected_artifacts_hashes:
+                    self.filtered_artifacts_list = current_detected_artifacts
 
                 if self.exit_event.is_set() is True: 
                     self.log(f"Observer thread for node '{self.name}' exiting", level="INFO")
@@ -182,7 +185,7 @@ class BaseWatcherNode(threading.Thread, ABC):
                 f"""
                 SELECT artifact_path, artifact_hash FROM {self.global_usage_table_name}
                 WHERE node_id = ? AND state = 'detected' AND artifact_hash NOT IN (
-                SELECT DISTINCT artifact_hash FROM {self.global_usage_table_name} WHERE node_id = ? AND state in ('using', 'used', 'ignored')
+                SELECT DISTINCT artifact_hash FROM {self.global_usage_table_name} WHERE node_id = ? AND state in ('primed', 'using', 'used', 'ignored')
                 );
                 """,
                 (self.node_id, self.node_id)
@@ -196,6 +199,7 @@ class BaseWatcherNode(threading.Thread, ABC):
 
                     if self.filtering_func(artifact_path) is True:
                         filtered_artifacts.append(artifact_tuple)
+                        self.mark_artifact_primed(artifact_path, artifact_hash)
                     else:
                         self.mark_artifact_ignored(artifact_path, artifact_hash)
 
@@ -209,6 +213,16 @@ class BaseWatcherNode(threading.Thread, ABC):
     def set_filtering_function(self, func: Callable[[str], bool]) -> None:
         """ Set the filtering function to filter detected artifacts. """
         self.filtering_func = func
+    
+    def mark_artifact_primed(self, filepath: str, artifact_hash: str) -> None:
+        with self.conn_manager.write_cursor() as cursor:
+            cursor.execute(
+                f"""
+                INSERT OR IGNORE INTO {self.global_usage_table_name} (artifact_path, artifact_hash, node_id, node_name, run_id, state, source)
+                VALUES (?, ?, ?, ?, ?, ?, ?);
+                """,
+                (filepath, artifact_hash, self.node_id, self.name, self.run_id, "primed", "detected")
+            )
     
     def mark_artifact_using(self, filepath: str, artifact_hash: str) -> None:
         with self.conn_manager.write_cursor() as cursor:
@@ -309,7 +323,8 @@ class BaseWatcherNode(threading.Thread, ABC):
 
             # there is a problem on the restart where it wasn't done processing all artifacts that were detected before the restart
             # but then on the restart it skipped ahead to the next artifact instead of re-processing the previous one
-            # so we need to re-execute to process all unused artifacts
+            # so we need to re-execute to process all artifacts whose state is either 'primed' or 'using'.
+            # start with 'using' first to ensure that any artifacts that were in the process of being used are completed, then move to 'primed' artifacts.
             self.execute()
 
             self.log(f"{self.name} finished run {self.run_id}", level="INFO")
