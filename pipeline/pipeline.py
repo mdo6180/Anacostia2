@@ -43,7 +43,7 @@ class Pipeline:
                     node_id TEXT,
                     node_name TEXT,
                     run_id INTEGER,
-                    state TEXT CHECK (state IN ('using', 'used', 'ignored')),
+                    state TEXT CHECK (state IN ('detected', 'using', 'used', 'ignored')),
                     source TEXT
                 );
                 """

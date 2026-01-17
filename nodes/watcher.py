@@ -139,6 +139,13 @@ class BaseWatcherNode(threading.Thread, ABC):
                 f"INSERT OR IGNORE INTO {self.artifact_table_name} (artifact_path, timestamp, artifact_hash, hash_algorithm, source) VALUES (?, ?, ?, ?, ?);",
                 (filepath, timestamp, self.hash_file(filepath), "sha256", "detected")
             )
+            cursor.execute(
+                f"""
+                INSERT OR IGNORE INTO {self.global_usage_table_name} (artifact_path, artifact_hash, node_id, node_name, state, source) 
+                VALUES (?, ?, ?, ?, ?, ?);
+                """,
+                (filepath, self.hash_file(filepath), self.node_id, self.name, "detected", "detected")
+            )
     
     def artifact_exists(self, filepath: str) -> bool:
         with self.conn_manager.read_cursor() as cursor:
@@ -161,16 +168,16 @@ class BaseWatcherNode(threading.Thread, ABC):
             )
             return cursor.fetchall()
     
-    def get_unseen_artifacts(self) -> list:
+    def get_artifacts(self) -> list:
         with self.conn_manager.read_cursor() as cursor:
             cursor.execute(
                 f"""
-                SELECT artifact_path, artifact_hash FROM {self.artifact_table_name}
-                WHERE artifact_hash NOT IN (
-                SELECT DISTINCT artifact_hash FROM {self.global_usage_table_name} WHERE node_id = ?
+                SELECT artifact_path, artifact_hash FROM {self.global_usage_table_name}
+                WHERE node_id = ? AND state = 'detected' AND artifact_hash NOT IN (
+                SELECT DISTINCT artifact_hash FROM {self.global_usage_table_name} WHERE node_id = ? AND state in ('using', 'used', 'ignored')
                 );
                 """,
-                (self.node_id,)
+                (self.node_id, self.node_id)
             )
             return cursor.fetchall()
     

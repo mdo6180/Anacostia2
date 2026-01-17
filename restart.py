@@ -42,12 +42,13 @@ class FolderWatcherNode(BaseWatcherNode):
         super().__init__(name, path, hash_chunk_size, logger)
 
     def resource_trigger(self) -> None:
-        if len(self.get_unseen_artifacts()) > 0:
+        if len(self.get_artifacts()) > 0:
             self.trigger(message="New artifact detected")
     
     def execute(self):
         # Process one artifact at a time
-        artifact, hash = self.get_unused_artifacts()[0]
+        # artifact, hash = self.get_unused_artifacts()[0]
+        artifact, hash = self.get_artifacts()[0]
         self.log(f"{self.name} processing artifact: {artifact} with hash: {hash}", level="INFO")
 
         self.mark_artifact_using(artifact, hash)
