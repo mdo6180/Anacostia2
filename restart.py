@@ -37,6 +37,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+
 class FolderWatcherNode(BaseWatcherNode):
     def __init__(self, name, path, hash_chunk_size = 1048576, logger = None):
         super().__init__(name, path, hash_chunk_size, logger)
@@ -71,13 +72,27 @@ class DelayStageNode(BaseStageNode):
 
 
 if __name__ == "__main__":
+    def filter_odd(artifact):
+        with open(artifact, 'r') as f:
+            content = f.read()
+            return int(content[-1]) % 2 != 0  # Keep only artifacts with last character as odd number
+
+    def filter_even(artifact):
+        with open(artifact, 'r') as f:
+            content = f.read()
+            return int(content[-1]) % 2 == 0  # Keep only artifacts with last character as even number
+
     # Example usage of BaseStageNode and BaseWatcherNode
-    watcher_node = FolderWatcherNode(name="WatcherNode1", path=data_store_path1, logger=logger)
+    watcher_node1 = FolderWatcherNode(name="WatcherNode1", path=data_store_path1, logger=logger)
+    watcher_node1.set_filtering_function(filter_odd)    # process only odd-numbered artifacts
+
     watcher_node2 = FolderWatcherNode(name="WatcherNode2", path=data_store_path2, logger=logger)
-    stage_node = DelayStageNode(name="StageNode1", predecessors=[watcher_node, watcher_node2], delay=4, logger=logger)
+    watcher_node2.set_filtering_function(filter_even)   # process only even-numbered artifacts
+    
+    stage_node = DelayStageNode(name="StageNode1", predecessors=[watcher_node1, watcher_node2], delay=4, logger=logger)
     stage_node2 = DelayStageNode(name="StageNode2", predecessors=[stage_node], delay=2, logger=logger)
 
-    pipeline = Pipeline(name="TestPipeline", nodes=[watcher_node, watcher_node2, stage_node, stage_node2], db_folder=db_folder_path, logger=logger)
+    pipeline = Pipeline(name="TestPipeline", nodes=[watcher_node1, watcher_node2, stage_node, stage_node2], db_folder=db_folder_path, logger=logger)
     try:
         pipeline.launch_nodes()
     except KeyboardInterrupt:

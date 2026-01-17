@@ -6,7 +6,7 @@ import time
 import traceback
 from datetime import datetime
 import hashlib
-from typing import List
+from typing import List, Callable
 
 from utils.connection import ConnectionManager
 
@@ -31,6 +31,7 @@ class BaseWatcherNode(threading.Thread, ABC):
 
         self.global_usage_table_name = "artifact_usage_events"
         self.filtered_artifacts_list: List[tuple[str, str]] = []
+        self.filtering_func: Callable[[str], bool] = None
 
         self.run_id = 0
 
@@ -115,9 +116,9 @@ class BaseWatcherNode(threading.Thread, ABC):
                             self.log(f"Unexpected error in monitoring logic for '{self.name}': {traceback.format_exc()}", level="ERROR")
                 
                 filtered_artifacts_hashes = set(artifact_hash for artifact_path, artifact_hash in self.get_filtered_artifacts())
-                all_detected_artifacts_hashes = set(artifact_hash for artifact_path, artifact_hash in self._get_detected_artifacts())
+                all_detected_artifacts_hashes = set(artifact_hash for artifact_path, artifact_hash in self.__get_detected_artifacts())
                 if filtered_artifacts_hashes != all_detected_artifacts_hashes:
-                    self.filtered_artifacts_list = self._get_detected_artifacts()
+                    self.filtered_artifacts_list = self.__get_detected_artifacts()
 
                 if self.exit_event.is_set() is True: 
                     self.log(f"Observer thread for node '{self.name}' exiting", level="INFO")
@@ -175,7 +176,7 @@ class BaseWatcherNode(threading.Thread, ABC):
             )
             return cursor.fetchall()
     
-    def _get_detected_artifacts(self) -> list:
+    def __get_detected_artifacts(self) -> list:
         with self.conn_manager.read_cursor() as cursor:
             cursor.execute(
                 f"""
@@ -186,10 +187,28 @@ class BaseWatcherNode(threading.Thread, ABC):
                 """,
                 (self.node_id, self.node_id)
             )
+
+            if self.filtering_func is not None:
+                artifacts = cursor.fetchall()
+                filtered_artifacts = []
+                for artifact_tuple in artifacts:
+                    artifact_path, artifact_hash = artifact_tuple
+
+                    if self.filtering_func(artifact_path) is True:
+                        filtered_artifacts.append(artifact_tuple)
+                    else:
+                        self.mark_artifact_ignored(artifact_path, artifact_hash)
+
+                return filtered_artifacts
+
             return cursor.fetchall()
     
     def get_filtered_artifacts(self) -> list:
         return self.filtered_artifacts_list
+    
+    def set_filtering_function(self, func: Callable[[str], bool]) -> None:
+        """ Set the filtering function to filter detected artifacts. """
+        self.filtering_func = func
     
     def mark_artifact_using(self, filepath: str, artifact_hash: str) -> None:
         with self.conn_manager.write_cursor() as cursor:
@@ -209,6 +228,16 @@ class BaseWatcherNode(threading.Thread, ABC):
                 VALUES (?, ?, ?, ?, ?, ?, ?);
                 """,
                 (filepath, artifact_hash, self.node_id, self.name, self.run_id, "used", "detected")
+            )
+    
+    def mark_artifact_ignored(self, filepath: str, artifact_hash: str) -> None:
+        with self.conn_manager.write_cursor() as cursor:
+            cursor.execute(
+                f"""
+                INSERT OR IGNORE INTO {self.global_usage_table_name} (artifact_path, artifact_hash, node_id, node_name, run_id, state, source)
+                VALUES (?, ?, ?, ?, ?, ?, ?);
+                """,
+                (filepath, artifact_hash, self.node_id, self.name, self.run_id, "ignored", "detected")
             )
 
     def hash_file(self, filepath: str) -> str:
