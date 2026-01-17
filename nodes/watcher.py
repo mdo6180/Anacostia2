@@ -6,6 +6,7 @@ import time
 import traceback
 from datetime import datetime
 import hashlib
+from typing import List
 
 from utils.connection import ConnectionManager
 
@@ -29,6 +30,7 @@ class BaseWatcherNode(threading.Thread, ABC):
         self.artifact_table_name = f"{name}_{self.node_id}_artifacts"
 
         self.global_usage_table_name = "artifact_usage_events"
+        self.filtered_artifacts_list: List[tuple[str, str]] = []
 
         self.run_id = 0
 
@@ -111,6 +113,11 @@ class BaseWatcherNode(threading.Thread, ABC):
                         
                         except Exception as e:
                             self.log(f"Unexpected error in monitoring logic for '{self.name}': {traceback.format_exc()}", level="ERROR")
+                
+                filtered_artifacts_hashes = set(artifact_hash for artifact_path, artifact_hash in self.get_filtered_artifacts())
+                all_detected_artifacts_hashes = set(artifact_hash for artifact_path, artifact_hash in self._get_detected_artifacts())
+                if filtered_artifacts_hashes != all_detected_artifacts_hashes:
+                    self.filtered_artifacts_list = self._get_detected_artifacts()
 
                 if self.exit_event.is_set() is True: 
                     self.log(f"Observer thread for node '{self.name}' exiting", level="INFO")
@@ -168,7 +175,7 @@ class BaseWatcherNode(threading.Thread, ABC):
             )
             return cursor.fetchall()
     
-    def get_artifacts(self) -> list:
+    def _get_detected_artifacts(self) -> list:
         with self.conn_manager.read_cursor() as cursor:
             cursor.execute(
                 f"""
@@ -180,6 +187,9 @@ class BaseWatcherNode(threading.Thread, ABC):
                 (self.node_id, self.node_id)
             )
             return cursor.fetchall()
+    
+    def get_filtered_artifacts(self) -> list:
+        return self.filtered_artifacts_list
     
     def mark_artifact_using(self, filepath: str, artifact_hash: str) -> None:
         with self.conn_manager.write_cursor() as cursor:
