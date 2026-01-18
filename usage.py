@@ -100,6 +100,14 @@ def get_artifacts_to_process(folder_path):
 # and ensure the pipeline can be restarted safely.
 # The pattern is to use use an outer context manager for writing to the dataset file (i.e., the outputted file), 
 # and an inner context manager for reading each artifact file (i.e., the input files).
+
+# In the case of training nodes, the outer context manager would be for writing the model file, and the inner context manager would be for reading the dataset.
+# Suppose the dataset is an image classification dataset stored in a folder with multiple image files.
+# We do not use the inner context manager to read each individual image file because each image file is used more than once during training (i.e., multiple epochs);
+# thus, marking each image file as used after reading it would mean the training cannot be restarted properly because all image files would be marked as used.
+# Instead, we would use the inner context manager to read the entire dataset folder.
+# This pattern ensures that if a restart happens, we start the training from scratch.
+# Note: in the real implementation, we would hash the entire dataset folder and consider it as a single artifact (i.e., one dataset produces one model).
 with OutputFileManager(dataset_path) as dataset_file:
     artifacts_to_process = get_artifacts_to_process(raw_artifacts_folder)
     print(f"Artifacts to process: {artifacts_to_process}")
