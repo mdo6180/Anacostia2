@@ -1,0 +1,115 @@
+import os
+import time
+import argparse
+
+
+raw_artifacts_folder = "./testing_artifacts/data_store1"
+dataset_path = "./testing_artifacts/dataset.txt"
+record_path = "./testing_artifacts/record.txt"
+
+
+parser = argparse.ArgumentParser(description="Run the pipeline after restart test")
+parser.add_argument("-r", "--restart", action="store_true", help="Flag to indicate if this is a restart")
+args = parser.parse_args()
+
+if args.restart == False:
+    if os.path.exists(dataset_path):
+        os.remove(dataset_path)
+    if os.path.exists(record_path):
+        os.remove(record_path)
+
+
+# Note: In a real implementation, these functions would interact with Anacostia's database.
+def mark_artifact_used(artifact_path):
+    with open(record_path, 'a') as record_file:
+        record_file.write(f"USED: {artifact_path}\n")
+    print(f"Marked artifact as used: {artifact_path}")
+
+def mark_artifact_using(artifact_path):
+    with open(record_path, 'a') as record_file:
+        record_file.write(f"USING: {artifact_path}\n")
+    print(f"Marked artifact as using: {artifact_path}")
+
+
+class OutputFileManager:
+    def __init__(self, filename):
+        self.filename = filename
+
+        # the reason why we open in append mode is to avoid overwriting existing data in the dataset file on restarts
+        # it is for this reason that we do not use 'w' mode here.
+        self.mode = 'a'
+        self.file = None
+        
+    def __enter__(self):
+        mark_artifact_using(self.filename)
+        self.file = open(self.filename, self.mode)
+        return self.file
+    
+    def __exit__(self, exc_type, exc_value, exc_traceback):
+        if exc_type is KeyboardInterrupt:
+            pass
+        else:
+            mark_artifact_used(self.filename)
+
+        self.file.close()
+
+
+class InputFileManager:
+    def __init__(self, filename):
+        self.filename = filename
+        self.mode = 'r'
+        self.file = None
+        
+    def __enter__(self):
+        mark_artifact_using(self.filename)
+        self.file = open(self.filename, self.mode)
+        return self.file
+    
+    def __exit__(self, exc_type, exc_value, exc_traceback):
+        if exc_type is KeyboardInterrupt:
+            pass
+        else:
+            mark_artifact_used(self.filename)
+
+        self.file.close()
+
+
+def get_artifacts_to_process(folder_path):
+    # get all files in the folder as artifacts
+    all_files = os.listdir(folder_path)
+    artifacts = [os.path.join(folder_path, f) for f in all_files if os.path.isfile(os.path.join(folder_path, f))]
+    artifacts.sort() # sort to ensure consistent order
+
+    # filter out artifacts that have already been used
+    with open(record_path, 'r') as record_file:
+        lines = record_file.readlines()
+        used_artifacts = []
+        for line in lines:
+            if line.startswith("USED: "):
+                used_artifact = line[len("USED: "):].strip()
+                if used_artifact.startswith(folder_path):
+                    used_artifacts.append(used_artifact)
+
+    # Note: it seems like it might not be necessary to filter out 'using' artifacts for this simple example. Just filter out used ones.
+    unused_artifacts = [a for a in artifacts if a not in used_artifacts]
+    return unused_artifacts
+
+
+# Example usage of context managers to read artifacts and write to dataset
+# For data aggregation nodes, we can use the patter shown below to ensure that artifacts are marked as using/used properly 
+# and ensure the pipeline can be restarted safely.
+# The pattern is to use use an outer context manager for writing to the dataset file (i.e., the outputted file), 
+# and an inner context manager for reading each artifact file (i.e., the input files).
+with OutputFileManager(dataset_path) as dataset_file:
+    artifacts_to_process = get_artifacts_to_process(raw_artifacts_folder)
+    print(f"Artifacts to process: {artifacts_to_process}")
+
+    for filepath in artifacts_to_process:
+        filename = os.path.basename(filepath)
+
+        with InputFileManager(filepath) as artifact_file:
+            content = artifact_file.read()
+            time.sleep(2)  # Simulate some processing time
+            dataset_file.write(f"{filename}: {content}\n")
+
+        time.sleep(2)  # Simulate some time between processing artifacts to allow for testing when restart happens between artifacts processing
