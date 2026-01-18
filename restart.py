@@ -48,14 +48,14 @@ class FolderWatcherNode(BaseWatcherNode):
     
     def execute(self):
         # Process one artifact at a time
-        artifact, hash = self.get_filtered_artifacts()[0]
-        self.log(f"{self.name} processing artifact: {artifact} with hash: {hash}", level="INFO")
+        artifact_path, hash = self.get_filtered_artifacts()[0]
+        self.log(f"{self.name} processing artifact: {artifact_path} with hash: {hash}", level="INFO")
 
-        self.mark_artifact_using(artifact, hash)
+        self.mark_artifact_using(artifact_path, hash)
         time.sleep(2)  # Simulate some processing time
-        self.mark_artifact_used(artifact, hash)
+        self.mark_artifact_used(artifact_path, hash)
 
-        self.log(f"{self.name} finished processing artifact: {artifact}", level="INFO")
+        self.log(f"{self.name} finished processing artifact: {artifact_path}", level="INFO")
 
 
 class DelayStageNode(BaseStageNode):
