@@ -97,6 +97,9 @@ class BaseStageNode(threading.Thread):
     def setup(self):
         pass
 
+    def resume(self):
+        pass
+
     def execute(self):
         self.log(f"{self.name} executing", level="INFO")
     
@@ -119,6 +122,9 @@ class BaseStageNode(threading.Thread):
             self.log(f"{self.name} restarting run {self.run_id}", level="INFO")
             self.conn_manager.resume_run(self.name, self.run_id)
             
+            # run the resume logic to set up any necessary state (e.g., load model from checkpoint, etc.)
+            self.resume()
+
             self.execute()
             
             self.log(f"{self.name} finished run {self.run_id}", level="INFO")

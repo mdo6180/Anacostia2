@@ -279,6 +279,9 @@ class BaseWatcherNode(threading.Thread, ABC):
                 target_node_name=successor
             )
             self.log(f"{self.name} signalled {successor}", level="INFO")
+    
+    def resume(self):
+        pass
 
     @abstractmethod
     def execute(self):
@@ -307,6 +310,9 @@ class BaseWatcherNode(threading.Thread, ABC):
 
             self.log(f"{self.name} restarting run {self.run_id}", level="INFO")
             self.conn_manager.resume_run(self.name, self.run_id)
+
+            # run the resume logic to set up any necessary state (e.g., load model from checkpoint, etc.)
+            self.resume()
 
             # there is a problem on the restart where it wasn't done processing all artifacts that were detected before the restart
             # but then on the restart it skipped ahead to the next artifact instead of re-processing the previous one
