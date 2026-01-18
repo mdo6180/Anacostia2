@@ -31,6 +31,8 @@ def mark_artifact_using(artifact_path):
     print(f"Marked artifact as using: {artifact_path}")
 
 
+# Note: users can inherit from these context managers to implement more complex logic if needed 
+# (e.g., logging, error handling, opening files in binary mode, etc).
 class OutputFileManager:
     def __init__(self, filename):
         self.filename = filename
