@@ -20,22 +20,22 @@ if args.restart == False:
 
 
 # Note: In a real implementation, these functions would interact with Anacostia's database.
-def mark_artifact_used(artifact_path):
+def input_artifact_used(artifact_path):
     with open(record_path, 'a') as record_file:
         record_file.write(f"USED: {artifact_path}\n")
     print(f"Marked artifact as used: {artifact_path}")
 
-def mark_artifact_using(artifact_path):
+def input_artifact_using(artifact_path):
     with open(record_path, 'a') as record_file:
         record_file.write(f"USING: {artifact_path}\n")
     print(f"Marked artifact as using: {artifact_path}")
 
-def mark_artifact_created(artifact_path):
+def output_artifact_created(artifact_path):
     with open(record_path, 'a') as record_file:
         record_file.write(f"CREATED: {artifact_path}\n")
     print(f"Marked artifact as created: {artifact_path}")
 
-def mark_artifact_accessed(artifact_path):
+def output_artifact_accessed(artifact_path):
     with open(record_path, 'a') as record_file:
         record_file.write(f"ACCESSED: {artifact_path}\n")
     print(f"Marked artifact as accessed: {artifact_path}")
@@ -63,9 +63,9 @@ class OutputFileManager:
         # mark it as deleted, and create a new file to write to.
         # However, if we're using append mode, we do not delete the existing file on restarts.
         if os.path.exists(self.filename) is False:
-            mark_artifact_created(self.filename)
+            output_artifact_created(self.filename)
         else:
-            mark_artifact_accessed(self.filename)
+            output_artifact_accessed(self.filename)
 
         self.file = open(self.filename, self.mode)
         return self.file
@@ -81,7 +81,7 @@ class InputFileManager:
         self.file = None
         
     def __enter__(self):
-        mark_artifact_using(self.filename)
+        input_artifact_using(self.filename)
         self.file = open(self.filename, self.mode)
         return self.file
     
@@ -89,7 +89,7 @@ class InputFileManager:
         if exc_type is KeyboardInterrupt:
             pass
         else:
-            mark_artifact_used(self.filename)
+            input_artifact_used(self.filename)
 
         self.file.close()
 
