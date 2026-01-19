@@ -30,29 +30,47 @@ def mark_artifact_using(artifact_path):
         record_file.write(f"USING: {artifact_path}\n")
     print(f"Marked artifact as using: {artifact_path}")
 
+def mark_artifact_created(artifact_path):
+    with open(record_path, 'a') as record_file:
+        record_file.write(f"CREATED: {artifact_path}\n")
+    print(f"Marked artifact as created: {artifact_path}")
+
+def mark_artifact_accessed(artifact_path):
+    with open(record_path, 'a') as record_file:
+        record_file.write(f"ACCESSED: {artifact_path}\n")
+    print(f"Marked artifact as accessed: {artifact_path}")
+
 
 # Note: users can inherit from these context managers to implement more complex logic if needed 
 # (e.g., logging, error handling, opening files in binary mode, etc).
 class OutputFileManager:
-    def __init__(self, filename):
+    def __init__(self, filename, mode):
         self.filename = filename
+        self.mode = mode
 
+        # in the case of a single output file (data aggregation node combining multiple input artifacts into one file), 
+        # appending is safe because we only write new data that has not been written before.
         # the reason why we open in append mode is to avoid overwriting existing data in the dataset file on restarts
         # it is for this reason that we do not use 'w' mode here.
-        self.mode = 'a'
+
+        # in the case of multiple output files (training node producing checkpoint),
+        # each output file should be unique per run (e.g., include run id in filename) to avoid conflicts.
+        # thus, 'w' mode is preferable to use in that case; otherwise, 
         self.file = None
         
     def __enter__(self):
-        mark_artifact_using(self.filename)
+        # in the case of the output file already existing (i.e., restart case), if we're in write mode, we still delete the existing file,
+        # mark it as deleted, and create a new file to write to.
+        # However, if we're using append mode, we do not delete the existing file on restarts.
+        if os.path.exists(self.filename) is False:
+            mark_artifact_created(self.filename)
+        else:
+            mark_artifact_accessed(self.filename)
+
         self.file = open(self.filename, self.mode)
         return self.file
     
     def __exit__(self, exc_type, exc_value, exc_traceback):
-        if exc_type is KeyboardInterrupt:
-            pass
-        else:
-            mark_artifact_used(self.filename)
-
         self.file.close()
 
 
@@ -124,7 +142,7 @@ def get_artifacts_to_process(folder_path):
 # not at the level of physical file access.
 # A file or folder should be treated as a single artifact if partial progress cannot
 # be meaningfully resumed after a restart.
-with OutputFileManager(dataset_path) as dataset_file:
+with OutputFileManager(dataset_path, 'a') as dataset_file:
     artifacts_to_process = get_artifacts_to_process(raw_artifacts_folder)
     print(f"Artifacts to process: {artifacts_to_process}")
 
