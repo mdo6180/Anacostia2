@@ -30,7 +30,7 @@ class BaseWatcherNode(threading.Thread, ABC):
         self.artifact_table_name = f"{name}_{self.node_id}_artifacts"
 
         self.global_usage_table_name = "artifact_usage_events"
-        self.filtered_artifacts_list: List[tuple[str, str]] = []
+        self.filtered_artifacts_list: List[tuple[str, str]] = []    # list of (artifact_path, artifact_hash)
         self.filtering_func: Callable[[str], bool] = None
 
         self.run_id = 0
@@ -83,7 +83,6 @@ class BaseWatcherNode(threading.Thread, ABC):
                     timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
                     artifact_hash TEXT PRIMARY KEY,
                     hash_algorithm TEXT,
-                    source TEXT,
                     UNIQUE(artifact_path, artifact_hash)
                 );
                 """
@@ -147,15 +146,15 @@ class BaseWatcherNode(threading.Thread, ABC):
 
         with self.conn_manager.write_cursor() as cursor:
             cursor.execute(
-                f"INSERT OR IGNORE INTO {self.artifact_table_name} (artifact_path, timestamp, artifact_hash, hash_algorithm, source) VALUES (?, ?, ?, ?, ?);",
-                (filepath, timestamp, self.hash_file(filepath), "sha256", "detected")
+                f"INSERT OR IGNORE INTO {self.artifact_table_name} (artifact_path, timestamp, artifact_hash, hash_algorithm) VALUES (?, ?, ?, ?);",
+                (filepath, timestamp, self.hash_file(filepath), "sha256")
             )
             cursor.execute(
                 f"""
-                INSERT OR IGNORE INTO {self.global_usage_table_name} (artifact_path, artifact_hash, node_id, node_name, state, source) 
+                INSERT OR IGNORE INTO {self.global_usage_table_name} (artifact_path, artifact_hash, node_id, node_name, state, edge_type) 
                 VALUES (?, ?, ?, ?, ?, ?);
                 """,
-                (filepath, self.hash_file(filepath), self.node_id, self.name, "detected", "detected")
+                (filepath, self.hash_file(filepath), self.node_id, self.name, "detected", "input")
             )
     
     def artifact_exists(self, filepath: str) -> bool:
@@ -205,42 +204,42 @@ class BaseWatcherNode(threading.Thread, ABC):
         with self.conn_manager.write_cursor() as cursor:
             cursor.execute(
                 f"""
-                INSERT OR IGNORE INTO {self.global_usage_table_name} (artifact_path, artifact_hash, node_id, node_name, run_id, state, source)
+                INSERT OR IGNORE INTO {self.global_usage_table_name} (artifact_path, artifact_hash, node_id, node_name, run_id, state, edge_type)
                 VALUES (?, ?, ?, ?, ?, ?, ?);
                 """,
-                (filepath, artifact_hash, self.node_id, self.name, self.run_id, "primed", "detected")
+                (filepath, artifact_hash, self.node_id, self.name, self.run_id, "primed", "input")
             )
     
     def mark_artifact_using(self, filepath: str, artifact_hash: str) -> None:
         with self.conn_manager.write_cursor() as cursor:
             cursor.execute(
                 f"""
-                INSERT OR IGNORE INTO {self.global_usage_table_name} (artifact_path, artifact_hash, node_id, node_name, run_id, state, source)
+                INSERT OR IGNORE INTO {self.global_usage_table_name} (artifact_path, artifact_hash, node_id, node_name, run_id, state, edge_type)
                 VALUES (?, ?, ?, ?, ?, ?, ?);
                 """,
-                (filepath, artifact_hash, self.node_id, self.name, self.run_id, "using", "detected")
+                (filepath, artifact_hash, self.node_id, self.name, self.run_id, "using", "input")
             )
     
     def mark_artifact_used(self, filepath: str, artifact_hash: str) -> None:
         with self.conn_manager.write_cursor() as cursor:
             cursor.execute(
                 f"""
-                INSERT OR IGNORE INTO {self.global_usage_table_name} (artifact_path, artifact_hash, node_id, node_name, run_id, state, source)
+                INSERT OR IGNORE INTO {self.global_usage_table_name} (artifact_path, artifact_hash, node_id, node_name, run_id, state, edge_type)
                 VALUES (?, ?, ?, ?, ?, ?, ?);
                 """,
-                (filepath, artifact_hash, self.node_id, self.name, self.run_id, "used", "detected")
+                (filepath, artifact_hash, self.node_id, self.name, self.run_id, "used", "input")
             )
     
     def mark_artifact_ignored(self, filepath: str, artifact_hash: str) -> None:
         with self.conn_manager.write_cursor() as cursor:
             cursor.execute(
                 f"""
-                INSERT OR IGNORE INTO {self.global_usage_table_name} (artifact_path, artifact_hash, node_id, node_name, run_id, state, source)
+                INSERT OR IGNORE INTO {self.global_usage_table_name} (artifact_path, artifact_hash, node_id, node_name, run_id, state, edge_type)
                 VALUES (?, ?, ?, ?, ?, ?, ?);
                 """,
-                (filepath, artifact_hash, self.node_id, self.name, self.run_id, "ignored", "detected")
+                (filepath, artifact_hash, self.node_id, self.name, self.run_id, "ignored", "input")
             )
-
+    
     def hash_file(self, filepath: str) -> str:
         sha256 = hashlib.sha256()
         with open(filepath, 'rb') as f:
@@ -306,10 +305,19 @@ class BaseWatcherNode(threading.Thread, ABC):
             # upon restart, if the latest run has not ended, resume from that run
             self.run_id = latest_run_id
 
-            #self.resource_event.wait()      # Wait until the resource event is set
-
             self.log(f"{self.name} restarting run {self.run_id}", level="INFO")
             self.conn_manager.resume_run(self.name, self.run_id)
+
+            # load filtered artifacts that were primed before the restart
+            with self.conn_manager.read_cursor() as cursor:
+                cursor.execute(
+                    f"""
+                    SELECT artifact_path, artifact_hash FROM {self.global_usage_table_name}
+                    WHERE node_id = ? AND run_id = ? AND state = 'primed';
+                    """,
+                    (self.node_id, self.run_id)
+                )
+                self.filtered_artifacts_list = cursor.fetchall()
 
             # run the resume logic to set up any necessary state (e.g., load model from checkpoint, etc.)
             self.resume()
@@ -318,7 +326,10 @@ class BaseWatcherNode(threading.Thread, ABC):
             # but then on the restart it skipped ahead to the next artifact instead of re-processing the previous one
             # so we need to re-execute to process all artifacts whose state is either 'primed' or 'using'.
             # start with 'using' first to ensure that any artifacts that were in the process of being used are completed, then move to 'primed' artifacts.
-            self.execute()
+            try:
+                self.execute()
+            except Exception as e:
+                self.log(f"Error during restart execution in node '{self.name}': {traceback.format_exc()}", level="ERROR")
 
             self.log(f"{self.name} finished run {self.run_id}", level="INFO")
             self.conn_manager.end_run(self.name, self.run_id)
@@ -337,7 +348,10 @@ class BaseWatcherNode(threading.Thread, ABC):
             self.conn_manager.start_run(self.name, self.run_id)
             self.log(f"{self.name} starting new run {self.run_id}", level="INFO")
 
-            self.execute()
+            try:
+                self.execute()
+            except Exception as e:
+                self.log(f"Error during restart execution in node '{self.name}': {traceback.format_exc()}", level="ERROR")
             
             self.log(f"{self.name} finished run {self.run_id}", level="INFO")
             self.conn_manager.end_run(self.name, self.run_id)
