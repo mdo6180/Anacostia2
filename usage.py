@@ -1,9 +1,10 @@
+import hashlib
 import os
 import time
 import argparse
 
 
-raw_artifacts_folder = "./testing_artifacts/data_store1"
+raw_artifacts_folder = "./testing_artifacts/data_store1_input"
 dataset_path = "./testing_artifacts/dataset.txt"
 record_path = "./testing_artifacts/record.txt"
 
@@ -17,6 +18,14 @@ if args.restart == False:
         os.remove(dataset_path)
     if os.path.exists(record_path):
         os.remove(record_path)
+
+
+def hash_file(filepath: str, hash_chunk_size: int = 1_048_576) -> str:
+        sha256 = hashlib.sha256()
+        with open(filepath, 'rb') as f:
+            while chunk := f.read(hash_chunk_size):
+                sha256.update(chunk)
+        return sha256.hexdigest()
 
 
 # Note: In a real implementation, these functions would interact with Anacostia's database.
@@ -39,6 +48,11 @@ def output_artifact_accessed(artifact_path):
     with open(record_path, 'a') as record_file:
         record_file.write(f"ACCESSED: {artifact_path}\n")
     print(f"Marked artifact as accessed: {artifact_path}")
+
+def output_artifact_committed(artifact_path, artifact_hash):
+    with open(record_path, 'a') as record_file:
+        record_file.write(f"COMMITTED: {artifact_path} HASH: {artifact_hash}\n")
+    print(f"Marked artifact as committed: {artifact_path} with hash: {artifact_hash}")
 
 
 # Note: users can inherit from these context managers to implement more complex logic if needed 
@@ -71,7 +85,17 @@ class OutputFileManager:
         return self.file
     
     def __exit__(self, exc_type, exc_value, exc_traceback):
-        self.file.close()
+        try:
+            # Ensure all data is written
+            self.file.flush()
+            os.fsync(self.file.fileno())
+
+            # Only hash on clean exit
+            if exc_type is None:
+                artifact_hash = hash_file(self.filename)
+                output_artifact_committed(self.filename, artifact_hash)
+        finally:
+            self.file.close()
 
 
 class InputFileManager:
