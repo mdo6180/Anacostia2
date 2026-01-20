@@ -13,10 +13,14 @@ from utils.connection import ConnectionManager
 
 
 class BaseWatcherNode(threading.Thread, ABC):
-    def __init__(self, name: str, path: str, hash_chunk_size: int = 1_048_576, logger: Logger = None):
-        self.path = path
-        if os.path.exists(self.path) is False:
-            os.makedirs(self.path)
+    def __init__(self, name: str, input_path: str, output_path: str, hash_chunk_size: int = 1_048_576, logger: Logger = None):
+        self.input_path = input_path
+        if os.path.exists(self.input_path) is False:
+            os.makedirs(self.input_path)
+        
+        self.output_path = output_path
+        if os.path.exists(self.output_path) is False:
+            os.makedirs(self.output_path)
 
         self.successors = []
         self.exit_event = threading.Event()
@@ -25,7 +29,7 @@ class BaseWatcherNode(threading.Thread, ABC):
         self.conn_manager: ConnectionManager = None
         self.hash_chunk_size = hash_chunk_size
         
-        self.node_id = f"{name}|{self.path}"
+        self.node_id = f"{name}|{self.input_path}|{self.output_path}"
         self.node_id = hashlib.sha256(self.node_id.encode("utf-8")).hexdigest()
         self.artifact_table_name = f"{name}_{self.node_id}_artifacts"
 
@@ -102,7 +106,7 @@ class BaseWatcherNode(threading.Thread, ABC):
         def _monitor_thread_func():
             self.log(f"Starting observer thread for node '{self.name}'", level="INFO")
             while self.exit_event.is_set() is False:
-                for root, dirnames, filenames in os.walk(self.path):
+                for root, dirnames, filenames in os.walk(self.input_path):
                     for filename in filenames:
                         filepath = os.path.join(root, filename)
                         

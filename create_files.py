@@ -11,12 +11,14 @@ def create_file(file_path, content):
 
 
 if __name__ == "__main__":
-    path = f"./testing_artifacts"
-    data_store1 = f"{path}/data_store1"
-    data_store2 = f"{path}/data_store2"
+    tests_path = f"./testing_artifacts"
+    data_store1_input = f"{tests_path}/data_store1_input"
+    data_store1_output = f"{tests_path}/data_store1_output"
+    data_store2_input = f"{tests_path}/data_store2_input"
+    data_store2_output = f"{tests_path}/data_store2_output"
 
     for i in range(10):
-        create_file(f"{data_store1}/test_file{i}.txt", f"test file data_store1 {i}")
+        create_file(f"{data_store1_input}/test_file{i}.txt", f"test file data_store1 {i}")
         time.sleep(1.5)
-        create_file(f"{data_store2}/test_file{i}.txt", f"test file data_store2 {i}")
+        create_file(f"{data_store2_input}/test_file{i}.txt", f"test file data_store2 {i}")
         time.sleep(1.5)

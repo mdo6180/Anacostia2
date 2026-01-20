@@ -22,8 +22,10 @@ if args.restart == False:
         shutil.rmtree(tests_path)
     os.makedirs(tests_path)
 
-data_store_path1 = f"{tests_path}/data_store1"
-data_store_path2 = f"{tests_path}/data_store2"
+data_store1_input = f"{tests_path}/data_store1_input"
+data_store1_output = f"{tests_path}/data_store1_output"
+data_store2_input = f"{tests_path}/data_store2_input"
+data_store2_output = f"{tests_path}/data_store2_output"
 db_folder_path = f"{tests_path}/.anacostia"
 
 log_path = f"{tests_path}/anacostia.log"
@@ -39,8 +41,8 @@ logger = logging.getLogger(__name__)
 
 
 class FolderWatcherNode(BaseWatcherNode):
-    def __init__(self, name, path, hash_chunk_size = 1048576, logger = None):
-        super().__init__(name, path, hash_chunk_size, logger)
+    def __init__(self, name, input_path, output_path, hash_chunk_size = 1048576, logger = None):
+        super().__init__(name, input_path, output_path, hash_chunk_size, logger)
 
     def resource_trigger(self) -> None:
         if len(self.get_filtered_artifacts()) > 0:
@@ -82,10 +84,10 @@ if __name__ == "__main__":
             return int(content[-1]) % 2 == 0  # Keep only artifacts with last character as even number
 
     # Example usage of BaseStageNode and BaseWatcherNode
-    watcher_node1 = FolderWatcherNode(name="WatcherNode1", path=data_store_path1, logger=logger)
+    watcher_node1 = FolderWatcherNode(name="WatcherNode1", input_path=data_store1_input, output_path=data_store1_output, logger=logger)
     watcher_node1.set_filtering_function(filter_odd)    # process only odd-numbered artifacts
 
-    watcher_node2 = FolderWatcherNode(name="WatcherNode2", path=data_store_path2, logger=logger)
+    watcher_node2 = FolderWatcherNode(name="WatcherNode2", input_path=data_store2_input, output_path=data_store2_output, logger=logger)
     watcher_node2.set_filtering_function(filter_even)   # process only even-numbered artifacts
     
     stage_node = DelayStageNode(name="StageNode1", predecessors=[watcher_node1, watcher_node2], delay=4, logger=logger)
@@ -100,7 +102,7 @@ if __name__ == "__main__":
     
     # How to run the test:
     # 1. Run this script without the --restart flag in one terminal to start the pipeline.
-    # 2. Add some files to data_store_path1 and data_store_path2 to trigger the watchers.
+    # 2. Add some files to data_store1_input and data_store2_input to trigger the watchers.
     # 3. After some time, stop the script (Ctrl+C).
     # 4. Run this script again with the --restart flag to simulate a restart.
     # 5. Observe the logs to verify that the pipeline resumes correctly from where it left off.
