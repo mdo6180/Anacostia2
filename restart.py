@@ -5,7 +5,7 @@ import time
 import argparse
 
 from nodes.stage import BaseStageNode
-from nodes.watcher import BaseWatcherNode
+from nodes.watcher import BaseWatcherNode, InputFileManager
 from pipeline.pipeline import Pipeline
 
 
@@ -51,13 +51,11 @@ class FolderWatcherNode(BaseWatcherNode):
     def execute(self):
         # Process one artifact at a time
         artifact_path, hash = self.get_filtered_artifacts()[0]
-        self.log(f"{self.name} processing artifact: {artifact_path} with hash: {hash}", level="INFO")
-
-        self.mark_artifact_using(artifact_path, hash)
-        time.sleep(2)  # Simulate some processing time
-        self.mark_artifact_used(artifact_path, hash)
-
-        self.log(f"{self.name} finished processing artifact: {artifact_path}", level="INFO")
+        with InputFileManager(node=self, filename=os.path.basename(artifact_path), artifact_hash=hash) as file:
+            content = file.read()
+            self.log(f"{self.name} processing artifact: {artifact_path} | hash: {hash} | content: {content}", level="INFO")
+            time.sleep(2)  # Simulate some processing time
+            self.log(f"{self.name} finished processing artifact: {artifact_path}", level="INFO")
 
 
 class DelayStageNode(BaseStageNode):

@@ -12,6 +12,56 @@ from utils.connection import ConnectionManager
 
 
 
+class OutputFileManager:
+    def __init__(self, node: 'BaseWatcherNode', filename, mode):
+        self.node = node
+        self.filename = filename
+        self.filepath = os.path.join(node.output_path, filename)
+        self.mode = mode
+        self.file = None
+        self.artifact_hash = self.node.hash_file(self.filepath) if os.path.exists(self.filepath) else None
+        
+    def __enter__(self):
+        if os.path.exists(self.filepath) is False:
+            self.node.mark_artifact_created(self.filepath, self.artifact_hash)
+        else:
+            self.node.mark_artifact_accessed(self.filepath, self.artifact_hash)
+
+        self.file = open(self.filepath, self.mode)
+        return self.file
+    
+    def __exit__(self, exc_type, exc_value, exc_traceback):
+        if self.node.exit_event.is_set() is False:
+            self.node.mark_artifact_committed(self.filepath, self.artifact_hash)
+
+        self.file.close()
+
+
+
+class InputFileManager:
+    def __init__(self, node: 'BaseWatcherNode', filename: str, artifact_hash: str):
+        self.node = node
+        self.filename = filename
+        self.filepath = os.path.join(node.input_path, filename)
+        self.artifact_hash = artifact_hash
+        self.mode = 'r'
+        self.file = None
+        
+    def __enter__(self):
+        self.node.mark_artifact_using(self.filepath, self.artifact_hash)
+        self.file = open(self.filepath, self.mode)
+        return self.file
+    
+    def __exit__(self, exc_type, exc_value, exc_traceback):
+        if exc_type is KeyboardInterrupt:
+            pass
+        else:
+            self.node.mark_artifact_used(self.filepath, self.artifact_hash)
+
+        self.file.close()
+
+
+
 class BaseWatcherNode(threading.Thread, ABC):
     def __init__(self, name: str, input_path: str, output_path: str, hash_chunk_size: int = 1_048_576, logger: Logger = None):
         self.input_path = input_path
@@ -242,6 +292,36 @@ class BaseWatcherNode(threading.Thread, ABC):
                 VALUES (?, ?, ?, ?, ?, ?, ?);
                 """,
                 (filepath, artifact_hash, self.node_id, self.name, self.run_id, "ignored", "input")
+            )
+    
+    def mark_artifact_created(self, filepath: str, artifact_hash: str) -> None:
+        with self.conn_manager.write_cursor() as cursor:
+            cursor.execute(
+                f"""
+                INSERT OR IGNORE INTO {self.global_usage_table_name} (artifact_path, artifact_hash, node_id, node_name, run_id, state, edge_type)
+                VALUES (?, ?, ?, ?, ?, ?, ?);
+                """,
+                (filepath, artifact_hash, self.node_id, self.name, self.run_id, "created", "output")
+            )
+    
+    def mark_artifact_accessed(self, filepath: str, artifact_hash: str) -> None:
+        with self.conn_manager.write_cursor() as cursor:
+            cursor.execute(
+                f"""
+                INSERT OR IGNORE INTO {self.global_usage_table_name} (artifact_path, artifact_hash, node_id, node_name, run_id, state, edge_type)
+                VALUES (?, ?, ?, ?, ?, ?, ?);
+                """,
+                (filepath, artifact_hash, self.node_id, self.name, self.run_id, "accessed", "output")
+            )
+    
+    def mark_artifact_committed(self, filepath: str, artifact_hash: str) -> None:
+        with self.conn_manager.write_cursor() as cursor:
+            cursor.execute(
+                f"""
+                INSERT OR IGNORE INTO {self.global_usage_table_name} (artifact_path, artifact_hash, node_id, node_name, run_id, state, edge_type)
+                VALUES (?, ?, ?, ?, ?, ?, ?);
+                """,
+                (filepath, artifact_hash, self.node_id, self.name, self.run_id, "committed", "output")
             )
     
     def hash_file(self, filepath: str) -> str:
