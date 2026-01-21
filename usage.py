@@ -73,9 +73,10 @@ class OutputFileManager:
         self.file = None
         
     def __enter__(self):
-        # in the case of the output file already existing (i.e., restart case), if we're in write mode, we still delete the existing file,
-        # mark it as deleted, and create a new file to write to.
-        # However, if we're using append mode, we do not delete the existing file on restarts.
+        # in the restart case, if we're in write mode, we will not encounter an existing file because we will not save a file unless its a clean exit.
+        # thus, we do not need to delete the existing file on restarts.
+        # this is because we are writing to a temporary file during execution and only renaming it to the final output filename on clean exit.
+        # However, if we're using append mode, we do not delete the existing file on restarts; thus, we just mark it as accessed.
         if os.path.exists(self.filename) is False:
             output_artifact_created(self.filename)
         else:
