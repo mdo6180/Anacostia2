@@ -61,7 +61,7 @@ class BaseWatcherNode:
                     node_name,
                     run_id,
                     state,
-                    source
+                    edge_type
                 )
                 SELECT
                     artifact_path,
@@ -70,7 +70,7 @@ class BaseWatcherNode:
                     node_name,
                     ?,          -- new run_id (current run)
                     ?,          -- new state
-                    source      -- copy source from the prior row
+                    edge_type      -- copy edge_type from the prior row
                 FROM {self.global_usage_table_name}
                 WHERE artifact_path = ?
                 AND artifact_hash = ?
@@ -99,7 +99,7 @@ class BaseWatcherNode:
                     node_name,
                     run_id,
                     state,
-                    source
+                    edge_type
                 )
                 SELECT
                     artifact_path,
@@ -108,7 +108,7 @@ class BaseWatcherNode:
                     node_name,
                     ?,          -- new run_id (current run)
                     ?,          -- new state
-                    source      -- copy source from the prior row
+                    edge_type      -- copy edge_type from the prior row
                 FROM {self.global_usage_table_name}
                 WHERE artifact_path = ?
                 AND artifact_hash = ?
@@ -131,7 +131,7 @@ class BaseWatcherNode:
             with self.conn_manager.write_cursor() as cursor:
                 cursor.execute(
                     f"""
-                    INSERT INTO {self.global_usage_table_name} (artifact_path, artifact_hash, node_id, node_name, run_id, source)
+                    INSERT INTO {self.global_usage_table_name} (artifact_path, artifact_hash, node_id, node_name, run_id, edge_type)
                     VALUES (?, ?, ?, ?, ?, ?);
                     """,
                     (filepath, artifact_hash, self.node_id, self.name, self.run_id, "generated")

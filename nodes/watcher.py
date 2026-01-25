@@ -7,6 +7,7 @@ import traceback
 from datetime import datetime
 import hashlib
 from typing import List, Callable
+from io import TextIOWrapper
 
 from utils.connection import ConnectionManager
 
@@ -18,7 +19,7 @@ class OutputFileManager:
         self.filename = filename
         self.filepath = os.path.join(node.output_path, filename)
         self.mode = mode
-        self.file = None
+        self.file: TextIOWrapper = None
         self.artifact_hash = self.node.hash_file(self.filepath) if os.path.exists(self.filepath) else None
         
     def __enter__(self):
@@ -45,7 +46,7 @@ class InputFileManager:
         self.filepath = os.path.join(node.input_path, filename)
         self.artifact_hash = artifact_hash
         self.mode = 'r'
-        self.file = None
+        self.file: TextIOWrapper = None
         
     def __enter__(self):
         self.node.mark_artifact_using(self.filepath, self.artifact_hash)
