@@ -212,6 +212,7 @@ class BaseWatcherNode(threading.Thread, ABC):
                         except Exception as e:
                             self.log(f"Unexpected error in monitoring logic for '{self.name}': {traceback.format_exc()}", level="ERROR")
                 
+                # During resuming, do not mark new artifacts as primed
                 if self.resuming is False:
                     previous_filtered_artifacts_hashes = set(artifact_hash for artifact_path, artifact_hash in self.get_filtered_artifacts())
                     
