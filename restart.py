@@ -5,7 +5,7 @@ import time
 import argparse
 
 from nodes.stage import BaseStageNode
-from nodes.watcher import BaseWatcherNode, InputFileManager
+from nodes.watcher import BaseWatcherNode, InputFileManager, OutputFileManager
 from pipeline.pipeline import Pipeline
 
 
@@ -54,8 +54,21 @@ class FolderWatcherNode(BaseWatcherNode):
         with InputFileManager(node=self, filename=os.path.basename(artifact_path), artifact_hash=hash) as file:
             content = file.read()
             self.log(f"{self.name} processing artifact: {artifact_path} | hash: {hash} | content: {content}", level="INFO")
-            time.sleep(2)  # Simulate some processing time
+            print(f"{self.name} processing artifact: {artifact_path} | hash: {hash} | content: {content}")
+            time.sleep(1.5)  # Simulate some processing time
+            print(f"{self.name} finished processing artifact: {artifact_path}")
             self.log(f"{self.name} finished processing artifact: {artifact_path}", level="INFO")
+        
+        outfile_name = os.path.basename(artifact_path)
+        outfile_name = f"processed_{outfile_name}"
+        with OutputFileManager(node=self, filename=outfile_name, mode='w') as outfile:
+            self.log(f"{self.name} writing output artifact: {os.path.join(self.output_path, outfile_name)}", level="INFO")
+            print(f"{self.name} writing output artifact: {os.path.join(self.output_path, outfile_name)}")
+            outfile.write(content)
+            outfile.write(f"\nProcessed by {self.name}\n")
+            time.sleep(1.5)  # Simulate some processing time
+            print(f"{self.name} wrote output artifact: {os.path.join(self.output_path, outfile_name)}")
+            self.log(f"{self.name} wrote output artifact: {os.path.join(self.output_path, outfile_name)}", level="INFO")
 
 
 class DelayStageNode(BaseStageNode):

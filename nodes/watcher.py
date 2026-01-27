@@ -8,6 +8,8 @@ from datetime import datetime
 import hashlib
 from typing import List, Callable
 from io import TextIOWrapper
+import os
+import tempfile
 
 from utils.connection import ConnectionManager
 
@@ -17,25 +19,64 @@ class OutputFileManager:
     def __init__(self, node: 'BaseWatcherNode', filename, mode):
         self.node = node
         self.filename = filename
-        self.filepath = os.path.join(node.output_path, filename)
+        self.final_path = os.path.join(node.output_path, filename)
         self.mode = mode
+
         self.file: TextIOWrapper = None
-        self.artifact_hash = self.node.hash_file(self.filepath) if os.path.exists(self.filepath) else None
-        
+        self.tmp_file: TextIOWrapper = None
+        self.tmp_path: str = None
+
+        # Hash of existing artifact (if any)
+        self.artifact_hash = (
+            self.node.hash_file(self.final_path)
+            if os.path.exists(self.final_path)
+            else None
+        )
+
     def __enter__(self):
-        if os.path.exists(self.filepath) is False:
-            self.node.mark_artifact_created(self.filepath, self.artifact_hash)
+        # Mark intent based on final path
+        if not os.path.exists(self.final_path):
+            self.node.mark_artifact_created(self.final_path, self.artifact_hash)
         else:
-            self.node.mark_artifact_accessed(self.filepath, self.artifact_hash)
+            self.node.mark_artifact_accessed(self.final_path, self.artifact_hash)
 
-        self.file = open(self.filepath, self.mode)
+        # Create temp file in same directory for atomic replace
+        tmp_fd, self.tmp_path = tempfile.mkstemp(
+            dir=self.node.output_path,
+            prefix=f".tmp_{self.filename}.",
+            text="b" not in self.mode
+        )
+
+        # Wrap fd in a Python file object
+        self.tmp_file = os.fdopen(tmp_fd, self.mode)
+        self.file = self.tmp_file
         return self.file
-    
-    def __exit__(self, exc_type, exc_value, exc_traceback):
-        if self.node.exit_event.is_set() is False:
-            self.node.mark_artifact_committed(self.filepath, self.artifact_hash)
 
-        self.file.close()
+    def __exit__(self, exc_type, exc_value, exc_traceback):
+        try:
+            if self.file:
+                # Ensure Python buffers flushed
+                self.file.flush()
+                # Ensure OS buffers flushed
+                os.fsync(self.file.fileno())
+                self.file.close()
+
+            # Only commit if we're not shutting down and no exception
+            if exc_type is None and not self.node.exit_event.is_set():
+                # Atomic replace: temp → final
+                os.replace(self.tmp_path, self.final_path)
+
+                # Mark committed against final path
+                self.node.mark_artifact_committed(self.final_path, self.artifact_hash)
+            else:
+                # On error or shutdown, do NOT replace final file
+                if self.tmp_path and os.path.exists(self.tmp_path):
+                    os.unlink(self.tmp_path)
+
+        finally:
+            self.file = None
+            self.tmp_file = None
+            self.tmp_path = None
 
 
 
@@ -89,6 +130,8 @@ class BaseWatcherNode(threading.Thread, ABC):
         self.filtering_func: Callable[[str], bool] = None
 
         self.run_id = 0
+
+        self.resuming = False
 
         super().__init__(name=name)
     
@@ -169,13 +212,14 @@ class BaseWatcherNode(threading.Thread, ABC):
                         except Exception as e:
                             self.log(f"Unexpected error in monitoring logic for '{self.name}': {traceback.format_exc()}", level="ERROR")
                 
-                previous_filtered_artifacts_hashes = set(artifact_hash for artifact_path, artifact_hash in self.get_filtered_artifacts())
-                
-                current_detected_artifacts = self.__get_detected_artifacts()
-                current_detected_artifacts_hashes = set(artifact_hash for artifact_path, artifact_hash in current_detected_artifacts)
-                
-                if previous_filtered_artifacts_hashes != current_detected_artifacts_hashes:
-                    self.filtered_artifacts_list = current_detected_artifacts
+                if self.resuming is False:
+                    previous_filtered_artifacts_hashes = set(artifact_hash for artifact_path, artifact_hash in self.get_filtered_artifacts())
+                    
+                    current_detected_artifacts = self.__get_detected_artifacts()
+                    current_detected_artifacts_hashes = set(artifact_hash for artifact_path, artifact_hash in current_detected_artifacts)
+                    
+                    if previous_filtered_artifacts_hashes != current_detected_artifacts_hashes:
+                        self.filtered_artifacts_list = current_detected_artifacts
 
                 if self.exit_event.is_set() is True: 
                     self.log(f"Observer thread for node '{self.name}' exiting", level="INFO")
@@ -393,7 +437,10 @@ class BaseWatcherNode(threading.Thread, ABC):
             self.log(f"{self.name} restarting run {self.run_id}", level="INFO")
             self.conn_manager.resume_run(self.name, self.run_id)
 
+            self.resuming = True    # tell the monitoring thread we are resuming and should not mark new artifacts as primed
+
             # load filtered artifacts that were primed before the restart
+            # this ensures that we re-process any artifacts that were primed but not yet processed
             with self.conn_manager.read_cursor() as cursor:
                 cursor.execute(
                     f"""
@@ -418,6 +465,8 @@ class BaseWatcherNode(threading.Thread, ABC):
 
             self.log(f"{self.name} finished run {self.run_id}", level="INFO")
             self.conn_manager.end_run(self.name, self.run_id)
+
+            self.resuming = False     # tell the monitoring thread we are done resuming and can mark new artifacts as primed
 
             self.signal_successors()
 
