@@ -10,6 +10,7 @@ from typing import List, Callable
 from io import TextIOWrapper
 import os
 import tempfile
+import glob
 
 from utils.connection import ConnectionManager
 
@@ -26,19 +27,19 @@ class OutputFileManager:
         self.tmp_file: TextIOWrapper = None
         self.tmp_path: str = None
 
-        # Hash of existing artifact (if any)
-        self.artifact_hash = (
-            self.node.hash_file(self.final_path)
-            if os.path.exists(self.final_path)
-            else None
-        )
-
     def __enter__(self):
-        # Mark intent based on final path
-        if not os.path.exists(self.final_path):
-            self.node.mark_artifact_created(self.final_path, self.artifact_hash)
-        else:
-            self.node.mark_artifact_accessed(self.final_path, self.artifact_hash)
+        def cleanup_stale_tmp_files(output_dir: str, filename: str):
+            pattern = os.path.join(output_dir, f".tmp_{filename}.*")
+            for path in glob.glob(pattern):
+                try:
+                    os.unlink(path)
+                except FileNotFoundError:
+                    pass
+                except PermissionError:
+                    # If something is still writing it, skip
+                    pass
+
+        cleanup_stale_tmp_files(self.node.output_path, self.filename)
 
         # Create temp file in same directory for atomic replace
         tmp_fd, self.tmp_path = tempfile.mkstemp(
@@ -67,7 +68,8 @@ class OutputFileManager:
                 os.replace(self.tmp_path, self.final_path)
 
                 # Mark committed against final path
-                self.node.mark_artifact_committed(self.final_path, self.artifact_hash)
+                artifact_hash = self.node.hash_file(self.final_path)
+                self.node.mark_artifact_committed(filepath=self.final_path, artifact_hash=artifact_hash)
             else:
                 # On error or shutdown, do NOT replace final file
                 if self.tmp_path and os.path.exists(self.tmp_path):

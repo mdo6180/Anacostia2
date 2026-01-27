@@ -3,3 +3,4 @@ testing_artifacts/
 artifact.txt
 virtualenv/
 queries.py
+notes/
