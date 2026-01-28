@@ -107,7 +107,17 @@ class InputFileManager:
 
 
 class BaseWatcherNode(threading.Thread, ABC):
-    def __init__(self, name: str, input_path: str, output_path: str, hash_chunk_size: int = 1_048_576, logger: Logger = None):
+    def __init__(
+        self, 
+        name: str, 
+        input_path: str, 
+        output_path: str, 
+        min_artifacts_per_run: int = 1, 
+        max_artifacts_per_run: int = None, 
+        hash_chunk_size: int = 1_048_576, 
+        trigger_message: str = "New artifact detected",
+        logger: Logger = None
+    ):
         self.input_path = input_path
         if os.path.exists(self.input_path) is False:
             os.makedirs(self.input_path)
@@ -121,8 +131,10 @@ class BaseWatcherNode(threading.Thread, ABC):
         self.resource_event = threading.Event()
         self.logger = logger
         self.conn_manager: ConnectionManager = None
+        self.min_artifacts_per_run = min_artifacts_per_run
+        self.max_artifacts_per_run = max_artifacts_per_run
         self.hash_chunk_size = hash_chunk_size
-        
+        self.trigger_message = trigger_message
         self.node_id = f"{name}|{self.input_path}|{self.output_path}"
         self.node_id = hashlib.sha256(self.node_id.encode("utf-8")).hexdigest()
         self.artifact_table_name = f"{name}_{self.node_id}_artifacts"
@@ -286,8 +298,14 @@ class BaseWatcherNode(threading.Thread, ABC):
                     artifact_path, artifact_hash = artifact_tuple
 
                     if self.filtering_func(artifact_path) is True:
-                        filtered_artifacts.append(artifact_tuple)
-                        self.mark_artifact_primed(artifact_path, artifact_hash)
+                        # Only prime up to max_artifacts_per_run
+                        if self.max_artifacts_per_run is not None:
+                            if len(filtered_artifacts) < self.max_artifacts_per_run:
+                                filtered_artifacts.append(artifact_tuple)
+                                self.mark_artifact_primed(artifact_path, artifact_hash)
+                        else:
+                            filtered_artifacts.append(artifact_tuple)
+                            self.mark_artifact_primed(artifact_path, artifact_hash)
                     else:
                         self.mark_artifact_ignored(artifact_path, artifact_hash)
 
@@ -388,14 +406,9 @@ class BaseWatcherNode(threading.Thread, ABC):
         self.observer_thread.join()
         self.log(f"Observer stopped for node '{self.name}'", level="INFO")
 
-    @abstractmethod
     def resource_trigger(self) -> None:
-        """
-        Override to specify how the resource triggers the node.
-        This method is called periodically by the monitoring thread.
-        When the resource condition is met, this method should set the resource_event.
-        """
-        pass
+        if len(self.get_filtered_artifacts()) >= self.min_artifacts_per_run:
+            self.trigger(message=self.trigger_message)
 
     def trigger(self, message: str = None) -> None:
         if self.resource_event.is_set() is False:
