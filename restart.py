@@ -5,7 +5,7 @@ import time
 import argparse
 
 from nodes.stage import BaseStageNode
-from nodes.watcher import BaseWatcherNode, InputFileManager, OutputFileManager
+from nodes.watcher import BaseWatcherNode, ConsumeInput, ProduceOutput
 from pipeline.pipeline import Pipeline
 
 
@@ -47,7 +47,7 @@ class FolderWatcherNode(BaseWatcherNode):
     def execute(self):
         # Process one artifact at a time
         artifact_path, hash = self.get_filtered_artifacts()[0]
-        with InputFileManager(node=self, filename=os.path.basename(artifact_path), artifact_hash=hash) as file:
+        with ConsumeInput(node=self, filename=os.path.basename(artifact_path), artifact_hash=hash) as file:
             content = file.read()
             self.log(f"{self.name} processing artifact: {artifact_path} | hash: {hash} | content: {content}", level="INFO")
             print(f"{self.name} processing artifact: {artifact_path} | hash: {hash} | content: {content}")
@@ -57,7 +57,7 @@ class FolderWatcherNode(BaseWatcherNode):
         
         outfile_name = os.path.basename(artifact_path)
         outfile_name = f"processed_{outfile_name}"
-        with OutputFileManager(node=self, filename=outfile_name, mode='w') as outfile:
+        with ProduceOutput(node=self, filename=outfile_name, mode='w') as outfile:
             self.log(f"{self.name} writing output artifact: {os.path.join(self.output_path, outfile_name)}", level="INFO")
             print(f"{self.name} writing output artifact: {os.path.join(self.output_path, outfile_name)}")
             outfile.write(content)

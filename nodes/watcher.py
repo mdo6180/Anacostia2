@@ -16,7 +16,7 @@ from utils.connection import ConnectionManager
 
 
 
-class OutputFileManager:
+class ProduceOutput:
     def __init__(self, node: 'BaseWatcherNode', filename, mode):
         self.node = node
         self.filename = filename
@@ -82,7 +82,31 @@ class OutputFileManager:
 
 
 
-class InputFileManager:
+class ConsumeOutput:
+    def __init__(self, consumer_node: 'BaseWatcherNode', output_folder: str, filename: str, artifact_hash: str):
+        self.consumer_node = consumer_node
+        self.filename = filename
+        self.filepath = os.path.join(output_folder, filename)
+        self.artifact_hash = artifact_hash
+        self.mode = 'r'
+        self.file: TextIOWrapper = None
+        
+    def __enter__(self):
+        self.consumer_node.mark_artifact_using(self.filepath, self.artifact_hash)
+        self.file = open(self.filepath, self.mode)
+        return self.file
+    
+    def __exit__(self, exc_type, exc_value, exc_traceback):
+        if exc_type is KeyboardInterrupt:
+            pass
+        else:
+            self.consumer_node.mark_artifact_used(self.filepath, self.artifact_hash)
+
+        self.file.close()
+
+
+
+class ConsumeInput:
     def __init__(self, node: 'BaseWatcherNode', filename: str, artifact_hash: str):
         self.node = node
         self.filename = filename
