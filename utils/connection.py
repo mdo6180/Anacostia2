@@ -11,6 +11,7 @@ class ConnectionManager:
             db_path, 
             check_same_thread=False, 
             timeout=5.0,                            # wait up to 5 seconds for lock
+            isolation_level=None,                   # autocommit mode
             detect_types=sqlite3.PARSE_DECLTYPES
         )
         self.connection.execute("PRAGMA journal_mode=WAL;")

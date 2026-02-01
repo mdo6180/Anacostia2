@@ -152,7 +152,6 @@ class BaseWatcherNode(threading.Thread, ABC):
 
         self.successors = []
         self.exit_event = threading.Event()
-        self.resource_event = threading.Event()
         self.logger = logger
         self.conn_manager: ConnectionManager = None
         self.min_artifacts_per_run = min_artifacts_per_run
@@ -227,7 +226,6 @@ class BaseWatcherNode(threading.Thread, ABC):
     def exit(self):
         self.conn_manager.close()
         self.stop_monitoring()
-        self.resource_event.set()
     
     def start_monitoring(self) -> None:
         """
@@ -250,27 +248,12 @@ class BaseWatcherNode(threading.Thread, ABC):
                         except Exception as e:
                             self.log(f"Unexpected error in monitoring logic for '{self.name}': {traceback.format_exc()}", level="ERROR")
                 
-                # During resuming, do not mark new artifacts as primed
-                if self.resuming is False:
-                    previous_filtered_artifacts_hashes = set(artifact_hash for artifact_path, artifact_hash in self.get_filtered_artifacts())
-                    
-                    current_detected_artifacts = self.__get_detected_artifacts()
-                    current_detected_artifacts_hashes = set(artifact_hash for artifact_path, artifact_hash in current_detected_artifacts)
-                    
-                    if previous_filtered_artifacts_hashes != current_detected_artifacts_hashes:
-                        self.filtered_artifacts_list = current_detected_artifacts
-
-                if self.exit_event.is_set() is True: 
-                    self.log(f"Observer thread for node '{self.name}' exiting", level="INFO")
-                    return
-                try:
-                    self.resource_trigger()
-                
-                except Exception as e:
-                    self.log(f"Error checking resource in node '{self.name}': {traceback.format_exc()}", level="ERROR")
-
                 # sleep for a while before checking again
                 time.sleep(0.1)
+
+            if self.exit_event.is_set() is True: 
+                self.log(f"Observer thread for node '{self.name}' exiting", level="INFO")
+                return
 
             self.log(f"Observer thread for node '{self.name}' exited", level="INFO")
 
@@ -281,18 +264,19 @@ class BaseWatcherNode(threading.Thread, ABC):
     
     def register_artifact(self, filepath: str) -> None:
         timestamp = datetime.now()
+        artifact_hash = self.hash_file(filepath)
 
         with self.conn_manager.write_cursor() as cursor:
             cursor.execute(
                 f"INSERT OR IGNORE INTO {self.artifact_table_name} (artifact_path, timestamp, artifact_hash, hash_algorithm) VALUES (?, ?, ?, ?);",
-                (filepath, timestamp, self.hash_file(filepath), "sha256")
+                (filepath, timestamp, artifact_hash, "sha256")
             )
             cursor.execute(
                 f"""
                 INSERT OR IGNORE INTO {self.global_usage_table_name} (artifact_path, artifact_hash, node_id, node_name, state, edge_type) 
                 VALUES (?, ?, ?, ?, ?, ?);
                 """,
-                (filepath, self.hash_file(filepath), self.node_id, self.name, "detected", "input")
+                (filepath, artifact_hash, self.node_id, self.name, "detected", "input")
             )
     
     def artifact_exists(self, filepath: str) -> bool:
@@ -430,15 +414,6 @@ class BaseWatcherNode(threading.Thread, ABC):
         self.observer_thread.join()
         self.log(f"Observer stopped for node '{self.name}'", level="INFO")
 
-    def resource_trigger(self) -> None:
-        if len(self.get_filtered_artifacts()) >= self.min_artifacts_per_run:
-            self.trigger(message=self.trigger_message)
-
-    def trigger(self, message: str = None) -> None:
-        if self.resource_event.is_set() is False:
-            self.resource_event.set()
-            self.log(f"{self.name} triggered with message: {message}", level="INFO")
-    
     def signal_successors(self):
         for successor in self.successors:
             self.conn_manager.signal_successor(
@@ -455,13 +430,18 @@ class BaseWatcherNode(threading.Thread, ABC):
     def execute(self):
         """
         Override to specify what the node does when triggered.
-        This method is called when the resource_event is set.
         """
         pass
     
-    def run(self):
-        self.start_monitoring()     # Start monitoring the resource in a separate thread
+    def resource_trigger(self) -> None:
+        if len(self.get_filtered_artifacts()) >= self.min_artifacts_per_run:
+            self.trigger(message=self.trigger_message)
+            return True
 
+    def trigger(self, message: str = None) -> None:
+        self.log(f"{self.name} triggered with message: {message}", level="INFO")
+    
+    def run(self):
         latest_run_id = self.conn_manager.get_latest_run_id(node_name=self.name)
 
         if latest_run_id == -1:
@@ -511,30 +491,38 @@ class BaseWatcherNode(threading.Thread, ABC):
             self.signal_successors()
 
             self.run_id += 1
-            self.resource_event.clear()     # Reset the event for the next cycle
+
+        self.start_monitoring()     # Start monitoring the resource in a separate thread
 
         while not self.exit_event.is_set():
+            # During resuming, do not mark new artifacts as primed
+            if self.resuming is False:
+                previous_filtered_artifacts_hashes = set(artifact_hash for artifact_path, artifact_hash in self.get_filtered_artifacts())
+                
+                current_detected_artifacts = self.__get_detected_artifacts()
+                current_detected_artifacts_hashes = set(artifact_hash for artifact_path, artifact_hash in current_detected_artifacts)
+                
+                if previous_filtered_artifacts_hashes != current_detected_artifacts_hashes:
+                    self.filtered_artifacts_list = current_detected_artifacts
 
-            if self.exit_event.is_set(): return
-            self.resource_event.wait()      # Wait until the resource event is set
+            if self.resource_trigger():
 
-            if self.exit_event.is_set(): return
-            self.conn_manager.start_run(self.name, self.run_id)
-            self.log(f"{self.name} starting new run {self.run_id}", level="INFO")
+                if self.exit_event.is_set(): return
+                self.conn_manager.start_run(self.name, self.run_id)
+                self.log(f"{self.name} starting new run {self.run_id}", level="INFO")
 
-            try:
-                self.execute()
-            except Exception as e:
-                self.log(f"Error during restart execution in node '{self.name}': {traceback.format_exc()}", level="ERROR")
-            
-            self.log(f"{self.name} finished run {self.run_id}", level="INFO")
-            self.conn_manager.end_run(self.name, self.run_id)
+                try:
+                    self.execute()
+                except Exception as e:
+                    self.log(f"Error during restart execution in node '{self.name}': {traceback.format_exc()}", level="ERROR")
+                
+                self.log(f"{self.name} finished run {self.run_id}", level="INFO")
+                self.conn_manager.end_run(self.name, self.run_id)
 
-            # we don't wait for the exit event here to allow successors to be signalled even if we are terminating
-            # if the node exits, we want it to exit before the end_run is called, otherwise, we want to log the run into the run graph
-            self.signal_successors()
+                # we don't wait for the exit event here to allow successors to be signalled even if we are terminating
+                # if the node exits, we want it to exit before the end_run is called, otherwise, we want to log the run into the run graph
+                self.signal_successors()
 
-            self.run_id += 1
+                self.run_id += 1
 
-            if self.exit_event.is_set(): return
-            self.resource_event.clear()     # Reset the event for the next cycle
+                if self.exit_event.is_set(): return
