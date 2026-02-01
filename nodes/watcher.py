@@ -136,8 +136,7 @@ class BaseWatcherNode(threading.Thread, ABC):
         name: str, 
         input_path: str, 
         output_path: str, 
-        min_artifacts_per_run: int = 1, 
-        max_artifacts_per_run: int = None, 
+        artifacts_per_run: int = 1, 
         hash_chunk_size: int = 1_048_576, 
         trigger_message: str = "New artifact detected",
         logger: Logger = None
@@ -154,8 +153,7 @@ class BaseWatcherNode(threading.Thread, ABC):
         self.exit_event = threading.Event()
         self.logger = logger
         self.conn_manager: ConnectionManager = None
-        self.min_artifacts_per_run = min_artifacts_per_run
-        self.max_artifacts_per_run = max_artifacts_per_run
+        self.artifacts_per_run = artifacts_per_run
         self.hash_chunk_size = hash_chunk_size
         self.trigger_message = trigger_message
         self.node_id = f"{name}|{self.input_path}|{self.output_path}"
@@ -305,10 +303,11 @@ class BaseWatcherNode(threading.Thread, ABC):
                 for artifact_tuple in artifacts:
                     artifact_path, artifact_hash = artifact_tuple
 
+                    # if the artifact passes the filtering function, append it to filtered_artifacts and mark it as primed
                     if self.filtering_func(artifact_path) is True:
-                        # Only prime up to max_artifacts_per_run
-                        if self.max_artifacts_per_run is not None:
-                            if len(filtered_artifacts) < self.max_artifacts_per_run:
+                        # Only prime up to artifacts_per_run
+                        if self.artifacts_per_run is not None:
+                            if len(filtered_artifacts) < self.artifacts_per_run:
                                 filtered_artifacts.append(artifact_tuple)
                                 self.mark_artifact_primed(artifact_path, artifact_hash)
                         else:
@@ -434,7 +433,7 @@ class BaseWatcherNode(threading.Thread, ABC):
         pass
     
     def resource_trigger(self) -> None:
-        if len(self.get_filtered_artifacts()) >= self.min_artifacts_per_run:
+        if len(self.get_filtered_artifacts()) >= self.artifacts_per_run:
             self.trigger(message=self.trigger_message)
             return True
 

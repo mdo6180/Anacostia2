@@ -42,7 +42,7 @@ logger = logging.getLogger(__name__)
 
 class FolderWatcherNode(BaseWatcherNode):
     def __init__(self, name, input_path, output_path, logger = None):
-        super().__init__(name=name, input_path=input_path, output_path=output_path, max_artifacts_per_run=1, hash_chunk_size=1048576, logger=logger)
+        super().__init__(name=name, input_path=input_path, output_path=output_path, artifacts_per_run=1, hash_chunk_size=1048576, logger=logger)
 
     def execute(self):
         # Process one artifact at a time
