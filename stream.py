@@ -22,6 +22,9 @@ class DirectoryStream:
         self.poll_interval = poll_interval
         self.batch_size = batch_size
         self.seen = set()
+    
+    def set_db_connection(self, connection):
+        self.connection = connection
 
     def poll(self):
         batch_paths = []
@@ -29,17 +32,20 @@ class DirectoryStream:
 
         while True:
             for filename in sorted(os.listdir(self.directory)):
+                # Skip files we've already seen
+                # replace with artifact_exists DB check in the future
                 if filename in self.seen:
                     continue
 
+                # Skip if not a file (e.g., sub-directory)
                 path = os.path.join(self.directory, filename)
                 if not os.path.isfile(path):
                     continue
 
                 self.seen.add(filename)
-                batch_paths.append(path)
+                batch_paths.append(path)    # replace with register_artifact DB call in the future
 
-                # Read file content
+                # Read file content, user will implement their own logic to extract the content from the artifact
                 with open(path, 'r') as file:
                     content = file.read()
                     batch_content.append(content)
@@ -57,6 +63,9 @@ class DirectoryStream:
 class StreamRunner:
     def __init__(self, stream: DirectoryStream, maxsize=0):
         self.stream = stream
+        self.db_connection = None                           # placeholder for DB connection
+        self.stream.set_db_connection(self.db_connection)   # set to actual DB connection in the future
+
         self.items_queue = queue.Queue(maxsize=maxsize)
         self._stop = threading.Event()
         self._thread = None
@@ -76,8 +85,8 @@ class StreamRunner:
 
     def __iter__(self):
         while not self._stop.is_set():
-            batch_paths, batch_content = self.items_queue.get(block=True)  # blocks until item is available
-            print(f"StreamRunner registering paths to DB: {batch_paths}")
+            batch_paths, batch_content = self.items_queue.get(block=True)   # blocks until item is available
+            print(f"StreamRunner registering paths to DB: {batch_paths}")   # replace with prime_artifact DB call in the future
             yield batch_content
 
 
