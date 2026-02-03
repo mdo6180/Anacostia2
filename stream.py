@@ -124,7 +124,7 @@ class StreamRunner:
     def __iter__(self):
         while not self._stop.is_set():
             batch_paths, batch_items = self.items_queue.get(block=True)
-            print(f"{self.name} using_artifact: {batch_paths}")      # using_artifact DB call in future
+            print(f"{self.name} using_artifact: {batch_paths}")     # using_artifact DB call in future
             yield batch_items
 
 
@@ -134,18 +134,21 @@ if __name__ == "__main__":
         # Test 0: Single DirectoryStream with batch_size=1
         runner1 = StreamRunner(name="Stream1", stream=DirectoryStream(input_path1)).start()
         for batch1 in runner1:
-            print(f"New file detected: {batch1}")
+            for item1 in batch1:
+                print(f"New file detected: {item1}")
 
         # Test 1: Single DirectoryStream with batch_size=2
         runner1 = StreamRunner(name="Stream1", stream=DirectoryStream(input_path1, batch_size=2)).start()
         for batch1 in runner1:
-            print(f"New file detected: {batch1}")
+            for item1 in batch1:
+                print(f"New file detected: {item1}")
         
         # Test 2: Two DirectoryStreams with batch_size=2
         runner1 = StreamRunner(name="Stream1", stream=DirectoryStream(input_path1, batch_size=2)).start()
         runner2 = StreamRunner(name="Stream2", stream=DirectoryStream(input_path2, batch_size=2)).start()
         for batch1, batch2 in zip(runner1, runner2):
-            print(f"New file detected: {batch1}, {batch2}")
+            for item1, item2 in zip(batch1, batch2):
+                print(f"New file detected: {item1}, {item2}")
 
         """
 
@@ -160,7 +163,10 @@ if __name__ == "__main__":
         runner2 = StreamRunner(name="Stream2", stream=DirectoryStream(input_path2), batch_size=2, filter_func=filter_even).start()
 
         for batch1, batch2 in zip(runner1, runner2):
-            print(f"New file detected: {batch1}, {batch2}")
+            for item1, item2 in zip(batch1, batch2):
+                #print(f"using_artifact: {item1}, {item2}")             # using_artifact DB call in future
+                print(f"processing artifacts detected: {item1}, {item2}")
+                #print(f"used_artifact: {item1}, {item2}")         # used_artifact DB call in future
 
     except KeyboardInterrupt:
         print("Stopping stream runners...")
