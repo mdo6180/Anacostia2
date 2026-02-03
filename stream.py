@@ -128,18 +128,6 @@ class StreamRunner:
             yield bundle_items
 
 
-class Run:
-    def __init__(self, run_id: int):
-        self.run_id = run_id
-        
-    def __enter__(self):
-        print(f"\nStarting run {self.run_id}")
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        print(f"Finished run {self.run_id}\n")
-
-
 class Artifact:
     def __init__(self, content: str):
         self.content = content
@@ -153,7 +141,6 @@ class Artifact:
 
 
 if __name__ == "__main__":
-    run_id = 0
 
     try:
         """
@@ -189,12 +176,9 @@ if __name__ == "__main__":
         runner2 = StreamRunner(name="Stream2", stream=DirectoryStream(input_path2), bundle_size=2, filter_func=filter_even).start()
 
         for bundle1, bundle2 in zip(runner1, runner2):
-            with Run(run_id):
-                for item1, item2 in zip(bundle1, bundle2):
-                    with Artifact(item1) as artifact1, Artifact(item2) as artifact2:
-                        print(f"processing artifacts detected: {artifact1}, {artifact2}")
-                
-            run_id += 1
+            for item1, item2 in zip(bundle1, bundle2):
+                with Artifact(item1) as artifact1, Artifact(item2) as artifact2:
+                    print(f"processing artifacts detected: {artifact1}, {artifact2}")
 
     except KeyboardInterrupt:
         print("Stopping stream runners...")
