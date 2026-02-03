@@ -2,7 +2,7 @@ import os
 import time
 import threading
 import queue
-from typing import Callable, Any, Optional, Tuple, List
+from typing import Callable, Any, Optional, List
 
 
 input_path1 = "./testing_artifacts/incoming1"
@@ -23,33 +23,35 @@ class DirectoryStream:
     def set_db_connection(self, connection):
         self.connection = connection
 
-    def load_artifact(self, path: str) -> str:
-        with open(path, "r") as file:
-            return file.read()
-
     def poll(self):
         """
         Yields single items: (path, content)
         """
         while True:
             for filename in sorted(os.listdir(self.directory)):
-                if filename in self.seen:
+
+                if filename in self.seen:   # replace with artifact_exists DB check in the future
                     continue
 
                 path = os.path.join(self.directory, filename)
                 if not os.path.isfile(path):
                     continue
 
-                self.seen.add(filename)
-                content = self.load_artifact(path)
-                yield path, content
+                self.seen.add(filename)     # replace with register_artifact DB call in the future
 
+                # Read file content, user will implement their own logic to extract the content from the artifact
+                with open(path, "r") as file:
+                    content = file.read()
+                    yield path, content
+
+            # IMPORTANT: put this sleep here so the polling doesn't block the main thread.
             time.sleep(self.poll_interval)
 
 
 class StreamRunner:
     def __init__(
         self,
+        name: str,
         stream: DirectoryStream,
         batch_size: int = 1,
         maxsize: int = 0,
@@ -58,6 +60,7 @@ class StreamRunner:
         if batch_size <= 0:
             raise ValueError("batch_size must be >= 1")
 
+        self.name = name
         self.stream = stream
         self.batch_size = batch_size
         self.db_connection = None                           # placeholder for DB connection
@@ -80,10 +83,10 @@ class StreamRunner:
                 # Apply filtering function if provided
                 if self.filter_func is not None:
                     if not self.filter_func(item):
-                        print(f"StreamRunner filtering out item: {item} from {path}")  # ignore_artifact DB call in future
+                        print(f"{self.name} filtering out item: {item} from {path}")   # ignore_artifact DB call in future
                         continue
                     else:
-                        print(f"StreamRunner accepting item: {item} from {path}")
+                        print(f"{self.name} accepting item: {item} from {path}")       # prime_artifact DB call in future
 
                 # Item accepted (or no filter)
                 batch_paths.append(path)
@@ -91,7 +94,7 @@ class StreamRunner:
 
                 # Emit only when batch is full
                 if len(batch_items) >= self.batch_size:
-                    self.items_queue.put((batch_paths, batch_items), block=True)  # backpressure here
+                    self.items_queue.put((batch_paths, batch_items), block=True)        # backpressure here, blocks if queue is full
                     batch_paths = []
                     batch_items = []
 
@@ -108,20 +111,39 @@ class StreamRunner:
     def __iter__(self):
         while not self._stop.is_set():
             batch_paths, batch_items = self.items_queue.get(block=True)
-            print(f"StreamRunner registering paths to DB: {batch_paths}")  # prime_artifact DB call in future
+            print(f"Using: {batch_paths}")      # using_artifact DB call in future
             yield batch_items
 
 
 if __name__ == "__main__":
     try:
+        """
+        # Test 0: Single DirectoryStream with batch_size=1
+        runner1 = StreamRunner(name="Stream1", stream=DirectoryStream(input_path1)).start()
+        for batch1 in runner1:
+            print(f"New file detected: {batch1}")
+
+        # Test 1: Single DirectoryStream with batch_size=2
+        runner1 = StreamRunner(name="Stream1", stream=DirectoryStream(input_path1, batch_size=2)).start()
+        for batch1 in runner1:
+            print(f"New file detected: {batch1}")
+        
+        # Test 2: Two DirectoryStreams with batch_size=2
+        runner1 = StreamRunner(name="Stream1", stream=DirectoryStream(input_path1, batch_size=2)).start()
+        runner2 = StreamRunner(name="Stream2", stream=DirectoryStream(input_path2, batch_size=2)).start()
+        for batch1, batch2 in zip(runner1, runner2):
+            print(f"New file detected: {batch1}, {batch2}")
+
+        """
+        # Test 3: Two DirectoryStreams with batch_size=2 and filtering functions
         def filter_odd(content: str) -> bool:
             return int(content[-1]) % 2 != 0  # Keep only artifacts with last character as odd number
 
         def filter_even(content: str) -> bool:
             return int(content[-1]) % 2 == 0  # Keep only artifacts with last character as even number
 
-        runner1 = StreamRunner(DirectoryStream(input_path1), batch_size=2, filter_func=filter_odd).start()
-        runner2 = StreamRunner(DirectoryStream(input_path2), batch_size=2, filter_func=filter_even).start()
+        runner1 = StreamRunner(name="Stream1", stream=DirectoryStream(input_path1), batch_size=2, filter_func=filter_odd).start()
+        runner2 = StreamRunner(name="Stream2", stream=DirectoryStream(input_path2), batch_size=2, filter_func=filter_even).start()
 
         for batch1, batch2 in zip(runner1, runner2):
             print(f"New file detected: {batch1}, {batch2}")
