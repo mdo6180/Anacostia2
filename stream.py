@@ -66,16 +66,16 @@ class StreamRunner:
         self,
         name: str,
         stream: DirectoryStream,
-        batch_size: int = 1,
+        bundle_size: int = 1,
         maxsize: int = 0,
         filter_func: Optional[Callable[[Any], bool]] = None,
     ):
-        if batch_size <= 0:
-            raise ValueError("batch_size must be >= 1")
+        if bundle_size <= 0:
+            raise ValueError("bundle_size must be >= 1")
 
         self.name = name
         self.stream = stream
-        self.batch_size = batch_size
+        self.bundle_size = bundle_size
         self.db_connection = None                           # placeholder for DB connection
         self.stream.set_db_connection(self.db_connection)   # set to actual DB connection in the future
         self.filter_func = filter_func
@@ -86,8 +86,8 @@ class StreamRunner:
 
     def start(self):
         def run():
-            batch_paths: List[str] = []
-            batch_items: List[Any] = []
+            bundle_paths: List[str] = []
+            bundle_items: List[Any] = []
 
             for path, item in self.stream:
                 if self._stop.is_set():
@@ -102,14 +102,14 @@ class StreamRunner:
                         print(f"{self.name} prime_artifact: {item} from {path}")        # prime_artifact DB call in future
 
                 # Item accepted (or no filter)
-                batch_paths.append(path)
-                batch_items.append(item)
+                bundle_paths.append(path)
+                bundle_items.append(item)
 
                 # Emit only when batch is full
-                if len(batch_items) >= self.batch_size:
-                    self.items_queue.put((batch_paths, batch_items), block=True)        # backpressure here, blocks if queue is full
-                    batch_paths = []
-                    batch_items = []
+                if len(bundle_items) >= self.bundle_size:
+                    self.items_queue.put((bundle_paths, bundle_items), block=True)        # backpressure here, blocks if queue is full
+                    bundle_paths = []
+                    bundle_items = []
 
             # Optional: decide whether to flush partial batch on stop.
             # Current behavior: do NOT flush partial batch.
@@ -123,9 +123,9 @@ class StreamRunner:
 
     def __iter__(self):
         while not self._stop.is_set():
-            batch_paths, batch_items = self.items_queue.get(block=True)
-            #print(f"{self.name} using_artifact: {batch_paths}")     # using_artifact DB call in future
-            yield batch_items
+            bundle_paths, bundle_items = self.items_queue.get(block=True)
+            #print(f"{self.name} using_artifact: {bundle_paths}")     # using_artifact DB call in future
+            yield bundle_items
 
 
 class Run:
@@ -157,40 +157,40 @@ if __name__ == "__main__":
 
     try:
         """
-        # Test 0: Single DirectoryStream with batch_size=1
+        # Test 0: Single DirectoryStream with bundle_size=1
         runner1 = StreamRunner(name="Stream1", stream=DirectoryStream(input_path1)).start()
         for batch1 in runner1:
             for item1 in batch1:
                 print(f"New file detected: {item1}")
 
-        # Test 1: Single DirectoryStream with batch_size=2
-        runner1 = StreamRunner(name="Stream1", stream=DirectoryStream(input_path1, batch_size=2)).start()
+        # Test 1: Single DirectoryStream with bundle_size=2
+        runner1 = StreamRunner(name="Stream1", stream=DirectoryStream(input_path1, bundle_size=2)).start()
         for batch1 in runner1:
             for item1 in batch1:
                 print(f"New file detected: {item1}")
         
-        # Test 2: Two DirectoryStreams with batch_size=2
-        runner1 = StreamRunner(name="Stream1", stream=DirectoryStream(input_path1, batch_size=2)).start()
-        runner2 = StreamRunner(name="Stream2", stream=DirectoryStream(input_path2, batch_size=2)).start()
+        # Test 2: Two DirectoryStreams with bundle_size=2
+        runner1 = StreamRunner(name="Stream1", stream=DirectoryStream(input_path1, bundle_size=2)).start()
+        runner2 = StreamRunner(name="Stream2", stream=DirectoryStream(input_path2, bundle_size=2)).start()
         for batch1, batch2 in zip(runner1, runner2):
             for item1, item2 in zip(batch1, batch2):
                 print(f"New file detected: {item1}, {item2}")
 
         """
 
-        # Test 3: Two DirectoryStreams with batch_size=2 and filtering functions
+        # Test 3: Two DirectoryStreams with bundle_size=2 and filtering functions
         def filter_odd(content: str) -> bool:
             return int(content[-1]) % 2 != 0    # Keep only artifacts with last character as odd number
 
         def filter_even(content: str) -> bool:
             return int(content[-1]) % 2 == 0    # Keep only artifacts with last character as even number
 
-        runner1 = StreamRunner(name="Stream1", stream=DirectoryStream(input_path1), batch_size=2, filter_func=filter_odd).start()
-        runner2 = StreamRunner(name="Stream2", stream=DirectoryStream(input_path2), batch_size=2, filter_func=filter_even).start()
+        runner1 = StreamRunner(name="Stream1", stream=DirectoryStream(input_path1), bundle_size=2, filter_func=filter_odd).start()
+        runner2 = StreamRunner(name="Stream2", stream=DirectoryStream(input_path2), bundle_size=2, filter_func=filter_even).start()
 
-        for batch1, batch2 in zip(runner1, runner2):
+        for bundle1, bundle2 in zip(runner1, runner2):
             with Run(run_id):
-                for item1, item2 in zip(batch1, batch2):
+                for item1, item2 in zip(bundle1, bundle2):
                     with Artifact(item1) as artifact1, Artifact(item2) as artifact2:
                         print(f"processing artifacts detected: {artifact1}, {artifact2}")
                 
