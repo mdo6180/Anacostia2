@@ -124,11 +124,37 @@ class StreamRunner:
     def __iter__(self):
         while not self._stop.is_set():
             batch_paths, batch_items = self.items_queue.get(block=True)
-            print(f"{self.name} using_artifact: {batch_paths}")     # using_artifact DB call in future
+            #print(f"{self.name} using_artifact: {batch_paths}")     # using_artifact DB call in future
             yield batch_items
 
 
+class Run:
+    def __init__(self, run_id: int):
+        self.run_id = run_id
+        
+    def __enter__(self):
+        print(f"\nStarting run {self.run_id}")
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        print(f"Finished run {self.run_id}\n")
+
+
+class Artifact:
+    def __init__(self, content: str):
+        self.content = content
+    
+    def __enter__(self):
+        print(f"using_artifact: {self.content}")
+        return self.content
+    
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        print(f"used_artifact: {self.content}")
+
+
 if __name__ == "__main__":
+    run_id = 0
+
     try:
         """
         # Test 0: Single DirectoryStream with batch_size=1
@@ -163,10 +189,12 @@ if __name__ == "__main__":
         runner2 = StreamRunner(name="Stream2", stream=DirectoryStream(input_path2), batch_size=2, filter_func=filter_even).start()
 
         for batch1, batch2 in zip(runner1, runner2):
-            for item1, item2 in zip(batch1, batch2):
-                #print(f"using_artifact: {item1}, {item2}")             # using_artifact DB call in future
-                print(f"processing artifacts detected: {item1}, {item2}")
-                #print(f"used_artifact: {item1}, {item2}")         # used_artifact DB call in future
+            with Run(run_id):
+                for item1, item2 in zip(batch1, batch2):
+                    with Artifact(item1) as artifact1, Artifact(item2) as artifact2:
+                        print(f"processing artifacts detected: {artifact1}, {artifact2}")
+                
+            run_id += 1
 
     except KeyboardInterrupt:
         print("Stopping stream runners...")
