@@ -2,6 +2,7 @@ import os
 import time
 import threading
 import queue
+from typing import Callable, Any
 
 
 
@@ -25,6 +26,11 @@ class DirectoryStream:
     
     def set_db_connection(self, connection):
         self.connection = connection
+    
+    def load_artifact(self, path: str) -> str:
+        with open(path, 'r') as file:
+            content = file.read()
+        return content
 
     def poll(self):
         batch_paths = []
@@ -46,9 +52,8 @@ class DirectoryStream:
                 batch_paths.append(path)    # replace with register_artifact DB call in the future
 
                 # Read file content, user will implement their own logic to extract the content from the artifact
-                with open(path, 'r') as file:
-                    content = file.read()
-                    batch_content.append(content)
+                content = self.load_artifact(path)
+                batch_content.append(content)
 
                 # Only yield when the batch is FULL
                 if len(batch_paths) >= self.batch_size:
@@ -56,15 +61,16 @@ class DirectoryStream:
                     batch_paths = []
                     batch_content = []
 
-            # IMPORTANT: do NOT yield partial batches here.
+            # IMPORTANT: put this sleep here so the polling doesn't block the main thread.
             time.sleep(self.poll_interval)
 
 
 class StreamRunner:
-    def __init__(self, stream: DirectoryStream, maxsize=0):
+    def __init__(self, stream: DirectoryStream, maxsize=0, filter_func: Callable[[Any], bool] = None):
         self.stream = stream
         self.db_connection = None                           # placeholder for DB connection
         self.stream.set_db_connection(self.db_connection)   # set to actual DB connection in the future
+        self.filter_func = filter_func
 
         self.items_queue = queue.Queue(maxsize=maxsize)
         self._stop = threading.Event()
@@ -72,10 +78,23 @@ class StreamRunner:
 
     def start(self):
         def run():
-            for item in self.stream.poll():
+            for batch in self.stream.poll():
                 if self._stop.is_set():
                     break
-                self.items_queue.put(item=item, block=True)  # backpressure here, blocks if queue is full
+                
+                # Apply filtering function if provided
+                if self.filter_func is not None:
+                    paths, items = batch
+                    for path, item in zip(paths, items):
+                        if not self.filter_func(item):
+                            print(f"StreamRunner filtering out item: {item} from {path}")   # replace with ignore_artifact DB call in the future
+                            continue
+                        else:
+                            print(f"StreamRunner accepting item: {item} from {path}")
+                            self.items_queue.put(([path], [item]), block=True)  # backpressure here, blocks if queue is full
+                else:
+                    self.items_queue.put(batch, block=True)  # backpressure here, blocks if queue is full
+
         self._thread = threading.Thread(target=run, daemon=True)
         self._thread.start()
         return self
@@ -110,8 +129,14 @@ if __name__ == "__main__":
             print(f"New file detected: {batch1}, {batch2}")
 
         """
-        runner1 = StreamRunner(DirectoryStream(input_path1, batch_size=2)).start()
-        runner2 = StreamRunner(DirectoryStream(input_path2, batch_size=2)).start()
+        def filter_odd(content):
+            return int(content[-1]) % 2 != 0  # Keep only artifacts with last character as odd number
+
+        def filter_even(content):
+            return int(content[-1]) % 2 == 0  # Keep only artifacts with last character as even number
+
+        runner1 = StreamRunner(DirectoryStream(input_path1, batch_size=2), filter_func=filter_odd).start()
+        runner2 = StreamRunner(DirectoryStream(input_path2, batch_size=2), filter_func=filter_even).start()
 
         for batch1, batch2 in zip(runner1, runner2):
             print(f"New file detected: {batch1}, {batch2}")
