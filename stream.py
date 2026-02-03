@@ -2,15 +2,27 @@ import os
 import time
 import threading
 import queue
+import argparse
+import shutil
 from typing import Callable, Any, Optional, List
 
 
 input_path1 = "./testing_artifacts/incoming1"
 input_path2 = "./testing_artifacts/incoming2"
 
+parser = argparse.ArgumentParser(description="Run the pipeline after restart test")
+parser.add_argument("-r", "--restart", action="store_true", help="Flag to indicate if this is a restart")
+args = parser.parse_args()
+
+if args.restart == False:
+    if os.path.exists(input_path1):
+        shutil.rmtree(input_path1)
+    if os.path.exists(input_path2):
+        shutil.rmtree(input_path2)
+
 
 class DirectoryStream:
-    def __init__(self, directory: str, poll_interval: float = 1.0):
+    def __init__(self, directory: str, poll_interval: float = 0.1):
         if os.path.exists(directory) is False:
             print(f"Directory {directory} does not exist. Creating it.")
             os.makedirs(directory)
@@ -22,8 +34,9 @@ class DirectoryStream:
 
     def set_db_connection(self, connection):
         self.connection = connection
+        # add logic to create necessary tables if needed
 
-    def poll(self):
+    def __iter__(self):
         """
         Yields single items: (path, content)
         """
@@ -76,17 +89,17 @@ class StreamRunner:
             batch_paths: List[str] = []
             batch_items: List[Any] = []
 
-            for path, item in self.stream.poll():
+            for path, item in self.stream:
                 if self._stop.is_set():
                     break
 
                 # Apply filtering function if provided
                 if self.filter_func is not None:
                     if not self.filter_func(item):
-                        print(f"{self.name} filtering out item: {item} from {path}")   # ignore_artifact DB call in future
+                        print(f"{self.name} ignore_artifact: {item} from {path}")       # ignore_artifact DB call in future
                         continue
                     else:
-                        print(f"{self.name} accepting item: {item} from {path}")       # prime_artifact DB call in future
+                        print(f"{self.name} prime_artifact: {item} from {path}")        # prime_artifact DB call in future
 
                 # Item accepted (or no filter)
                 batch_paths.append(path)
@@ -111,7 +124,7 @@ class StreamRunner:
     def __iter__(self):
         while not self._stop.is_set():
             batch_paths, batch_items = self.items_queue.get(block=True)
-            print(f"Using: {batch_paths}")      # using_artifact DB call in future
+            print(f"{self.name} using_artifact: {batch_paths}")      # using_artifact DB call in future
             yield batch_items
 
 
@@ -135,12 +148,13 @@ if __name__ == "__main__":
             print(f"New file detected: {batch1}, {batch2}")
 
         """
+
         # Test 3: Two DirectoryStreams with batch_size=2 and filtering functions
         def filter_odd(content: str) -> bool:
-            return int(content[-1]) % 2 != 0  # Keep only artifacts with last character as odd number
+            return int(content[-1]) % 2 != 0    # Keep only artifacts with last character as odd number
 
         def filter_even(content: str) -> bool:
-            return int(content[-1]) % 2 == 0  # Keep only artifacts with last character as even number
+            return int(content[-1]) % 2 == 0    # Keep only artifacts with last character as even number
 
         runner1 = StreamRunner(name="Stream1", stream=DirectoryStream(input_path1), batch_size=2, filter_func=filter_odd).start()
         runner2 = StreamRunner(name="Stream2", stream=DirectoryStream(input_path2), batch_size=2, filter_func=filter_even).start()

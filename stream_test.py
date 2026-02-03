@@ -15,7 +15,7 @@ if __name__ == "__main__":
     data_store1_input = f"{tests_path}/incoming1"
     data_store2_input = f"{tests_path}/incoming2"
 
-    for i in range(10):
+    for i in range(12):
         create_file(f"{data_store1_input}/test_file{i}.txt", f"incoming1 {i}")
         time.sleep(1.5)
         create_file(f"{data_store2_input}/test_file{i}.txt", f"incoming2 {i}")
