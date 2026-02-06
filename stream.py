@@ -1,3 +1,4 @@
+from abc import ABC
 import hashlib
 import os
 import time
@@ -5,6 +6,7 @@ import threading
 import queue
 import argparse
 import shutil
+from contextlib import contextmanager
 from typing import Callable, Any, Optional, List, Generator
 
 
@@ -145,24 +147,23 @@ class Consumer:
             yield bundle_items
 
 
-class Run:
-    def __init__(self, run_id: int):
-        self.run_id = run_id
+class Producer:
+    def __init__(self, name: str):
+        self.name = name
+
+
+class Node(threading.Thread, ABC):
+    def __init__(self, name: str, consumers: List[Consumer], producers: List[Producer]):
+        self.consumers = consumers
+        self.producers = producers
+        self.run_id = 0
         
-    def __enter__(self):
-        # mark artifacts as in using_artifact in DB here
-        print(f"\nStarting run {self.run_id}")      # start_run DB call in future, used to display run started on GUI
-        return self
+        self.stream_consumer_odd = consumers[0]
+        self.stream_consumer_even = consumers[1]
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        # mark artifacts as used_artifact in DB here
-        print(f"Finished run {self.run_id}\n")   # end_run DB call in future, used to display run ended on GUI
-
-
-if __name__ == "__main__":
-    run_id = 0
-
-    try:
+        super().__init__(name=name, daemon=True)
+    
+    def execute(self):
         """
         # Test 0: Single DirectoryStream with bundle_size=1
         runner1 = StreamRunner(name="Stream1", stream=DirectoryStream(input_path1)).start()
@@ -185,24 +186,57 @@ if __name__ == "__main__":
 
         """
 
-        # Test 3: Two DirectoryStreams with bundle_size=2 and filtering functions
-        def filter_odd(content: str) -> bool:
-            return int(content[-1]) % 2 != 0    # Keep only artifacts with last character as odd number
-
-        def filter_even(content: str) -> bool:
-            return int(content[-1]) % 2 == 0    # Keep only artifacts with last character as even number
-
-        stream_consumer_odd = Consumer(name="Stream1", stream=DirectoryStream(input_path1), bundle_size=2, filter_func=filter_odd).start()
-        stream_consumer_even = Consumer(name="Stream2", stream=DirectoryStream(input_path2), bundle_size=2, filter_func=filter_even).start()
-
-        for bundle1, bundle2 in zip(stream_consumer_odd, stream_consumer_even):
-            with Run(run_id):
+        for bundle1, bundle2 in zip(self.stream_consumer_odd, self.stream_consumer_even):
+            with self.stage_run():
                 for item1, item2 in zip(bundle1, bundle2):
                     print(f"processing artifacts detected: {item1}, {item2}")
-                
-            run_id += 1
+    
+    def start_consumers(self):
+        for consumer in self.consumers:
+            consumer.start()
+    
+    def stop_consumers(self):
+        for consumer in self.consumers:
+            consumer.stop()
 
-    except KeyboardInterrupt:
-        print("Stopping stream runners...")
-        stream_consumer_odd.stop()
-        stream_consumer_even.stop()
+    @contextmanager
+    def stage_run(self):
+        try:
+            print(f"\nNode {self.name} starting run {self.run_id}")   # start_run DB call in future
+            yield
+            print(f"Node {self.name} finished run {self.run_id}\n")    # end_run DB call in future
+            self.run_id += 1
+
+        except Exception as e:
+            print(f"Error in node {self.name} during run {self.run_id}: {e}")
+            # log the error in DB here, used to display run error on GUI
+
+    def run(self):
+        try:
+            self.start_consumers()
+            # get the max run_id from the DB for this node and set self.run_id to max_run_id + 1 here, so that run IDs are consistent across restarts
+            self.execute()
+
+        except Exception as e:
+            print(f"Error in node {self.name}: {e}")
+            # log the error in DB here, used to display run error on GUI
+
+        except KeyboardInterrupt:
+            print(f"Node {self.name} received KeyboardInterrupt. Stopping...")
+            self.stop_consumers()
+
+
+if __name__ == "__main__":
+    # Test 3: Two DirectoryStreams with bundle_size=2 and filtering functions
+    def filter_odd(content: str) -> bool:
+        return int(content[-1]) % 2 != 0    # Keep only artifacts with last character as odd number
+
+    def filter_even(content: str) -> bool:
+        return int(content[-1]) % 2 == 0    # Keep only artifacts with last character as even number
+
+    stream_consumer_odd = Consumer(name="Stream1", stream=DirectoryStream(input_path1), bundle_size=2, filter_func=filter_odd)
+    stream_consumer_even = Consumer(name="Stream2", stream=DirectoryStream(input_path2), bundle_size=2, filter_func=filter_even)
+
+    node = Node(name="TestNode", consumers=[stream_consumer_odd, stream_consumer_even], producers=[])
+    node.start()
+    node.join()
