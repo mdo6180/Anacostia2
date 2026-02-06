@@ -5,7 +5,7 @@ import threading
 import queue
 import argparse
 import shutil
-from typing import Callable, Any, Optional, List
+from typing import Callable, Any, Optional, List, Generator
 
 
 input_path1 = "./testing_artifacts/incoming1"
@@ -39,6 +39,7 @@ class DirectoryStream:
         # add logic to create necessary tables if needed
         # create a stream_artifacts table to track seen artifacts for all streams
         # add a way to get indexes from seen artifacts to help with resuming streams after restart
+        # associate the file paths with file hashes in the DB for this stream
     
     def hash_artifact(self, filepath: str) -> str:
         sha256 = hashlib.sha256()
@@ -47,9 +48,9 @@ class DirectoryStream:
                 sha256.update(chunk)
         return sha256.hexdigest()
 
-    def __iter__(self):
+    def __iter__(self) -> Generator[str, Any, str]:
         """
-        Yields single items: (path, content)
+        Yields single items: (content, file_hash)
         """
         while True:
             for filename in sorted(os.listdir(self.directory)):
@@ -68,7 +69,7 @@ class DirectoryStream:
                 # Read file content, user will implement their own logic to extract the content from the artifact
                 with open(path, "r") as file:
                     content = file.read()
-                    yield path, content, file_hash
+                    yield content, file_hash
 
             # IMPORTANT: put this sleep here so the polling doesn't block the main thread.
             time.sleep(self.poll_interval)
@@ -99,31 +100,28 @@ class Consumer:
 
     def start(self):
         def run():
-            bundle_paths: List[str] = []
             bundle_items: List[Any] = []
             bundle_hashes: List[str] = []
 
-            for path, item, file_hash in self.stream:
+            for item, file_hash in self.stream:
                 if self._stop.is_set():
                     break
 
                 # Apply filtering function if provided
                 if self.filter_func is not None:
                     if not self.filter_func(item):
-                        print(f"{self.name} ignore_artifact: {item} from {path}")       # ignore_artifact DB call in future
+                        print(f"{self.name} ignore_artifact: {item}")       # ignore_artifact DB call in future
                         continue
                     else:
-                        print(f"{self.name} prime_artifact: {item} from {path}")        # prime_artifact DB call in future
+                        print(f"{self.name} prime_artifact: {item}")        # prime_artifact DB call in future
 
                 # Item accepted (or no filter)
-                bundle_paths.append(path)
                 bundle_items.append(item)
                 bundle_hashes.append(file_hash)
 
                 # Emit only when batch is full
                 if len(bundle_items) >= self.bundle_size:
-                    self.items_queue.put((bundle_paths, bundle_items, bundle_hashes), block=True)        # backpressure here, blocks if queue is full
-                    bundle_paths = []
+                    self.items_queue.put((bundle_items, bundle_hashes), block=True)        # backpressure here, blocks if queue is full
                     bundle_items = []
                     bundle_hashes = []
 
@@ -142,8 +140,8 @@ class Consumer:
         # yield the last bundle when the StreamRunner is restarted here
 
         while not self._stop.is_set():
-            bundle_paths, bundle_items, bundle_hashes = self.items_queue.get(block=True)
-            #print(f"{self.name} using_artifact: {bundle_paths}")     # using_artifact DB call in future
+            bundle_items, bundle_hashes = self.items_queue.get(block=True)
+            #print(f"{self.name} using_artifact: {bundle_hashes}")     # using_artifact DB call in future
             yield bundle_items
 
 
@@ -159,18 +157,6 @@ class Run:
     def __exit__(self, exc_type, exc_val, exc_tb):
         # mark artifacts as used_artifact in DB here
         print(f"Finished run {self.run_id}\n")   # end_run DB call in future, used to display run ended on GUI
-
-
-class Artifact:
-    def __init__(self, content: str):
-        self.content = content
-    
-    def __enter__(self):
-        print(f"using_artifact: {self.content}")
-        return self.content
-    
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        print(f"used_artifact: {self.content}")
 
 
 if __name__ == "__main__":
@@ -212,8 +198,7 @@ if __name__ == "__main__":
         for bundle1, bundle2 in zip(stream_consumer_odd, stream_consumer_even):
             with Run(run_id):
                 for item1, item2 in zip(bundle1, bundle2):
-                    with Artifact(item1) as artifact1, Artifact(item2) as artifact2:    # get rid of Artifact context manager in the future
-                        print(f"processing artifacts detected: {artifact1}, {artifact2}")
+                    print(f"processing artifacts detected: {item1}, {item2}")
                 
             run_id += 1
 
