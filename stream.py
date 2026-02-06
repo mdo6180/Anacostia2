@@ -144,6 +144,7 @@ class Consumer:
         while not self._stop.is_set():
             bundle_items, bundle_hashes = self.items_queue.get(block=True)
             #print(f"{self.name} using_artifact: {bundle_hashes}")     # using_artifact DB call in future
+            self.bundle_hashes = bundle_hashes
             yield bundle_items
 
 
@@ -198,12 +199,30 @@ class Node(threading.Thread, ABC):
     def stop_consumers(self):
         for consumer in self.consumers:
             consumer.stop()
+    
+    def using_artifacts(self):
+        # placeholder for logic to mark artifacts as being used in the DB
+        hashes = []
+        for consumer in self.consumers:
+            hashes.extend(consumer.bundle_hashes)
+            print(f"{self.name} using_artifact: {hashes}")     # using_artifact DB call in future
+    
+    def commit_artifacts(self):
+        # placeholder for logic to mark artifacts as committed in the DB
+        hashes = []
+        for consumer in self.consumers:
+            hashes.extend(consumer.bundle_hashes)
+            print(f"{self.name} committed_artifact: {hashes}")     # commit_artifact DB call in future
 
     @contextmanager
     def stage_run(self):
         try:
             print(f"\nNode {self.name} starting run {self.run_id}")   # start_run DB call in future
+            self.using_artifacts()    # mark artifacts as being used in the DB
+            
             yield
+            
+            self.commit_artifacts()   # mark artifacts as committed in the DB
             print(f"Node {self.name} finished run {self.run_id}\n")    # end_run DB call in future
             self.run_id += 1
 
