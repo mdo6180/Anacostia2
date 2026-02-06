@@ -12,6 +12,9 @@ from typing import Callable, Any, Optional, List, Generator
 
 input_path1 = "./testing_artifacts/incoming1"
 input_path2 = "./testing_artifacts/incoming2"
+output_path1 = "./testing_artifacts/processed1"
+output_path2 = "./testing_artifacts/processed2"
+output_combined_path = "./testing_artifacts/processed_combined"
 
 parser = argparse.ArgumentParser(description="Run the pipeline after restart test")
 parser.add_argument("-r", "--restart", action="store_true", help="Flag to indicate if this is a restart")
@@ -22,6 +25,12 @@ if args.restart == False:
         shutil.rmtree(input_path1)
     if os.path.exists(input_path2):
         shutil.rmtree(input_path2)
+    if os.path.exists(output_path1):
+        shutil.rmtree(output_path1)
+    if os.path.exists(output_path2):
+        shutil.rmtree(output_path2)
+    if os.path.exists(output_combined_path):
+        shutil.rmtree(output_combined_path)
 
 
 class DirectoryStream:
@@ -148,8 +157,18 @@ class Consumer:
 
 
 class Producer:
-    def __init__(self, name: str):
+    def __init__(self, name: str, directory: str):
         self.name = name
+        self.directory = directory
+        if os.path.exists(directory) is False:
+            print(f"Directory {directory} does not exist. Creating it.")
+            os.makedirs(directory)
+    
+    def write(self, filename: str, content: str):
+        path = os.path.join(self.directory, filename)
+        with open(path, "a") as file:
+            file.write(content)
+        print(f"{self.name} produced artifact: {path}")    # produced_artifact DB call in future
 
 
 class Node(threading.Thread, ABC):
@@ -160,6 +179,10 @@ class Node(threading.Thread, ABC):
         
         self.stream_consumer_odd = consumers[0]
         self.stream_consumer_even = consumers[1]
+
+        self.odd_producer = producers[0]
+        self.even_producer = producers[1]
+        self.combined_producer = producers[2]
 
         super().__init__(name=name, daemon=True)
     
@@ -189,8 +212,10 @@ class Node(threading.Thread, ABC):
         for bundle1, bundle2 in zip(self.stream_consumer_odd, self.stream_consumer_even):
             with self.stage_run():
                 for item1, item2 in zip(bundle1, bundle2):
-                    print(f"processing artifacts detected: {item1}, {item2}")
-    
+                    self.odd_producer.write(filename=f"processed_odd_{self.run_id}.txt", content=f"Processed {item1} from odd stream\n")
+                    self.even_producer.write(filename=f"processed_even_{self.run_id}.txt", content=f"Processed {item2} from even stream\n")
+                    self.combined_producer.write(filename=f"processed_combined_{self.run_id}.txt", content=f"Processed {item1} and {item2} from combined streams\n")
+
     def start_consumers(self):
         for consumer in self.consumers:
             consumer.start()
@@ -254,7 +279,10 @@ if __name__ == "__main__":
 
     stream_consumer_odd = Consumer(name="Stream1", stream=DirectoryStream(input_path1), bundle_size=2, filter_func=filter_odd)
     stream_consumer_even = Consumer(name="Stream2", stream=DirectoryStream(input_path2), bundle_size=2, filter_func=filter_even)
+    odd_producer = Producer(name="Producer1", directory=output_path1)   # example producer, not used in this test
+    even_producer = Producer(name="Producer2", directory=output_path2)   # example producer, not used in this test
+    combined_producer = Producer(name="CombinedProducer", directory=output_combined_path)   # example producer to write combined results, not used in this test
 
-    node = Node(name="TestNode", consumers=[stream_consumer_odd, stream_consumer_even], producers=[])
+    node = Node(name="TestNode", consumers=[stream_consumer_odd, stream_consumer_even], producers=[odd_producer, even_producer, combined_producer])
     node.start()
     node.join()
