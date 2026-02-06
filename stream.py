@@ -1,3 +1,4 @@
+import hashlib
 import os
 import time
 import threading
@@ -22,19 +23,29 @@ if args.restart == False:
 
 
 class DirectoryStream:
-    def __init__(self, directory: str, poll_interval: float = 0.1):
+    def __init__(self, directory: str, poll_interval: float = 0.1, hash_chunk_size: int = 1_048_576):
         if os.path.exists(directory) is False:
             print(f"Directory {directory} does not exist. Creating it.")
             os.makedirs(directory)
 
         self.directory = directory
         self.poll_interval = poll_interval
+        self.hash_chunk_size = hash_chunk_size
         self.seen = set()
         self.connection = None
 
     def set_db_connection(self, connection):
         self.connection = connection
         # add logic to create necessary tables if needed
+        # create a stream_artifacts table to track seen artifacts for all streams
+        # add a way to get indexes from seen artifacts to help with resuming streams after restart
+    
+    def hash_artifact(self, filepath: str) -> str:
+        sha256 = hashlib.sha256()
+        with open(filepath, 'rb') as f:
+            while chunk := f.read(self.hash_chunk_size):
+                sha256.update(chunk)
+        return sha256.hexdigest()
 
     def __iter__(self):
         """
@@ -52,10 +63,12 @@ class DirectoryStream:
 
                 self.seen.add(filename)     # replace with register_artifact DB call in the future
 
+                file_hash = self.hash_artifact(path)
+
                 # Read file content, user will implement their own logic to extract the content from the artifact
                 with open(path, "r") as file:
                     content = file.read()
-                    yield path, content
+                    yield path, content, file_hash
 
             # IMPORTANT: put this sleep here so the polling doesn't block the main thread.
             time.sleep(self.poll_interval)
@@ -88,8 +101,9 @@ class Consumer:
         def run():
             bundle_paths: List[str] = []
             bundle_items: List[Any] = []
+            bundle_hashes: List[str] = []
 
-            for path, item in self.stream:
+            for path, item, file_hash in self.stream:
                 if self._stop.is_set():
                     break
 
@@ -104,12 +118,14 @@ class Consumer:
                 # Item accepted (or no filter)
                 bundle_paths.append(path)
                 bundle_items.append(item)
+                bundle_hashes.append(file_hash)
 
                 # Emit only when batch is full
                 if len(bundle_items) >= self.bundle_size:
-                    self.items_queue.put((bundle_paths, bundle_items), block=True)        # backpressure here, blocks if queue is full
+                    self.items_queue.put((bundle_paths, bundle_items, bundle_hashes), block=True)        # backpressure here, blocks if queue is full
                     bundle_paths = []
                     bundle_items = []
+                    bundle_hashes = []
 
             # Optional: decide whether to flush partial batch on stop.
             # Current behavior: do NOT flush partial batch.
@@ -126,7 +142,7 @@ class Consumer:
         # yield the last bundle when the StreamRunner is restarted here
 
         while not self._stop.is_set():
-            bundle_paths, bundle_items = self.items_queue.get(block=True)
+            bundle_paths, bundle_items, bundle_hashes = self.items_queue.get(block=True)
             #print(f"{self.name} using_artifact: {bundle_paths}")     # using_artifact DB call in future
             yield bundle_items
 
