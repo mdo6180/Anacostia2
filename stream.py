@@ -43,7 +43,7 @@ class DirectoryStream:
         # add a way to get indexes from seen artifacts to help with resuming streams after restart
         # associate the file paths with file hashes in the DB for this stream
     
-    def hash_artifact(self, filepath: str) -> str:
+    def hash_file(self, filepath: str) -> str:
         sha256 = hashlib.sha256()
         with open(filepath, 'rb') as f:
             while chunk := f.read(self.hash_chunk_size):
@@ -66,7 +66,7 @@ class DirectoryStream:
 
                 self.seen.add(filename)     # replace with register_artifact DB call in the future
 
-                file_hash = self.hash_artifact(path)
+                file_hash = self.hash_file(path)
 
                 # Read file content, user will implement their own logic to extract the content from the artifact
                 with open(path, "r") as file:
@@ -143,8 +143,7 @@ class Consumer:
 
         while not self._stop.is_set():
             bundle_items, bundle_hashes = self.items_queue.get(block=True)
-            #print(f"{self.name} using_artifact: {bundle_hashes}")     # using_artifact DB call in future
-            self.bundle_hashes = bundle_hashes
+            self.bundle_hashes = bundle_hashes  # store the hashes of the current bundle for the using_artifacts and commit_artifacts calls in the Node
             yield bundle_items
 
 
@@ -205,14 +204,14 @@ class Node(threading.Thread, ABC):
         hashes = []
         for consumer in self.consumers:
             hashes.extend(consumer.bundle_hashes)
-            print(f"{self.name} using_artifact: {hashes}")     # using_artifact DB call in future
+        print(f"{self.name} using_artifact: {hashes}")     # using_artifact DB call in future
     
     def commit_artifacts(self):
         # placeholder for logic to mark artifacts as committed in the DB
         hashes = []
         for consumer in self.consumers:
             hashes.extend(consumer.bundle_hashes)
-            print(f"{self.name} committed_artifact: {hashes}")     # commit_artifact DB call in future
+        print(f"{self.name} committed_artifact: {hashes}")     # commit_artifact DB call in future
 
     @contextmanager
     def stage_run(self):
