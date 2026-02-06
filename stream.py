@@ -61,7 +61,7 @@ class DirectoryStream:
             time.sleep(self.poll_interval)
 
 
-class StreamRunner:
+class Consumer:
     def __init__(
         self,
         name: str,
@@ -122,10 +122,27 @@ class StreamRunner:
         self._stop.set()
 
     def __iter__(self):
+        # get the last partial bundle by checking which items are primed but not yet in the use_artifact state
+        # yield the last bundle when the StreamRunner is restarted here
+
         while not self._stop.is_set():
             bundle_paths, bundle_items = self.items_queue.get(block=True)
             #print(f"{self.name} using_artifact: {bundle_paths}")     # using_artifact DB call in future
             yield bundle_items
+
+
+class Run:
+    def __init__(self, run_id: int):
+        self.run_id = run_id
+        
+    def __enter__(self):
+        # mark artifacts as in using_artifact in DB here
+        print(f"\nStarting run {self.run_id}")      # start_run DB call in future, used to display run started on GUI
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        # mark artifacts as used_artifact in DB here
+        print(f"Finished run {self.run_id}\n")   # end_run DB call in future, used to display run ended on GUI
 
 
 class Artifact:
@@ -141,14 +158,15 @@ class Artifact:
 
 
 if __name__ == "__main__":
+    run_id = 0
 
     try:
         """
         # Test 0: Single DirectoryStream with bundle_size=1
         runner1 = StreamRunner(name="Stream1", stream=DirectoryStream(input_path1)).start()
         for batch1 in runner1:
-            for item1 in batch1:
-                print(f"New file detected: {item1}")
+            item1 = batch1[0]
+            print(f"New file detected: {item1}")
 
         # Test 1: Single DirectoryStream with bundle_size=2
         runner1 = StreamRunner(name="Stream1", stream=DirectoryStream(input_path1, bundle_size=2)).start()
@@ -172,15 +190,18 @@ if __name__ == "__main__":
         def filter_even(content: str) -> bool:
             return int(content[-1]) % 2 == 0    # Keep only artifacts with last character as even number
 
-        runner1 = StreamRunner(name="Stream1", stream=DirectoryStream(input_path1), bundle_size=2, filter_func=filter_odd).start()
-        runner2 = StreamRunner(name="Stream2", stream=DirectoryStream(input_path2), bundle_size=2, filter_func=filter_even).start()
+        stream_consumer_odd = Consumer(name="Stream1", stream=DirectoryStream(input_path1), bundle_size=2, filter_func=filter_odd).start()
+        stream_consumer_even = Consumer(name="Stream2", stream=DirectoryStream(input_path2), bundle_size=2, filter_func=filter_even).start()
 
-        for bundle1, bundle2 in zip(runner1, runner2):
-            for item1, item2 in zip(bundle1, bundle2):
-                with Artifact(item1) as artifact1, Artifact(item2) as artifact2:
-                    print(f"processing artifacts detected: {artifact1}, {artifact2}")
+        for bundle1, bundle2 in zip(stream_consumer_odd, stream_consumer_even):
+            with Run(run_id):
+                for item1, item2 in zip(bundle1, bundle2):
+                    with Artifact(item1) as artifact1, Artifact(item2) as artifact2:    # get rid of Artifact context manager in the future
+                        print(f"processing artifacts detected: {artifact1}, {artifact2}")
+                
+            run_id += 1
 
     except KeyboardInterrupt:
         print("Stopping stream runners...")
-        runner1.stop()
-        runner2.stop()
+        stream_consumer_odd.stop()
+        stream_consumer_even.stop()
