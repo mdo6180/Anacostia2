@@ -1,4 +1,5 @@
 from abc import ABC
+from functools import wraps
 import hashlib
 import os
 import time
@@ -187,6 +188,8 @@ class Node(threading.Thread, ABC):
         super().__init__(name=name, daemon=True)
     
     def start_consumers(self):
+        # in the future, add logic here to check if there are any primed artifacts that haven't been marked as being used in the DB 
+        # and yield those first before starting to consume new artifacts from the stream
         for consumer in self.consumers:
             consumer.start()
     
@@ -224,19 +227,28 @@ class Node(threading.Thread, ABC):
             print(f"Error in node {self.name} during run {self.run_id}: {e}")
             # log the error in DB here, used to display run error on GUI
 
-    def run(self, func):
+    def entrypoint(self, func: Callable[[], None]):
+        self._entrypoint = func
+
+        @wraps(func)
+        def wrapper():
+            return func()
+
+        return wrapper
+
+    def run(self):
+        if self._entrypoint is None:
+            raise RuntimeError(f"No entrypoint registered for node {self.name}. Use @node.entrypoint")
+
         try:
             self.start_consumers()
             # get the max run_id from the DB for this node and set self.run_id to max_run_id + 1 here, so that run IDs are consistent across restarts
-            func()
+
+            self._entrypoint()
 
         except Exception as e:
             print(f"Error in node {self.name}: {e}")
             # log the error in DB here, used to display run error on GUI
-
-        except KeyboardInterrupt:
-            print(f"Node {self.name} received KeyboardInterrupt. Stopping...")
-            self.stop_consumers()
 
 
 if __name__ == "__main__":
@@ -255,7 +267,7 @@ if __name__ == "__main__":
 
     node = Node(name="TestNode", consumers=[stream_consumer_odd, stream_consumer_even], producers=[odd_producer, even_producer, combined_producer])
     
-    @node.run
+    @node.entrypoint
     def node_func():
         """
         # Test 0: Single DirectoryStream with bundle_size=1
@@ -286,4 +298,9 @@ if __name__ == "__main__":
                     combined_producer.write(filename=f"processed_combined_{node.run_id}.txt", content=f"Processed {item1} and {item2} from combined streams\n")
 
     node.start()
-    node.join()
+
+    try:
+        node.join()
+    except KeyboardInterrupt:
+        print(f"Node {node.name} received KeyboardInterrupt. Stopping...")
+        node.stop_consumers()
