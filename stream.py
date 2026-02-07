@@ -61,7 +61,7 @@ class DirectoryStream:
                 sha256.update(chunk)
         return sha256.hexdigest()
 
-    def __iter__(self) -> Generator[str, Any, str]:
+    def __iter__(self) -> Generator[Any, str]:
         """
         Yields single items: (content, file_hash)
         """
