@@ -186,36 +186,6 @@ class Node(threading.Thread, ABC):
 
         super().__init__(name=name, daemon=True)
     
-    def execute(self):
-        """
-        # Test 0: Single DirectoryStream with bundle_size=1
-        runner1 = StreamRunner(name="Stream1", stream=DirectoryStream(input_path1)).start()
-        for batch1 in runner1:
-            item1 = batch1[0]
-            print(f"New file detected: {item1}")
-
-        # Test 1: Single DirectoryStream with bundle_size=2
-        runner1 = StreamRunner(name="Stream1", stream=DirectoryStream(input_path1, bundle_size=2)).start()
-        for batch1 in runner1:
-            for item1 in batch1:
-                print(f"New file detected: {item1}")
-        
-        # Test 2: Two DirectoryStreams with bundle_size=2
-        runner1 = StreamRunner(name="Stream1", stream=DirectoryStream(input_path1, bundle_size=2)).start()
-        runner2 = StreamRunner(name="Stream2", stream=DirectoryStream(input_path2, bundle_size=2)).start()
-        for batch1, batch2 in zip(runner1, runner2):
-            for item1, item2 in zip(batch1, batch2):
-                print(f"New file detected: {item1}, {item2}")
-
-        """
-
-        for bundle1, bundle2 in zip(self.stream_consumer_odd, self.stream_consumer_even):
-            with self.stage_run():
-                for item1, item2 in zip(bundle1, bundle2):
-                    self.odd_producer.write(filename=f"processed_odd_{self.run_id}.txt", content=f"Processed {item1} from odd stream\n")
-                    self.even_producer.write(filename=f"processed_even_{self.run_id}.txt", content=f"Processed {item2} from even stream\n")
-                    self.combined_producer.write(filename=f"processed_combined_{self.run_id}.txt", content=f"Processed {item1} and {item2} from combined streams\n")
-
     def start_consumers(self):
         for consumer in self.consumers:
             consumer.start()
@@ -254,11 +224,11 @@ class Node(threading.Thread, ABC):
             print(f"Error in node {self.name} during run {self.run_id}: {e}")
             # log the error in DB here, used to display run error on GUI
 
-    def run(self):
+    def run(self, func):
         try:
             self.start_consumers()
             # get the max run_id from the DB for this node and set self.run_id to max_run_id + 1 here, so that run IDs are consistent across restarts
-            self.execute()
+            func()
 
         except Exception as e:
             print(f"Error in node {self.name}: {e}")
@@ -284,5 +254,36 @@ if __name__ == "__main__":
     combined_producer = Producer(name="CombinedProducer", directory=output_combined_path)   # example producer to write combined results, not used in this test
 
     node = Node(name="TestNode", consumers=[stream_consumer_odd, stream_consumer_even], producers=[odd_producer, even_producer, combined_producer])
+    
+    @node.run
+    def node_func():
+        """
+        # Test 0: Single DirectoryStream with bundle_size=1
+        runner1 = StreamRunner(name="Stream1", stream=DirectoryStream(input_path1)).start()
+        for batch1 in runner1:
+            item1 = batch1[0]
+            print(f"New file detected: {item1}")
+
+        # Test 1: Single DirectoryStream with bundle_size=2
+        runner1 = StreamRunner(name="Stream1", stream=DirectoryStream(input_path1, bundle_size=2)).start()
+        for batch1 in runner1:
+            for item1 in batch1:
+                print(f"New file detected: {item1}")
+        
+        # Test 2: Two DirectoryStreams with bundle_size=2
+        runner1 = StreamRunner(name="Stream1", stream=DirectoryStream(input_path1, bundle_size=2)).start()
+        runner2 = StreamRunner(name="Stream2", stream=DirectoryStream(input_path2, bundle_size=2)).start()
+        for batch1, batch2 in zip(runner1, runner2):
+            for item1, item2 in zip(batch1, batch2):
+                print(f"New file detected: {item1}, {item2}")
+        """
+
+        for bundle1, bundle2 in zip(stream_consumer_odd, stream_consumer_even):
+            with node.stage_run():
+                for item1, item2 in zip(bundle1, bundle2):
+                    odd_producer.write(filename=f"processed_odd_{node.run_id}.txt", content=f"Processed {item1} from odd stream\n")
+                    even_producer.write(filename=f"processed_even_{node.run_id}.txt", content=f"Processed {item2} from even stream\n")
+                    combined_producer.write(filename=f"processed_combined_{node.run_id}.txt", content=f"Processed {item1} and {item2} from combined streams\n")
+
     node.start()
     node.join()
