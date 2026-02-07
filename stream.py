@@ -1,6 +1,7 @@
 from abc import ABC
 from functools import wraps
 import hashlib
+import inspect
 import os
 import time
 import threading
@@ -228,6 +229,24 @@ class Node(threading.Thread, ABC):
             # log the error in DB here, used to display run error on GUI
 
     def entrypoint(self, func: Callable[[], None]):
+        # 🔒 Enforce exactly ONE entrypoint
+        if self._entrypoint is not None:
+            prev_file = inspect.getsourcefile(self._entrypoint)
+            new_file = inspect.getsourcefile(func)
+
+            prev_line = inspect.getsourcelines(self._entrypoint)[1]
+            new_line = inspect.getsourcelines(func)[1]
+
+            prev_name = os.path.basename(prev_file) if prev_file else "<unknown>"
+            new_name = os.path.basename(new_file) if new_file else "<unknown>"
+
+            raise RuntimeError(
+                f"Node '{self.name}' already has entrypoint '{self._entrypoint.__name__}' "
+                f"(defined in {prev_name}:{prev_line}). "
+                f"Attempted second entrypoint '{func.__name__}' "
+                f"(defined in {new_name}:{new_line})."
+            )
+
         self._entrypoint = func
 
         @wraps(func)
