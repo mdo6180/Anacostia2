@@ -45,9 +45,9 @@ def filter_even(content: str) -> bool:
 
 stream_consumer_odd = Consumer(name="Stream1", stream=DirectoryStream(input_path1, logger=logger), bundle_size=2, filter_func=filter_odd, logger=logger)
 stream_consumer_even = Consumer(name="Stream2", stream=DirectoryStream(input_path2, logger=logger), bundle_size=2, filter_func=filter_even, logger=logger)
-odd_producer = Producer(name="Producer1", directory=output_path1, logger=logger)   # example producer, not used in this test
-even_producer = Producer(name="Producer2", directory=output_path2, logger=logger)   # example producer, not used in this test
-combined_producer = Producer(name="CombinedProducer", directory=output_combined_path, logger=logger)   # example producer to write combined results, not used in this test
+odd_producer = Producer(name="Producer1", directory=output_path1, logger=logger)   # example producer
+even_producer = Producer(name="Producer2", directory=output_path2, logger=logger)   # example producer
+combined_producer = Producer(name="CombinedProducer", directory=output_combined_path, logger=logger)   # example producer to write combined results
 
 node = Node(name="TestNode", consumers=[stream_consumer_odd, stream_consumer_even], producers=[odd_producer, even_producer, combined_producer], logger=logger)
 
