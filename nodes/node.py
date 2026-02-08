@@ -20,13 +20,6 @@ class Node(threading.Thread, ABC):
         self.run_id = 0
         self.logger = logger
         
-        self.stream_consumer_odd = consumers[0]
-        self.stream_consumer_even = consumers[1]
-
-        self.odd_producer = producers[0]
-        self.even_producer = producers[1]
-        self.combined_producer = producers[2]
-
         self._entrypoint = None
 
         super().__init__(name=name, daemon=True)
