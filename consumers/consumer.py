@@ -51,10 +51,10 @@ class Consumer:
                 # Apply filtering function if provided
                 if self.filter_func is not None:
                     if not self.filter_func(item):
-                        print(f"{self.name} ignore_artifact: {item}")       # ignore_artifact DB call in future
+                        self.logger.info(f"{self.name} ignore_artifact: {item}")       # ignore_artifact DB call in future
                         continue
                     else:
-                        print(f"{self.name} prime_artifact: {item}")        # prime_artifact DB call in future
+                        self.logger.info(f"{self.name} prime_artifact: {item}")        # prime_artifact DB call in future
 
                 # Item accepted (or no filter)
                 bundle_items.append(item)

@@ -8,8 +8,9 @@ from typing import Any, Generator
 
 class DirectoryStream:
     def __init__(self, directory: str, poll_interval: float = 0.1, hash_chunk_size: int = 1_048_576, logger: Logger = None):
+        self.logger = logger
         if os.path.exists(directory) is False:
-            print(f"Directory {directory} does not exist. Creating it.")
+            self.logger.info(f"Directory {directory} does not exist. Creating it.")
             os.makedirs(directory)
 
         self.directory = directory
@@ -17,7 +18,6 @@ class DirectoryStream:
         self.hash_chunk_size = hash_chunk_size
         self.seen = set()
         self.connection = None
-        self.logger = logger
 
     def set_db_connection(self, connection):
         self.connection = connection

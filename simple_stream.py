@@ -1,4 +1,4 @@
-from logging import Logger
+import logging
 import os
 import argparse
 import shutil
@@ -9,27 +9,31 @@ from consumers.consumer import Consumer
 from nodes.node import Node
 
 
-input_path1 = "./testing_artifacts/incoming1"
-input_path2 = "./testing_artifacts/incoming2"
-output_path1 = "./testing_artifacts/processed1"
-output_path2 = "./testing_artifacts/processed2"
-output_combined_path = "./testing_artifacts/processed_combined"
+tests_path = "./testing_artifacts"
+input_path1 = f"{tests_path}/incoming1"
+input_path2 = f"{tests_path}/incoming2"
+output_path1 = f"{tests_path}/processed1"
+output_path2 = f"{tests_path}/processed2"
+output_combined_path = f"{tests_path}/processed_combined"
 
 parser = argparse.ArgumentParser(description="Run the pipeline after restart test")
 parser.add_argument("-r", "--restart", action="store_true", help="Flag to indicate if this is a restart")
 args = parser.parse_args()
 
 if args.restart == False:
-    if os.path.exists(input_path1):
-        shutil.rmtree(input_path1)
-    if os.path.exists(input_path2):
-        shutil.rmtree(input_path2)
-    if os.path.exists(output_path1):
-        shutil.rmtree(output_path1)
-    if os.path.exists(output_path2):
-        shutil.rmtree(output_path2)
-    if os.path.exists(output_combined_path):
-        shutil.rmtree(output_combined_path)
+    if os.path.exists(tests_path) is True:
+        shutil.rmtree(tests_path)
+    os.makedirs(tests_path)
+
+log_path = f"{tests_path}/anacostia.log"
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S',
+    filename=log_path,
+    filemode='a'
+)
+logger = logging.getLogger(__name__)
 
 
 # Test 3: Two DirectoryStreams with bundle_size=2 and filtering functions
@@ -39,13 +43,13 @@ def filter_odd(content: str) -> bool:
 def filter_even(content: str) -> bool:
     return int(content[-1]) % 2 == 0    # Keep only artifacts with last character as even number
 
-stream_consumer_odd = Consumer(name="Stream1", stream=DirectoryStream(input_path1), bundle_size=2, filter_func=filter_odd)
-stream_consumer_even = Consumer(name="Stream2", stream=DirectoryStream(input_path2), bundle_size=2, filter_func=filter_even)
-odd_producer = Producer(name="Producer1", directory=output_path1)   # example producer, not used in this test
-even_producer = Producer(name="Producer2", directory=output_path2)   # example producer, not used in this test
-combined_producer = Producer(name="CombinedProducer", directory=output_combined_path)   # example producer to write combined results, not used in this test
+stream_consumer_odd = Consumer(name="Stream1", stream=DirectoryStream(input_path1, logger=logger), bundle_size=2, filter_func=filter_odd, logger=logger)
+stream_consumer_even = Consumer(name="Stream2", stream=DirectoryStream(input_path2, logger=logger), bundle_size=2, filter_func=filter_even, logger=logger)
+odd_producer = Producer(name="Producer1", directory=output_path1, logger=logger)   # example producer, not used in this test
+even_producer = Producer(name="Producer2", directory=output_path2, logger=logger)   # example producer, not used in this test
+combined_producer = Producer(name="CombinedProducer", directory=output_combined_path, logger=logger)   # example producer to write combined results, not used in this test
 
-node = Node(name="TestNode", consumers=[stream_consumer_odd, stream_consumer_even], producers=[odd_producer, even_producer, combined_producer])
+node = Node(name="TestNode", consumers=[stream_consumer_odd, stream_consumer_even], producers=[odd_producer, even_producer, combined_producer], logger=logger)
 
 @node.entrypoint
 def node_func():

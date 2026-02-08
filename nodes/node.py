@@ -33,6 +33,9 @@ class Node(threading.Thread, ABC):
     
     def initialize_db_connection(self, filename: str):
         self.conn_manager = ConnectionManager(db_path=filename, logger=self.logger)
+    
+    def setup(self):
+        pass
 
     def start_consumers(self):
         # in the future, add logic here to check if there are any primed artifacts that haven't been marked as being used in the DB 
@@ -49,29 +52,29 @@ class Node(threading.Thread, ABC):
         hashes = []
         for consumer in self.consumers:
             hashes.extend(consumer.bundle_hashes)
-        print(f"{self.name} using_artifact: {hashes}")     # using_artifact DB call in future
+        self.logger.info(f"{self.name} using_artifact: {hashes}")     # using_artifact DB call in future
     
     def commit_artifacts(self):
         # placeholder for logic to mark artifacts as committed in the DB
         hashes = []
         for consumer in self.consumers:
             hashes.extend(consumer.bundle_hashes)
-        print(f"{self.name} committed_artifact: {hashes}")     # commit_artifact DB call in future
+        self.logger.info(f"{self.name} committed_artifact: {hashes}")     # commit_artifact DB call in future
 
     @contextmanager
     def stage_run(self):
         try:
-            print(f"\nNode {self.name} starting run {self.run_id}")   # start_run DB call in future
+            self.logger.info(f"\nNode {self.name} starting run {self.run_id}")   # start_run DB call in future
             self.using_artifacts()    # mark artifacts as being used in the DB
             
             yield
             
             self.commit_artifacts()   # mark artifacts as committed in the DB
-            print(f"Node {self.name} finished run {self.run_id}\n")    # end_run DB call in future
+            self.logger.info(f"Node {self.name} finished run {self.run_id}\n")    # end_run DB call in future
             self.run_id += 1
 
         except Exception as e:
-            print(f"Error in node {self.name} during run {self.run_id}: {e}")
+            self.logger.error(f"Error in node {self.name} during run {self.run_id}: {e}")
             # log the error in DB here, used to display run error on GUI
 
     def entrypoint(self, func: Callable[[], None]):
@@ -112,5 +115,5 @@ class Node(threading.Thread, ABC):
             self._entrypoint()
 
         except Exception as e:
-            print(f"Error in node {self.name}: {e}")
+            self.logger.error(f"Error in node {self.name}: {e}")
             # log the error in DB here, used to display run error on GUI
