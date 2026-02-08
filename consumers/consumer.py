@@ -26,8 +26,6 @@ class Consumer:
         self.name = name
         self.stream = stream
         self.bundle_size = bundle_size
-        self.db_connection = None                           # placeholder for DB connection
-        self.stream.set_db_connection(self.db_connection)   # set to actual DB connection in the future
         self.filter_func = filter_func
 
         self.items_queue = queue.Queue(maxsize=maxsize)
@@ -35,12 +33,15 @@ class Consumer:
         self._thread = None
 
         self.logger = logger
+        self.conn_manager = None
 
-    def initialize_db_connection(self, filename: str):
-        self.conn_manager = ConnectionManager(db_path=filename, logger=self.logger)
+    def set_db_path(self, db_path: str):
+        self.db_path = db_path
 
     def start(self):
         def run():
+            self.conn_manager = ConnectionManager(db_path=self.db_path, logger=self.logger)
+
             bundle_items: List[Any] = []
             bundle_hashes: List[str] = []
 

@@ -7,9 +7,11 @@ from streams.directory import DirectoryStream
 from producers.producer import Producer
 from consumers.consumer import Consumer
 from nodes.node import Node
+from dag import Graph
 
 
 tests_path = "./testing_artifacts"
+db_folder_path = f"{tests_path}/.anacostia"
 input_path1 = f"{tests_path}/incoming1"
 input_path2 = f"{tests_path}/incoming2"
 output_path1 = f"{tests_path}/processed1"
@@ -60,16 +62,18 @@ def node_func():
                 even_producer.write(filename=f"processed_even_{node.run_id}.txt", content=f"Processed {item2} from even stream\n")
                 combined_producer.write(filename=f"processed_combined_{node.run_id}.txt", content=f"Processed {item1} and {item2} from combined streams\n")
 
+graph = Graph(name="TestGraph", nodes=[node], db_folder=db_folder_path, logger=logger)
+
 
 if __name__ == "__main__":
 
-    node.start()
+    graph.start()
 
     try:
-        node.join()
+        graph.join()
     except KeyboardInterrupt:
         print(f"Node {node.name} received KeyboardInterrupt. Stopping...")
-        node.stop_consumers()
+        graph.stop()
 
         """
         # Test 0: Single DirectoryStream with bundle_size=1

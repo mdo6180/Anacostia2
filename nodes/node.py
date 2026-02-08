@@ -24,9 +24,9 @@ class Node(threading.Thread, ABC):
 
         super().__init__(name=name, daemon=True)
     
-    def initialize_db_connection(self, filename: str):
-        self.conn_manager = ConnectionManager(db_path=filename, logger=self.logger)
-    
+    def set_db_path(self, db_path: str):
+        self.db_path = db_path
+
     def setup(self):
         pass
 
@@ -98,6 +98,8 @@ class Node(threading.Thread, ABC):
         return wrapper
 
     def run(self):
+        self.conn_manager = ConnectionManager(db_path=self.db_path, logger=self.logger)
+
         if self._entrypoint is None:
             raise RuntimeError(f"No entrypoint registered for node {self.name}. Use @node.entrypoint")
 
