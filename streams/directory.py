@@ -4,6 +4,8 @@ import os
 import time
 from typing import Any, Generator
 
+from utils.connection import ConnectionManager
+
 
 
 class DirectoryStream:
@@ -17,10 +19,10 @@ class DirectoryStream:
         self.poll_interval = poll_interval
         self.hash_chunk_size = hash_chunk_size
         self.seen = set()
-        self.connection = None
+        self.conn_manager = None
 
-    def set_db_connection(self, connection):
-        self.connection = connection
+    def initialize_db_connection(self, filename: str):
+        self.conn_manager = ConnectionManager(db_path=filename, logger=self.logger)
         # add logic to create necessary tables if needed
         # create a stream_artifacts table to track seen artifacts for all streams
         # add a way to get indexes from seen artifacts to help with resuming streams after restart
