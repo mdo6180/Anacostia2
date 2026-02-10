@@ -2,10 +2,9 @@ from logging import Logger
 import threading
 import queue
 from typing import Callable, Any, Optional, List
-
 from logging import Logger
-from utils.connection import ConnectionManager
 
+from connection import ConnectionManager
 from streams.directory import DirectoryStream
 
 
@@ -33,10 +32,29 @@ class Consumer:
         self._thread = None
 
         self.logger = logger
-        self.conn_manager = None
+        self.conn_manager: ConnectionManager = None
+        self.global_usage_table_name = "artifact_usage_events"
+
+        self.run_id = 0
 
     def set_db_path(self, db_path: str):
         self.db_path = db_path
+    
+    def set_run_id(self, run_id: int):
+        self.run_id = run_id
+
+    def ignore_artifact(self, artifact_hash: str) -> None:
+        # delete this query in future if we don't need to store file paths for ignored artifacts
+        filepath = self.stream.get_artifact_path(artifact_hash)
+
+        with self.conn_manager.write_cursor() as cursor:
+            cursor.execute(
+                f"""
+                INSERT OR IGNORE INTO {self.global_usage_table_name} (artifact_hash, node_name, run_id, state, details)
+                VALUES (?, ?, ?, ?, ?);
+                """,
+                (artifact_hash, self.name, self.run_id, "ignored", filepath)
+            )
 
     def start(self):
         def run():
@@ -53,9 +71,8 @@ class Consumer:
                 if self.filter_func is not None:
                     if not self.filter_func(item):
                         self.logger.info(f"{self.name} ignore_artifact: {item}")       # ignore_artifact DB call in future
+                        self.ignore_artifact(file_hash)    # mark artifact as ignored in the DB
                         continue
-                    else:
-                        self.logger.info(f"{self.name} prime_artifact: {item}")        # prime_artifact DB call in future
 
                 # Item accepted (or no filter)
                 bundle_items.append(item)
@@ -80,6 +97,8 @@ class Consumer:
     def __iter__(self):
         # get the last partial bundle by checking which items are primed but not yet in the use_artifact state
         # yield the last bundle when the StreamRunner is restarted here
+
+        # it might be better to get the last bundle by checking which items are marked as "using"
 
         while not self._stop.is_set():
             bundle_items, bundle_hashes = self.items_queue.get(block=True)

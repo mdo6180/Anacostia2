@@ -45,8 +45,16 @@ def filter_odd(content: str) -> bool:
 def filter_even(content: str) -> bool:
     return int(content[-1]) % 2 == 0    # Keep only artifacts with last character as even number
 
-stream_consumer_odd = Consumer(name="Stream1", stream=DirectoryStream(input_path1, logger=logger), bundle_size=2, filter_func=filter_odd, logger=logger)
-stream_consumer_even = Consumer(name="Stream2", stream=DirectoryStream(input_path2, logger=logger), bundle_size=2, filter_func=filter_even, logger=logger)
+stream_consumer_odd = Consumer(
+    name="Stream1", 
+    stream=DirectoryStream(name="odd_folder", directory=input_path1, logger=logger), 
+    bundle_size=2, filter_func=filter_odd, logger=logger
+)
+stream_consumer_even = Consumer(
+    name="Stream2", 
+    stream=DirectoryStream(name="even_folder", directory=input_path2, logger=logger), 
+    bundle_size=2, filter_func=filter_even, logger=logger
+)
 odd_producer = Producer(name="Producer1", directory=output_path1, logger=logger)   # example producer
 even_producer = Producer(name="Producer2", directory=output_path2, logger=logger)   # example producer
 combined_producer = Producer(name="CombinedProducer", directory=output_combined_path, logger=logger)   # example producer to write combined results
@@ -58,9 +66,11 @@ def node_func():
     for bundle1, bundle2 in zip(stream_consumer_odd, stream_consumer_even):
         with node.stage_run():
             for item1, item2 in zip(bundle1, bundle2):
-                odd_producer.write(filename=f"processed_odd_{node.run_id}.txt", content=f"Processed {item1} from odd stream\n")
-                even_producer.write(filename=f"processed_even_{node.run_id}.txt", content=f"Processed {item2} from even stream\n")
-                combined_producer.write(filename=f"processed_combined_{node.run_id}.txt", content=f"Processed {item1} and {item2} from combined streams\n")
+                odd_producer.write(filename=f"processed_odd_{node.run_id}.txt", content=f"Processed {item1} from odd stream\n", run_id=node.run_id)
+                even_producer.write(filename=f"processed_even_{node.run_id}.txt", content=f"Processed {item2} from even stream\n", run_id=node.run_id)
+                combined_producer.write(
+                    filename=f"processed_combined_{node.run_id}.txt", content=f"Processed {item1} and {item2} from combined streams\n", run_id=node.run_id
+                )
 
 graph = Graph(name="TestGraph", nodes=[node], db_folder=db_folder_path, logger=logger)
 

@@ -7,7 +7,7 @@ import threading
 from contextlib import contextmanager
 from typing import Callable, List
 
-from utils.connection import ConnectionManager
+from connection import ConnectionManager
 from consumers.consumer import Consumer
 from producers.producer import Producer
 
@@ -21,6 +21,8 @@ class Node(threading.Thread, ABC):
         self.logger = logger
         
         self._entrypoint = None
+        
+        self.global_usage_table_name = "artifact_usage_events"
 
         super().__init__(name=name, daemon=True)
     
@@ -40,19 +42,47 @@ class Node(threading.Thread, ABC):
         for consumer in self.consumers:
             consumer.stop()
     
+    def prime_artifact(self, filepath: str, artifact_hash: str) -> None:
+        with self.conn_manager.write_cursor() as cursor:
+            cursor.execute(
+                f"""
+                INSERT OR IGNORE INTO {self.global_usage_table_name} (artifact_hash, node_name, run_id, state, details)
+                VALUES (?, ?, ?, ?, ?);
+                """,
+                (artifact_hash, self.name, self.run_id, "primed", filepath)
+            )
+    
+    def start_using_artifact(self, filepath: str, artifact_hash: str) -> None:
+        with self.conn_manager.write_cursor() as cursor:
+            cursor.execute(
+                f"""
+                INSERT OR IGNORE INTO {self.global_usage_table_name} (artifact_hash, node_name, run_id, state, details)
+                VALUES (?, ?, ?, ?, ?);
+                """,
+                (artifact_hash, self.name, self.run_id, "using", filepath)
+            )
+    
+    def finished_using_artifact(self, filepath: str, artifact_hash: str) -> None:
+        with self.conn_manager.write_cursor() as cursor:
+            cursor.execute(
+                f"""
+                INSERT OR IGNORE INTO {self.global_usage_table_name} (artifact_hash, node_name, run_id, state, details)
+                VALUES (?, ?, ?, ?, ?);
+                """,
+                (artifact_hash, self.name, self.run_id, "used", filepath)
+            )
+    
     def using_artifacts(self):
-        # placeholder for logic to mark artifacts as being used in the DB
-        hashes = []
         for consumer in self.consumers:
-            hashes.extend(consumer.bundle_hashes)
-        self.logger.info(f"{self.name} using_artifact: {hashes}")     # using_artifact DB call in future
+            for artifact_hash in consumer.bundle_hashes:
+                artifact_path = consumer.stream.get_artifact_path(artifact_hash)
+                self.start_using_artifact(artifact_path, artifact_hash)
     
     def commit_artifacts(self):
-        # placeholder for logic to mark artifacts as committed in the DB
-        hashes = []
         for consumer in self.consumers:
-            hashes.extend(consumer.bundle_hashes)
-        self.logger.info(f"{self.name} committed_artifact: {hashes}")     # commit_artifact DB call in future
+            for artifact_hash in consumer.bundle_hashes:
+                artifact_path = consumer.stream.get_artifact_path(artifact_hash)
+                self.finished_using_artifact(artifact_path, artifact_hash)
 
     @contextmanager
     def stage_run(self):

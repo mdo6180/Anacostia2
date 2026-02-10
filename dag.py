@@ -3,7 +3,7 @@ from logging import Logger
 import os
 
 from nodes.node import Node
-from utils.connection import ConnectionManager
+from connection import ConnectionManager
 
 
 
@@ -24,15 +24,23 @@ class Graph:
         self.conn_manager = ConnectionManager(db_path, logger=self.logger)
         with self.conn_manager.write_cursor() as cursor:
             cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS nodes (
+                    node_name TEXT UNIQUE,
+                    node_type TEXT,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                );
+                """
+            )
+            cursor.execute(
                 f"""
                 CREATE TABLE IF NOT EXISTS artifact_usage_events (
                     artifact_hash TEXT,
-                    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-                    node_id TEXT,
                     node_name TEXT,
-                    run_id INTEGER,
+                    run_id INTEGER DEFAULT NULL,
                     state TEXT CHECK (state IN ( 'created', 'committed', 'detected', 'primed', 'using', 'used', 'ignored')),
-                    details TEXT DEFAULT NULL
+                    details TEXT DEFAULT NULL,
+                    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
                 );
                 """
             )
@@ -57,7 +65,8 @@ class Graph:
 
             for consumer in node.consumers:
                 consumer.set_db_path(db_path)
-                consumer.stream.initialize_db_connection(db_path)   # initialize stream's DB connection
+                consumer.stream.initialize_db_connection(db_path)
+                consumer.stream.setup()
                 
             for producer in node.producers:
                 producer.initialize_db_connection(db_path)
