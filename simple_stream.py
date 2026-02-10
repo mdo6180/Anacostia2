@@ -2,6 +2,7 @@ import logging
 import os
 import argparse
 import shutil
+import time
 
 from streams.directory import DirectoryStream
 from producers.producer import Producer
@@ -69,6 +70,8 @@ def node_func():
                 odd_producer.write(filename=f"processed_odd_{node.run_id}.txt", content=f"Processed {item1} from odd stream\n")
                 even_producer.write(filename=f"processed_even_{node.run_id}.txt", content=f"Processed {item2} from even stream\n")
                 combined_producer.write(filename=f"processed_combined_{node.run_id}.txt", content=f"Processed {item1} and {item2} from combined streams\n")
+            
+            time.sleep(2)   # simulate some processing time
 
 graph = Graph(name="TestGraph", nodes=[node], db_folder=db_folder_path, logger=logger)
 

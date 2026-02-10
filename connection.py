@@ -66,31 +66,15 @@ class ConnectionManager:
         finally:
             cur.close()
     
-    def get_node_id(self, node_name: str) -> int:
-        with self.read_cursor() as cursor:
-            cursor.execute(
-                """
-                SELECT node_id FROM nodes WHERE node_name = ?;
-                """,
-                (node_name,)
-            )
-            result = cursor.fetchone()
-            if result:
-                return result[0]
-            else:
-                raise ValueError(f"Node with name {node_name} not found in database.")
-    
     def start_run(self, node_name: str, run_id: int) -> int:
-        node_id = self.get_node_id(node_name)
-
         try:
             with self.write_cursor() as cursor:
                 cursor.execute(
                     """
-                    INSERT INTO run_events (node_name, node_id, run_id, timestamp, event_type)
-                    VALUES (?, ?, ?, CURRENT_TIMESTAMP, 'start');
+                    INSERT INTO run_events (node_name, run_id, timestamp, event_type)
+                    VALUES (?, ?, CURRENT_TIMESTAMP, 'start');
                     """,
-                    (node_name, node_id, run_id)
+                    (node_name, run_id)
                 )
                 return run_id
     
@@ -101,16 +85,14 @@ class ConnectionManager:
                 return -1
 
     def end_run(self, node_name: str, run_id: int) -> int:
-        node_id = self.get_node_id(node_name)
-
         with self.write_cursor() as cursor:
             try:
                 cursor.execute(
                     """
-                    INSERT INTO run_events (node_name, node_id, run_id, timestamp, event_type)
-                    VALUES (?, ?, ?, CURRENT_TIMESTAMP, 'end');
+                    INSERT INTO run_events (node_name, run_id, timestamp, event_type)
+                    VALUES (?, ?, CURRENT_TIMESTAMP, 'end');
                     """,
-                    (node_name, node_id, run_id)
+                    (node_name, run_id)
                 )
                 return run_id
             
@@ -131,13 +113,28 @@ class ConnectionManager:
             return cursor.fetchone() is not None
     
     def resume_run(self, node_name: str, run_id: int) -> None:
-        node_id = self.get_node_id(node_name)
-
         with self.write_cursor() as cursor:
             cursor.execute(
                 """
-                INSERT INTO run_events (node_name, node_id, run_id, timestamp, event_type)
-                VALUES (?, ?, ?, CURRENT_TIMESTAMP, 'restart');
+                INSERT INTO run_events (node_name, run_id, timestamp, event_type)
+                VALUES (?, ?, CURRENT_TIMESTAMP, 'restart');
                 """,
-                (node_name, node_id, run_id)
+                (node_name, run_id)
             )
+
+    def get_latest_run_id(self, node_name: str) -> int:
+        with self.read_cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT MAX(run_id) FROM run_events WHERE node_name = ?;
+                """,
+                (node_name,)
+            )
+            result = cursor.fetchone()
+            if result and result[0] is not None:
+                # if there is at least one run, return the latest run_id
+                return result[0]
+            else:
+                # no runs found, return -1
+                return -1
+    

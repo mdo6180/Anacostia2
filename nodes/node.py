@@ -21,6 +21,7 @@ class Node(threading.Thread, ABC):
         self.logger = logger
         
         self._entrypoint = None
+        self._restart = None
         
         self.global_usage_table_name = "artifact_usage_events"
 
@@ -80,12 +81,14 @@ class Node(threading.Thread, ABC):
     def stage_run(self):
         try:
             self.logger.info(f"\nNode {self.name} starting run {self.run_id}")   # start_run DB call in future
+            self.conn_manager.start_run(self.name, self.run_id)   # start_run DB call
             self.using_artifacts()    # mark artifacts as being used in the DB
             
             yield
             
             self.commit_artifacts()   # mark artifacts as committed in the DB
             self.logger.info(f"Node {self.name} finished run {self.run_id}\n")    # end_run DB call in future
+            self.conn_manager.end_run(self.name, self.run_id)   # end_run DB call
             self.run_id += 1
             
             for consumer in self.consumers:
@@ -97,6 +100,33 @@ class Node(threading.Thread, ABC):
         except Exception as e:
             self.logger.error(f"Error in node {self.name} during run {self.run_id}: {e}")
             # log the error in DB here, used to display run error on GUI
+
+    def restart(self, func: Callable[[], None]):
+        # 🔒 Enforce exactly ONE entrypoint
+        if self._restart is not None:
+            prev_file = inspect.getsourcefile(self._restart)
+            new_file = inspect.getsourcefile(func)
+
+            prev_line = inspect.getsourcelines(self._restart)[1]
+            new_line = inspect.getsourcelines(func)[1]
+
+            prev_name = os.path.basename(prev_file) if prev_file else "<unknown>"
+            new_name = os.path.basename(new_file) if new_file else "<unknown>"
+
+            raise RuntimeError(
+                f"Node '{self.name}' already has restart '{self._restart.__name__}' "
+                f"(defined in {prev_name}:{prev_line}). "
+                f"Attempted second restart '{func.__name__}' "
+                f"(defined in {new_name}:{new_line})."
+            )
+
+        self._restart = func
+
+        @wraps(func)
+        def wrapper():
+            return func()
+
+        return wrapper
 
     def entrypoint(self, func: Callable[[], None]):
         # 🔒 Enforce exactly ONE entrypoint

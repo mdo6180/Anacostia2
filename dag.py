@@ -57,6 +57,17 @@ class Graph:
                 );
                 """
             )
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS run_events (
+                    node_name TEXT,
+                    run_id INTEGER,
+                    timestamp DATETIME,
+                    event_type TEXT NOT NULL CHECK (event_type IN ('start', 'end', 'error', 'restart')),
+                    PRIMARY KEY (node_name, run_id, event_type)
+                );
+                """
+            )
         
         for node in self.nodes:
             # initialize DB connection for each node, its consumers, and producers

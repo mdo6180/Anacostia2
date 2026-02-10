@@ -2,7 +2,7 @@ import hashlib
 from logging import Logger
 import os
 import time
-from typing import Any, Generator
+from typing import Any, Generator, Tuple
 from datetime import datetime
 
 from connection import ConnectionManager
@@ -37,11 +37,13 @@ class DirectoryStream:
             cursor.execute(
                 f"""
                 CREATE TABLE IF NOT EXISTS {self.local_table_name} (
-                    artifact_path TEXT UNIQUE NOT NULL,
-                    artifact_hash TEXT PRIMARY KEY,
+                    artifact_index INTEGER PRIMARY KEY AUTOINCREMENT,
+                    artifact_path TEXT NOT NULL,
+                    artifact_hash TEXT NOT NULL,
                     timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
                     hash_algorithm TEXT,
-                    UNIQUE(artifact_path, artifact_hash)
+                    UNIQUE(artifact_path, artifact_hash),
+                    UNIQUE(artifact_hash)
                 );
                 """
             )
@@ -87,10 +89,30 @@ class DirectoryStream:
             while chunk := f.read(self.hash_chunk_size):
                 sha256.update(chunk)
         return sha256.hexdigest()
+    
+    def __getitem__(self, index) -> Tuple[Any, str]:
+        """
+        Get the content and hash of the artifact at the given index in chronological order. User implemented method.
+        """
+        # Note: this method is useful for getting a certain artifact (such as the latest model needed for resume after a restart)
+        # latest_model = stream[-1] to get the latest model artifact for example, or model = stream[model_index] to get a specific model artifact by index
+        def list_files_chronological():
+            with self.conn_manager.read_cursor() as cursor:
+                cursor.execute(f"SELECT artifact_path, artifact_hash FROM {self.local_table_name} ORDER BY timestamp ASC;")
+                return cursor.fetchall()
+
+        artifact_entries = list_files_chronological()
+        if index >= len(artifact_entries):
+            raise IndexError("Index out of range for available artifacts in stream.")
+        
+        artifact_path, artifact_hash = artifact_entries[index]
+        with open(artifact_path, "r") as file:
+            content = file.read()
+            return content, artifact_hash
 
     def __iter__(self) -> Generator[Any, Any, str]:
         """
-        Yields single items: (content, file_hash)
+        Yields single items: (content, file_hash). User implemented method.
         """
         while True:
             for filename in sorted(os.listdir(self.directory)):

@@ -46,6 +46,13 @@ class Producer:
 
     def write(self, filename: str, content: str):
         path = os.path.join(self.directory, filename)
+        """
+        if os.path.exists(path):
+            # might want to consider deleting existing file instead of overwriting in future if we want to preserve file paths for artifacts in the DB, 
+            # but for now we'll just overwrite and log a warning
+            self.logger.warning(f"File {path} already exists. It will be overwritten.")
+        """
+
         with open(path, "a") as file:
             file.write(content)
 
