@@ -42,16 +42,6 @@ class Node(threading.Thread, ABC):
         for consumer in self.consumers:
             consumer.stop()
     
-    def prime_artifact(self, filepath: str, artifact_hash: str) -> None:
-        with self.conn_manager.write_cursor() as cursor:
-            cursor.execute(
-                f"""
-                INSERT OR IGNORE INTO {self.global_usage_table_name} (artifact_hash, node_name, run_id, state, details)
-                VALUES (?, ?, ?, ?, ?);
-                """,
-                (artifact_hash, self.name, self.run_id, "primed", filepath)
-            )
-    
     def start_using_artifact(self, filepath: str, artifact_hash: str) -> None:
         with self.conn_manager.write_cursor() as cursor:
             cursor.execute(
@@ -77,12 +67,14 @@ class Node(threading.Thread, ABC):
             for artifact_hash in consumer.bundle_hashes:
                 artifact_path = consumer.stream.get_artifact_path(artifact_hash)
                 self.start_using_artifact(artifact_path, artifact_hash)
+                self.logger.info(f"Node {self.name} started using artifact {artifact_path} with hash {artifact_hash} in run {self.run_id}")
     
     def commit_artifacts(self):
         for consumer in self.consumers:
             for artifact_hash in consumer.bundle_hashes:
                 artifact_path = consumer.stream.get_artifact_path(artifact_hash)
                 self.finished_using_artifact(artifact_path, artifact_hash)
+                self.logger.info(f"Node {self.name} committed artifact {artifact_path} with hash {artifact_hash} in run {self.run_id}")
 
     @contextmanager
     def stage_run(self):
@@ -95,6 +87,9 @@ class Node(threading.Thread, ABC):
             self.commit_artifacts()   # mark artifacts as committed in the DB
             self.logger.info(f"Node {self.name} finished run {self.run_id}\n")    # end_run DB call in future
             self.run_id += 1
+            
+            for consumer in self.consumers:
+                consumer.set_run_id(self.run_id)
 
         except Exception as e:
             self.logger.error(f"Error in node {self.name} during run {self.run_id}: {e}")

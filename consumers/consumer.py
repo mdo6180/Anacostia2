@@ -43,6 +43,19 @@ class Consumer:
     def set_run_id(self, run_id: int):
         self.run_id = run_id
 
+    def prime_artifact(self, artifact_hash: str) -> None:
+        # delete this query in future if we don't need to store file paths for ignored artifacts
+        filepath = self.stream.get_artifact_path(artifact_hash)
+
+        with self.conn_manager.write_cursor() as cursor:
+            cursor.execute(
+                f"""
+                INSERT OR IGNORE INTO {self.global_usage_table_name} (artifact_hash, node_name, run_id, state, details)
+                VALUES (?, ?, ?, ?, ?);
+                """,
+                (artifact_hash, self.name, self.run_id, "primed", filepath)
+            )
+    
     def ignore_artifact(self, artifact_hash: str) -> None:
         # delete this query in future if we don't need to store file paths for ignored artifacts
         filepath = self.stream.get_artifact_path(artifact_hash)
@@ -73,6 +86,10 @@ class Consumer:
                         self.logger.info(f"{self.name} ignore_artifact: {item}")       # ignore_artifact DB call in future
                         self.ignore_artifact(file_hash)    # mark artifact as ignored in the DB
                         continue
+
+                    else:
+                        self.logger.info(f"{self.name} prime_artifact: {item}")        # prime_artifact DB call in future
+                        self.prime_artifact(file_hash)     # mark artifact as primed in the DB
 
                 # Item accepted (or no filter)
                 bundle_items.append(item)
