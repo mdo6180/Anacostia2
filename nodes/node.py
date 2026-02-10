@@ -90,6 +90,9 @@ class Node(threading.Thread, ABC):
             
             for consumer in self.consumers:
                 consumer.set_run_id(self.run_id)
+            
+            for producer in self.producers:
+                producer.set_run_id(self.run_id)
 
         except Exception as e:
             self.logger.error(f"Error in node {self.name} during run {self.run_id}: {e}")

@@ -66,11 +66,9 @@ def node_func():
     for bundle1, bundle2 in zip(stream_consumer_odd, stream_consumer_even):
         with node.stage_run():
             for item1, item2 in zip(bundle1, bundle2):
-                odd_producer.write(filename=f"processed_odd_{node.run_id}.txt", content=f"Processed {item1} from odd stream\n", run_id=node.run_id)
-                even_producer.write(filename=f"processed_even_{node.run_id}.txt", content=f"Processed {item2} from even stream\n", run_id=node.run_id)
-                combined_producer.write(
-                    filename=f"processed_combined_{node.run_id}.txt", content=f"Processed {item1} and {item2} from combined streams\n", run_id=node.run_id
-                )
+                odd_producer.write(filename=f"processed_odd_{node.run_id}.txt", content=f"Processed {item1} from odd stream\n")
+                even_producer.write(filename=f"processed_even_{node.run_id}.txt", content=f"Processed {item2} from even stream\n")
+                combined_producer.write(filename=f"processed_combined_{node.run_id}.txt", content=f"Processed {item1} and {item2} from combined streams\n")
 
 graph = Graph(name="TestGraph", nodes=[node], db_folder=db_folder_path, logger=logger)
 
