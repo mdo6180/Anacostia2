@@ -43,6 +43,15 @@ class Node(threading.Thread, ABC):
         for consumer in self.consumers:
             consumer.stop()
     
+    def set_run_id(self, run_id: int):
+        self.run_id = run_id
+
+        for consumer in self.consumers:
+            consumer.set_run_id(run_id)
+        
+        for producer in self.producers:
+            producer.set_run_id(run_id)
+
     def start_using_artifact(self, filepath: str, artifact_hash: str) -> None:
         with self.conn_manager.write_cursor() as cursor:
             cursor.execute(
@@ -80,29 +89,24 @@ class Node(threading.Thread, ABC):
     @contextmanager
     def stage_run(self):
         try:
-            self.logger.info(f"\nNode {self.name} starting run {self.run_id}")   # start_run DB call in future
+            self.logger.info(f"Node {self.name} starting run {self.run_id}")   # start_run DB call in future
             self.conn_manager.start_run(self.name, self.run_id)   # start_run DB call
+            self.set_run_id(self.run_id)
             self.using_artifacts()    # mark artifacts as being used in the DB
             
             yield
             
             self.commit_artifacts()   # mark artifacts as committed in the DB
-            self.logger.info(f"Node {self.name} finished run {self.run_id}\n")    # end_run DB call in future
+            self.logger.info(f"Node {self.name} finished run {self.run_id}")    # end_run DB call in future
             self.conn_manager.end_run(self.name, self.run_id)   # end_run DB call
-            self.run_id += 1
-            
-            for consumer in self.consumers:
-                consumer.set_run_id(self.run_id)
-            
-            for producer in self.producers:
-                producer.set_run_id(self.run_id)
+            self.set_run_id(self.run_id + 1)  # prepare for next run
 
         except Exception as e:
             self.logger.error(f"Error in node {self.name} during run {self.run_id}: {e}")
             # log the error in DB here, used to display run error on GUI
 
     def restart(self, func: Callable[[], None]):
-        # 🔒 Enforce exactly ONE entrypoint
+        # 🔒 Enforce exactly ONE restart
         if self._restart is not None:
             prev_file = inspect.getsourcefile(self._restart)
             new_file = inspect.getsourcefile(func)
@@ -158,6 +162,20 @@ class Node(threading.Thread, ABC):
     def run(self):
         self.conn_manager = ConnectionManager(db_path=self.db_path, logger=self.logger)
 
+        latest_run_id = self.conn_manager.get_latest_run_id(node_name=self.name)
+
+        if latest_run_id == -1:
+            self.set_run_id(0)
+
+        elif self.conn_manager.run_ended(self.name, latest_run_id) is True:
+            # upon restart, if the latest run has ended, start a new run
+            self.set_run_id(latest_run_id + 1)
+        else:
+            # upon restart, if the latest run has not ended, resume from that run
+            self.set_run_id(latest_run_id)
+            self.logger.info(f"{self.name} restarting run {self.run_id}")
+            self.conn_manager.resume_run(self.name, self.run_id)
+        
         if self._entrypoint is None:
             raise RuntimeError(f"No entrypoint registered for node {self.name}. Use @node.entrypoint")
 
