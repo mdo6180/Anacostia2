@@ -89,7 +89,7 @@ class Node(threading.Thread, ABC):
     @contextmanager
     def stage_run(self):
         try:
-            self.logger.info(f"Node {self.name} starting run {self.run_id}")   # start_run DB call in future
+            self.logger.info(f"\nNode {self.name} starting run {self.run_id}")   # start_run DB call in future
             self.conn_manager.start_run(self.name, self.run_id)   # start_run DB call
             self.set_run_id(self.run_id)
             self.using_artifacts()    # mark artifacts as being used in the DB
@@ -97,7 +97,7 @@ class Node(threading.Thread, ABC):
             yield
             
             self.commit_artifacts()   # mark artifacts as committed in the DB
-            self.logger.info(f"Node {self.name} finished run {self.run_id}")    # end_run DB call in future
+            self.logger.info(f"\nNode {self.name} finished run {self.run_id}")    # end_run DB call in future
             self.conn_manager.end_run(self.name, self.run_id)   # end_run DB call
             self.set_run_id(self.run_id + 1)  # prepare for next run
 
@@ -175,6 +175,9 @@ class Node(threading.Thread, ABC):
             self.set_run_id(latest_run_id)
             self.logger.info(f"{self.name} restarting run {self.run_id}")
             self.conn_manager.resume_run(self.name, self.run_id)
+
+            if self._restart is not None:
+                self._restart()
         
         if self._entrypoint is None:
             raise RuntimeError(f"No entrypoint registered for node {self.name}. Use @node.entrypoint")

@@ -62,6 +62,22 @@ combined_producer = Producer(name="CombinedProducer", directory=output_combined_
 
 node = Node(name="TestNode", consumers=[stream_consumer_odd, stream_consumer_even], producers=[odd_producer, even_producer, combined_producer], logger=logger)
 
+@node.restart
+def restart_func():
+    logger.info(f"\nNode {node.name} restarting run {node.run_id}")
+
+    # get_using_artifacts is a method to get the artifacts that were being used by the consumer at the time of the restart, 
+    # which can be used to resume processing those artifacts after the restart
+    bundle1 = stream_consumer_odd.get_using_artifacts()   
+    bundle2 = stream_consumer_even.get_using_artifacts()
+    with node.stage_run():
+        for item1, item2 in zip(bundle1, bundle2):
+            odd_producer.write(filename=f"processed_odd_{node.run_id}.txt", content=f"Processed {item1} from odd stream\n")
+            even_producer.write(filename=f"processed_even_{node.run_id}.txt", content=f"Processed {item2} from even stream\n")
+            combined_producer.write(filename=f"processed_combined_{node.run_id}.txt", content=f"Processed {item1} and {item2} from combined streams\n")
+        
+        time.sleep(2)   # simulate some processing time
+
 @node.entrypoint
 def node_func():
     for bundle1, bundle2 in zip(stream_consumer_odd, stream_consumer_even):

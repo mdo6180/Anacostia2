@@ -64,7 +64,7 @@ class DirectoryStream:
                 (artifact_hash, self.name, "detected", filepath)
             )
     
-    def artifact_registered(self, filepath: str) -> bool:
+    def is_artifact_registered(self, filepath: str) -> bool:
         with self.conn_manager.read_cursor() as cursor:
             cursor.execute(
                 f"SELECT 1 FROM {self.local_table_name} WHERE artifact_path = ? LIMIT 1;",
@@ -90,25 +90,36 @@ class DirectoryStream:
                 sha256.update(chunk)
         return sha256.hexdigest()
     
+    def load_artifact(self, artifact_hash: str) -> str:
+        """
+        Load and return the content of the artifact given its hash. User implemented method.
+        """
+        artifact_path = self.get_artifact_path(artifact_hash)
+        with open(artifact_path, "r") as file:
+            content = file.read()
+            return content
+    
+    def list_artifacts_chronological(self) -> list[str]:
+        with self.conn_manager.read_cursor() as cursor:
+            cursor.execute(f"SELECT artifact_hash FROM {self.local_table_name} ORDER BY timestamp ASC;")
+            hashes = cursor.fetchall()
+            if hashes is None:
+                return []
+            return [h[0] for h in hashes]
+
     def __getitem__(self, index) -> Tuple[Any, str]:
         """
         Get the content and hash of the artifact at the given index in chronological order. User implemented method.
         """
         # Note: this method is useful for getting a certain artifact (such as the latest model needed for resume after a restart)
         # latest_model = stream[-1] to get the latest model artifact for example, or model = stream[model_index] to get a specific model artifact by index
-        def list_files_chronological():
-            with self.conn_manager.read_cursor() as cursor:
-                cursor.execute(f"SELECT artifact_path, artifact_hash FROM {self.local_table_name} ORDER BY timestamp ASC;")
-                return cursor.fetchall()
-
-        artifact_entries = list_files_chronological()
+        artifact_entries = self.list_artifacts_chronological()
         if index >= len(artifact_entries):
             raise IndexError("Index out of range for available artifacts in stream.")
         
-        artifact_path, artifact_hash = artifact_entries[index]
-        with open(artifact_path, "r") as file:
-            content = file.read()
-            return content, artifact_hash
+        artifact_hash = artifact_entries[index]
+        content = self.load_artifact(artifact_hash)
+        return content, artifact_hash
 
     def __iter__(self) -> Generator[Any, Any, str]:
         """
@@ -121,7 +132,7 @@ class DirectoryStream:
                 if not os.path.isfile(path):
                     continue
 
-                if self.artifact_registered(path):  # check if we've already seen this artifact in the DB, if so skip it
+                if self.is_artifact_registered(path):  # check if we've already seen this artifact in the DB, if so skip it
                     continue
 
                 # if the file is new, hash it, register it in the DB, and yield its content and hash
@@ -130,9 +141,8 @@ class DirectoryStream:
                 self.register_artifact(path, file_hash)
 
                 # Read file content, user will implement their own logic to extract the content from the artifact
-                with open(path, "r") as file:
-                    content = file.read()
-                    yield content, file_hash
+                content = self.load_artifact(file_hash)
+                yield content, file_hash
 
             # IMPORTANT: put this sleep here so the polling doesn't block the main thread.
             time.sleep(self.poll_interval)

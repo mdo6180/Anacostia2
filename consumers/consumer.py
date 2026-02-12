@@ -1,7 +1,7 @@
 from logging import Logger
 import threading
 import queue
-from typing import Callable, Any, Optional, List
+from typing import Callable, Any, Optional, List, Tuple
 from logging import Logger
 
 from connection import ConnectionManager
@@ -110,6 +110,28 @@ class Consumer:
 
     def stop(self):
         self._stop.set()
+
+    def get_using_artifacts(self) -> List[Tuple[Any, str]]:
+        using_artifacts = []
+        with self.conn_manager.read_cursor() as cursor:
+            cursor.execute(
+                f"""
+                SELECT artifact_hash FROM {self.global_usage_table_name}
+                WHERE node_name = ? AND run_id = ? AND state = 'using';
+                """,
+                (self.name, self.run_id)
+            )
+            using_artifacts = cursor.fetchall()
+        
+        using_artifacts = [row[0] for row in using_artifacts]   # extract artifact hashes from query result
+        self.bundle_hashes = using_artifacts  # store the hashes of the current using artifacts for the using_artifacts and commit_artifacts calls in the Node
+
+        using_bundle = []
+        for artifact_hash in using_artifacts:
+            content = self.stream.load_artifact(artifact_hash)
+            using_bundle.append((content, artifact_hash))
+            
+        return using_bundle
 
     def __iter__(self):
         # get the last partial bundle by checking which items are primed but not yet in the use_artifact state
