@@ -83,6 +83,7 @@ class Graph:
                 producer.initialize_db_connection(db_path)
     
     def start(self):
+        self.log(f"Starting graph '{self.name}' with {len(self.nodes)} nodes.", level="INFO")
         for node in self.nodes:
             node.start()
     
@@ -91,6 +92,7 @@ class Graph:
             node.join()
     
     def stop(self):
+        self.log(f"Stopping graph '{self.name}' with {len(self.nodes)} nodes.", level="INFO")
         for node in self.nodes:
             node.stop_consumers()
 
