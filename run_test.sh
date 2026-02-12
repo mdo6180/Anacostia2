@@ -26,7 +26,22 @@ echo "Creating test data..."
 python3 stream_test.py &
 STREAM_TEST_PID=$!
 
-sleep 25
+# run 0, iteration 0, checkpoint 1: stop at 10 seconds
+# run 0, iteration 0, checkpoint 2: stop at 11 seconds
+# run 0, iteration 0, checkpoint 3: stop at 12 seconds
+
+# run 0, iteration 1, checkpoint 1: stop at 13 seconds
+# run 0, iteration 1, checkpoint 2: stop at 14 seconds
+# run 0, iteration 1, checkpoint 3: stop at 15 seconds
+
+# run 1, iteration 0, checkpoint 1: stop at 22 seconds
+# run 1, iteration 0, checkpoint 2: stop at 23 seconds
+# run 1, iteration 0, checkpoint 3: stop at 24 seconds
+
+# run 1, iteration 1, checkpoint 1: stop at 25 seconds
+# run 1, iteration 2, checkpoint 2: stop at 26 seconds
+# run 1, iteration 3, checkpoint 3: stop at 27 seconds
+sleep 14
 if [ -n "$PID" ] && kill -0 $PID 2>/dev/null; then
     echo "Stopping simple_stream.py (PID: $PID)..."
     kill -TERM $PID 2>/dev/null
@@ -35,8 +50,5 @@ fi
 
 echo "Shutting down simple_stream.py"
 
-echo "Restarting simple_stream.py"
-python3 simple_stream.py -r &
-PID=$!
-
-sleep 20
+echo "All processes terminated."
+exit 0
