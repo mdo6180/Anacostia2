@@ -29,16 +29,21 @@ class Producer:
     def initialize_db_connection(self, filename: str):
         self.conn_manager = ConnectionManager(db_path=filename, logger=self.logger)
 
-    def register_created_artifact(self, filepath: str, artifact_hash: str) -> None:
+    def register_created_artifacts(self) -> None:
+        entries = []
+        for path in self.paths_in_current_run:
+            artifact_hash = self.hash_artifact(path)
+            entries.append((artifact_hash, self.name, self.run_id, "created", path))
+            self.logger.info(f"Producer {self.name} registering created artifact {path} with hash {artifact_hash} in run {self.run_id}")
+
         with self.conn_manager.write_cursor() as cursor:
-            cursor.execute(
+            cursor.executemany(
                 f"""
                 INSERT OR IGNORE INTO {self.global_usage_table_name} (artifact_hash, node_name, run_id, state, details)
                 VALUES (?, ?, ?, ?, ?);
                 """,
-                (artifact_hash, self.name, self.run_id, "created", filepath)
+                entries
             )
-        self.logger.info(f"{self.name} registered_created_artifact: {filepath} in run {self.run_id}")        # created_artifact DB call in future
 
     def hash_artifact(self, filepath: str) -> str:
         sha256 = hashlib.sha256()

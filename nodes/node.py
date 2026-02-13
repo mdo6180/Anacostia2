@@ -91,10 +91,7 @@ class Node(threading.Thread, ABC):
                 self.logger.info(f"Node {self.name} committed artifact {artifact_path} with hash {artifact_hash} in run {self.run_id}")
         
         for producer in self.producers:
-            for artifact_path in producer.paths_in_current_run:
-                artifact_hash = producer.hash_artifact(artifact_path)
-                producer.register_created_artifact(artifact_path, artifact_hash)
-                self.logger.info(f"Node {self.name} committed artifact {artifact_path} with hash {artifact_hash} in run {self.run_id}")
+            producer.register_created_artifacts()   # register all created artifacts in the DB
             producer.paths_in_current_run.clear()   # clear the set for the next run
 
     @contextmanager
