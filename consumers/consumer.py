@@ -208,6 +208,8 @@ class Consumer:
                 if using_bundle:
                     self.logger.info(f"{self.name} yielding {len(using_bundle)} artifacts from last partial bundle after restart")
                     yield using_bundle
+                    self.bundle_items = []
+                    self.bundle_hashes = []
 
             self.restart = 0   # reset restart mode after restart is done
 
