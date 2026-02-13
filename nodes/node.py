@@ -178,6 +178,10 @@ class Node(threading.Thread, ABC):
         elif self.conn_manager.run_ended(self.name, latest_run_id) is True:
             # upon restart, if the latest run has ended, start a new run
             self.set_run_id(latest_run_id + 1)
+
+            if self._restart is not None:
+                self._restart()
+        
         else:
             # upon restart, if the latest run has not ended, resume from that run
             self.set_run_id(latest_run_id)
