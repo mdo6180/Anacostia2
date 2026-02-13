@@ -64,10 +64,10 @@ class Consumer:
         with self.conn_manager.write_cursor() as cursor:
             cursor.execute(
                 f"""
-                INSERT OR IGNORE INTO {self.global_usage_table_name} (artifact_hash, node_name, run_id, state, details)
-                VALUES (?, ?, ?, ?, ?);
+                INSERT OR IGNORE INTO {self.global_usage_table_name} (artifact_hash, node_name, state, details)
+                VALUES (?, ?, ?, ?);
                 """,
-                (artifact_hash, self.name, self.run_id, "primed", filepath)
+                (artifact_hash, self.name, "primed", filepath)
             )
     
     def ignore_artifact(self, artifact_hash: str) -> None:
@@ -77,10 +77,10 @@ class Consumer:
         with self.conn_manager.write_cursor() as cursor:
             cursor.execute(
                 f"""
-                INSERT OR IGNORE INTO {self.global_usage_table_name} (artifact_hash, node_name, run_id, state, details)
-                VALUES (?, ?, ?, ?, ?);
+                INSERT OR IGNORE INTO {self.global_usage_table_name} (artifact_hash, node_name, state, details)
+                VALUES (?, ?, ?, ?);
                 """,
-                (artifact_hash, self.name, self.run_id, "ignored", filepath)
+                (artifact_hash, self.name, "ignored", filepath)
             )
 
     def start(self):
