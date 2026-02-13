@@ -89,6 +89,13 @@ class Node(threading.Thread, ABC):
                 artifact_path = consumer.stream.get_artifact_path(artifact_hash)
                 self.finished_using_artifact(artifact_path, artifact_hash)
                 self.logger.info(f"Node {self.name} committed artifact {artifact_path} with hash {artifact_hash} in run {self.run_id}")
+        
+        for producer in self.producers:
+            for artifact_path in producer.paths_in_current_run:
+                artifact_hash = producer.hash_artifact(artifact_path)
+                producer.register_created_artifact(artifact_path, artifact_hash)
+                self.logger.info(f"Node {self.name} committed artifact {artifact_path} with hash {artifact_hash} in run {self.run_id}")
+            producer.paths_in_current_run.clear()   # clear the set for the next run
 
     @contextmanager
     def stage_run(self):

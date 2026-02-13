@@ -19,6 +19,9 @@ class Producer:
             os.makedirs(directory)
 
         self.global_usage_table_name = "artifact_usage_events"
+
+        # keep track of artifact paths created in the current run, so that we can log warnings if the same path is being overwritten in the same run
+        self.paths_in_current_run = set()   
     
     def set_run_id(self, run_id: int):
         self.run_id = run_id
@@ -26,7 +29,7 @@ class Producer:
     def initialize_db_connection(self, filename: str):
         self.conn_manager = ConnectionManager(db_path=filename, logger=self.logger)
 
-    def created_artifact(self, filepath: str, artifact_hash: str) -> None:
+    def register_created_artifact(self, filepath: str, artifact_hash: str) -> None:
         with self.conn_manager.write_cursor() as cursor:
             cursor.execute(
                 f"""
@@ -35,26 +38,23 @@ class Producer:
                 """,
                 (artifact_hash, self.name, self.run_id, "created", filepath)
             )
-        self.logger.info(f"{self.name} created_artifact: {filepath} in run {self.run_id}")        # created_artifact DB call in future
+        self.logger.info(f"{self.name} registered_created_artifact: {filepath} in run {self.run_id}")        # created_artifact DB call in future
 
-    def hash_file(self, filepath: str) -> str:
+    def hash_artifact(self, filepath: str) -> str:
         sha256 = hashlib.sha256()
         with open(filepath, 'rb') as f:
             while chunk := f.read(self.hash_chunk_size):
                 sha256.update(chunk)
         return sha256.hexdigest()
 
-    def write(self, filename: str, content: str):
+    def create_artifact(self, filename: str, content: str):
+        # check if the path already exists in the current run, if not, add it to the set. 
+        # at the end of the run, hash and create DB entry for all paths in the set, then clear the set for the next run. 
+        # This way we can avoid hashing the same file multiple times in the same run and also preserve file paths for artifacts in the DB.
+
         path = os.path.join(self.directory, filename)
-        """
-        if os.path.exists(path):
-            # might want to consider deleting existing file instead of overwriting in future if we want to preserve file paths for artifacts in the DB, 
-            # but for now we'll just overwrite and log a warning
-            self.logger.warning(f"File {path} already exists. It will be overwritten.")
-        """
+        if path not in self.paths_in_current_run:
+            self.paths_in_current_run.add(path)
 
         with open(path, "a") as file:
             file.write(content)
-
-        artifact_hash = self.hash_file(path)
-        self.created_artifact(path, artifact_hash)

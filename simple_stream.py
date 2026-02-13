@@ -72,10 +72,10 @@ def node_func():
     for bundle1, bundle2 in zip(stream_consumer_odd, stream_consumer_even):
         with node.stage_run():
             for i, (item1, item2) in enumerate(zip(bundle1, bundle2)):
-                odd_producer.write(filename=f"processed_odd_{node.run_id}.txt", content=f"Processed {item1} from odd stream\n")
+                odd_producer.create_artifact(filename=f"processed_odd_{node.run_id}.txt", content=f"Processed {item1} from odd stream\n")
                 time.sleep(1)   # checkpoint 1
                 
-                even_producer.write(filename=f"processed_even_{node.run_id}.txt", content=f"Processed {item2} from even stream\n")
+                even_producer.create_artifact(filename=f"processed_even_{node.run_id}.txt", content=f"Processed {item2} from even stream\n")
                 time.sleep(1)   # checkpoint 2
                 
                 # simulate failure at run 1, iter 0 (first iteration of the second run)
@@ -83,7 +83,7 @@ def node_func():
                 if args.restart == False:
                     stop_if(current_run=node.run_id, current_iter=i, target_run=1, target_iter=0, mode="sigint", logger=logger) 
                 
-                combined_producer.write(filename=f"processed_combined_{node.run_id}.txt", content=f"Processed {item1} and {item2} from combined streams\n")
+                combined_producer.create_artifact(filename=f"processed_combined_{node.run_id}.txt", content=f"Processed {item1} and {item2} from combined streams\n")
                 time.sleep(1)   # checkpoint 3
 
 graph = Graph(name="TestGraph", nodes=[node], db_folder=db_folder_path, logger=logger)
