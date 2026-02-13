@@ -120,16 +120,16 @@ class Consumer:
                 # Apply filtering function if provided
                 if self.filter_func is not None:
                     if not self.filter_func(item):
-                        self.logger.info(f"{self.name} ignore_artifact: {item}")       # ignore_artifact DB call in future
+                        # self.logger.info(f"{self.name} ignore_artifact: {item}")       # ignore_artifact DB call in future
                         self.ignore_artifact(file_hash)    # mark artifact as ignored in the DB
                         continue
 
                     else:
-                        self.logger.info(f"{self.name} prime_artifact: {item}")        # prime_artifact DB call in future
+                        # self.logger.info(f"{self.name} prime_artifact: {item}")        # prime_artifact DB call in future
                         self.prime_artifact(file_hash)     # mark artifact as primed in the DB
 
                 self.items_queue.put((item, file_hash), block=True)        # backpressure here, blocks if queue is full
-                self.logger.info(f"item: {item}, file_hash: {file_hash} put in queue by {self.name}")
+                # self.logger.info(f"item: '{item}', file_hash: '{file_hash}' put in queue by {self.name}")
 
             # Optional: decide whether to flush partial batch on stop.
             # Current behavior: do NOT flush partial batch.
@@ -180,7 +180,7 @@ class Consumer:
                 (self.name, self.node_name,)
             )
             unused_artifacts = cursor.fetchall()
-            self.logger.info(f"querying primed {self.node_name} run {self.run_id}: found {len(unused_artifacts)} artifacts in 'primed' state")
+            # self.logger.info(f"querying primed {self.node_name} run {self.run_id}: found {len(unused_artifacts)} artifacts in 'primed' state")
         
         artifact_hashes = [row[0] for row in unused_artifacts]   # extract artifact hashes from query result
         self.bundle_hashes = artifact_hashes  # store the hashes of the current unused artifacts for the using_artifacts and commit_artifacts calls in the Node
@@ -190,11 +190,6 @@ class Consumer:
             self.bundle_items.append(content)
             
     def __iter__(self):
-        # get the last partial bundle by checking which items are primed but not yet in the use_artifact state
-        # yield the last bundle when the StreamRunner is restarted here
-
-        # it might be better to get the last bundle by checking which items are marked as "using"
-
         while not self._stop.is_set():
             if self.restart == 1:
                 if self.conn_manager is None:
@@ -214,7 +209,7 @@ class Consumer:
                     self.logger.info(f"{self.name} yielding {len(using_bundle)} artifacts from last partial bundle after restart")
                     yield using_bundle
 
-            self.restart = 0   # reset restart mode to avoid yielding the same primed but unused artifacts again in the next iterations
+            self.restart = 0   # reset restart mode after restart is done
 
             if len(self.bundle_hashes) < self.bundle_size:
                 item, file_hash = self.items_queue.get(block=True)

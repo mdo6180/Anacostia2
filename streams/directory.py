@@ -63,7 +63,7 @@ class DirectoryStream:
                 """,
                 (artifact_hash, self.name, "detected", filepath)
             )
-            self.logger.info(f"Registered artifact {filepath} with hash {artifact_hash} in stream {self.name} at {timestamp}")
+            # self.logger.info(f"Registered artifact {filepath} with hash {artifact_hash} in stream {self.name} at {timestamp}")
     
     def is_artifact_registered(self, filepath: str) -> bool:
         with self.conn_manager.read_cursor() as cursor:
