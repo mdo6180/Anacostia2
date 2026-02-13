@@ -180,7 +180,8 @@ class Node(threading.Thread, ABC):
             self.set_run_id(latest_run_id + 1)
 
             for consumer in self.consumers:
-                consumer.set_restart_mode()
+                # restart mode 1 means the latest run ended 
+                consumer.set_restart_mode(mode=1)   
 
             if self._restart is not None:
                 self._restart()
@@ -192,7 +193,8 @@ class Node(threading.Thread, ABC):
             self.conn_manager.resume_run(self.name, self.run_id)
 
             for consumer in self.consumers:
-                consumer.set_restart_mode()
+                # restart mode 2 means the latest run did not end
+                consumer.set_restart_mode(mode=2)
 
             if self._restart is not None:
                 self._restart()

@@ -40,7 +40,9 @@ class Consumer:
         self.global_usage_table_name = "artifact_usage_events"
 
         self.run_id = 0
-        self.restart = False
+
+        # restart mode, 0 means no restart, 1 means restart from the beginning of the last run, 2 means restart from new run and process primed but unused artifacts
+        self.restart = 0
         self.node_name = None
     
     def set_node_name(self, node_name: str):
@@ -48,8 +50,17 @@ class Consumer:
             raise ValueError(f"This Consumer object has already been assigned to node {self.node_name}. Consumer objects cannot be shared between nodes.")
         self.node_name = node_name
 
-    def set_restart_mode(self):
-        self.restart = True
+    def set_restart_mode(self, mode: int):
+        """
+        mode: int = 1 or 2.
+        1 means restart from the beginning of the last run, i.e., re-process all artifacts in the last run marked as "using" in the DB. 
+        This is useful when you want to re-process the same artifacts again after fixing an issue in the processing logic.
+        2 means restart from new run, e.g., run 1 has finished, 
+        restart by starting run 2 and process artifacts that have been primed but have not been marked as using in the DB.
+        If there are not enough primed artifacts to form a full bundle, wait for new artifacts to be primed until a full bundle can be formed, 
+        then yield that bundle and continue processing new artifacts from the stream.
+        """
+        self.restart = mode
 
     def set_db_path(self, db_path: str):
         self.db_path = db_path
@@ -124,6 +135,7 @@ class Consumer:
                 # Emit only when batch is full
                 if len(bundle_items) >= self.bundle_size:
                     self.items_queue.put((bundle_items, bundle_hashes), block=True)        # backpressure here, blocks if queue is full
+                    self.logger.info(f"bundle_items: {bundle_items}, bundle_hashes: {bundle_hashes} put in queue by {self.name}")
                     bundle_items = []
                     bundle_hashes = []
 
@@ -195,7 +207,22 @@ class Consumer:
         # it might be better to get the last bundle by checking which items are marked as "using"
 
         while not self._stop.is_set():
-            if self.restart:
+            if self.restart == 1:
+                if self.conn_manager is None:
+                    self.conn_manager = ConnectionManager(db_path=self.db_path, logger=self.logger)
+                
+                # retrieve artifacts that were primed but not marked as using, and yield those as well 
+                # this can happen if the pipeline was stopped after priming artifacts but before starting to use them 
+                # e.g., if the stop_if was triggered between runs before the using_artifacts call in the Node
+                unused_bundle = self.get_unused_artifacts()
+                self.logger.info(f"unused_bundle {unused_bundle} for {self.name} run {self.run_id}")
+                if unused_bundle:
+                    self.logger.info(f"{self.name} yielding {len(unused_bundle)} artifacts from last partial bundle that were primed but not marked as using after restart")
+                    yield unused_bundle
+                else:
+                    self.logger.info(f"{self.name} no artifacts that were primed but not marked as using after restart")
+
+            elif self.restart == 2:
                 if self.conn_manager is None:
                     self.conn_manager = ConnectionManager(db_path=self.db_path, logger=self.logger)
                 
@@ -203,19 +230,8 @@ class Consumer:
                 if using_bundle:
                     self.logger.info(f"{self.name} yielding {len(using_bundle)} artifacts from last partial bundle after restart")
                     yield using_bundle
-                else:
-                    # retrieve artifacts that were primed but not marked as using, and yield those as well 
-                    # this can happen if the pipeline was stopped after priming artifacts but before starting to use them 
-                    # e.g., if the stop_if was triggered between runs before the using_artifacts call in the Node
-                    unused_bundle = self.get_unused_artifacts()
-                    self.logger.info(f"unused_bundle {unused_bundle} for {self.name} run {self.run_id}")
-                    if unused_bundle:
-                        self.logger.info(f"{self.name} yielding {len(unused_bundle)} artifacts from last partial bundle that were primed but not marked as using after restart")
-                        yield unused_bundle
-                    else:
-                        self.logger.info(f"{self.name} no artifacts that were primed but not marked as using after restart")
 
-                self.restart = False
+            self.restart = 0   # reset restart mode to avoid yielding the same primed but unused artifacts again in the next iterations
 
             bundle_items, bundle_hashes = self.items_queue.get(block=True)
             self.bundle_hashes = bundle_hashes  # store the hashes of the current bundle for the using_artifacts and commit_artifacts calls in the Node
