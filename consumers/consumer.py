@@ -203,13 +203,7 @@ class Consumer:
                 # retrieve artifacts that were primed but not marked as using, and yield those as well 
                 # this can happen if the pipeline was stopped after priming artifacts but before starting to use them 
                 # e.g., if the stop_if was triggered between runs before the using_artifacts call in the Node
-                unused_bundle = self.get_unused_artifacts()
-                self.logger.info(f"unused_bundle {unused_bundle} for {self.name} run {self.run_id}")
-                if unused_bundle:
-                    self.logger.info(f"{self.name} yielding {len(unused_bundle)} artifacts from last partial bundle that were primed but not marked as using after restart")
-                    yield unused_bundle
-                else:
-                    self.logger.info(f"{self.name} no artifacts that were primed but not marked as using after restart")
+                self.get_unused_artifacts()
 
             elif self.restart == 2:
                 if self.conn_manager is None:
