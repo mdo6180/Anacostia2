@@ -179,6 +179,9 @@ class Node(threading.Thread, ABC):
             # upon restart, if the latest run has ended, start a new run
             self.set_run_id(latest_run_id + 1)
 
+            for consumer in self.consumers:
+                consumer.set_restart_mode()
+
             if self._restart is not None:
                 self._restart()
         

@@ -82,6 +82,18 @@ class Consumer:
                 """,
                 (artifact_hash, self.name, "ignored", filepath)
             )
+    
+    def is_artifact_used(self, artifact_hash: str) -> bool:
+        with self.conn_manager.read_cursor() as cursor:
+            cursor.execute(
+                f"""
+                SELECT COUNT(*) FROM {self.global_usage_table_name}
+                WHERE node_name = ? AND artifact_hash = ? AND state = 'using';
+                """,
+                (self.node_name, artifact_hash)
+            )
+            result = cursor.fetchone()
+            return result[0] > 0   # returns True if count > 0, else False
 
     def start(self):
         def run():
@@ -149,6 +161,32 @@ class Consumer:
             using_bundle.append(content)
             
         return using_bundle
+    
+    def get_unused_artifacts(self) -> List[Tuple[Any, str]]:
+        unused_artifacts = []
+        with self.conn_manager.read_cursor() as cursor:
+            cursor.execute(
+                f"""
+                SELECT artifact_hash FROM {self.global_usage_table_name}
+                WHERE node_name = ? AND state = 'primed' AND artifact_hash NOT IN (
+                    SELECT artifact_hash FROM {self.global_usage_table_name}
+                    WHERE node_name = ? AND state = 'using'
+                );
+                """,
+                (self.name, self.node_name,)
+            )
+            unused_artifacts = cursor.fetchall()
+            self.logger.info(f"querying primed {self.node_name} run {self.run_id}: found {len(unused_artifacts)} artifacts in 'primed' state")
+        
+        unused_artifacts = [row[0] for row in unused_artifacts]   # extract artifact hashes from query result
+        self.bundle_hashes = unused_artifacts  # store the hashes of the current unused artifacts for the using_artifacts and commit_artifacts calls in the Node
+
+        unused_bundle = []
+        for artifact_hash in unused_artifacts:
+            content = self.stream.load_artifact(artifact_hash)
+            unused_bundle.append(content)
+            
+        return unused_bundle
 
     def __iter__(self):
         # get the last partial bundle by checking which items are primed but not yet in the use_artifact state
@@ -166,7 +204,17 @@ class Consumer:
                     self.logger.info(f"{self.name} yielding {len(using_bundle)} artifacts from last partial bundle after restart")
                     yield using_bundle
                 else:
-                    self.logger.info(f"{self.name} no artifacts in last partial bundle after restart")
+                    # retrieve artifacts that were primed but not marked as using, and yield those as well 
+                    # this can happen if the pipeline was stopped after priming artifacts but before starting to use them 
+                    # e.g., if the stop_if was triggered between runs before the using_artifacts call in the Node
+                    unused_bundle = self.get_unused_artifacts()
+                    self.logger.info(f"unused_bundle {unused_bundle} for {self.name} run {self.run_id}")
+                    if unused_bundle:
+                        self.logger.info(f"{self.name} yielding {len(unused_bundle)} artifacts from last partial bundle that were primed but not marked as using after restart")
+                        yield unused_bundle
+                    else:
+                        self.logger.info(f"{self.name} no artifacts that were primed but not marked as using after restart")
+
                 self.restart = False
 
             bundle_items, bundle_hashes = self.items_queue.get(block=True)
