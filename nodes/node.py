@@ -6,6 +6,7 @@ import os
 import threading
 from contextlib import contextmanager
 from typing import Callable, List
+import traceback
 
 from connection import ConnectionManager
 from consumers.consumer import Consumer
@@ -34,6 +35,9 @@ class Node(threading.Thread, ABC):
         pass
 
     def start_consumers(self):
+        for consumer in self.consumers:
+            consumer.set_node_name(self.name)
+
         # in the future, add logic here to check if there are any primed artifacts that haven't been marked as being used in the DB 
         # and yield those first before starting to consume new artifacts from the stream
         for consumer in self.consumers:
@@ -176,6 +180,9 @@ class Node(threading.Thread, ABC):
             self.logger.info(f"{self.name} restarting run {self.run_id}")
             self.conn_manager.resume_run(self.name, self.run_id)
 
+            for consumer in self.consumers:
+                consumer.set_restart_mode()
+
             if self._restart is not None:
                 self._restart()
         
@@ -189,5 +196,5 @@ class Node(threading.Thread, ABC):
             self._entrypoint()
 
         except Exception as e:
-            self.logger.error(f"Error in node {self.name}: {e}")
+            self.logger.error(f"Error in node {self.name}: {e}\n{traceback.format_exc()}")
             # log the error in DB here, used to display run error on GUI

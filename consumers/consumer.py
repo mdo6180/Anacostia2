@@ -19,6 +19,10 @@ class Consumer:
         filter_func: Optional[Callable[[Any], bool]] = None,
         logger: Logger = None
     ):
+        """
+        Note: you can only use one Consumer object for one node. Consumer objects cannot be shared between nodes. 
+        """
+
         if bundle_size <= 0:
             raise ValueError("bundle_size must be >= 1")
 
@@ -36,6 +40,16 @@ class Consumer:
         self.global_usage_table_name = "artifact_usage_events"
 
         self.run_id = 0
+        self.restart = False
+        self.node_name = None
+    
+    def set_node_name(self, node_name: str):
+        if self.node_name is not None:
+            raise ValueError(f"This Consumer object has already been assigned to node {self.node_name}. Consumer objects cannot be shared between nodes.")
+        self.node_name = node_name
+
+    def set_restart_mode(self):
+        self.restart = True
 
     def set_db_path(self, db_path: str):
         self.db_path = db_path
@@ -104,7 +118,7 @@ class Consumer:
             # Optional: decide whether to flush partial batch on stop.
             # Current behavior: do NOT flush partial batch.
 
-        self._thread = threading.Thread(target=run, daemon=True)
+        self._thread = threading.Thread(name=self.name, target=run, daemon=True)
         self._thread.start()
         return self
 
@@ -117,11 +131,14 @@ class Consumer:
             cursor.execute(
                 f"""
                 SELECT artifact_hash FROM {self.global_usage_table_name}
-                WHERE node_name = ? AND run_id = ? AND state = 'using';
+                WHERE node_name = ? AND run_id = ? AND state = 'using' AND artifact_hash IN (
+                    SELECT artifact_hash FROM {self.stream.local_table_name}
+                );
                 """,
-                (self.name, self.run_id)
+                (self.node_name, self.run_id)
             )
             using_artifacts = cursor.fetchall()
+            self.logger.info(f"querying using {self.node_name} run {self.run_id}: found {len(using_artifacts)} artifacts in 'using' state")
         
         using_artifacts = [row[0] for row in using_artifacts]   # extract artifact hashes from query result
         self.bundle_hashes = using_artifacts  # store the hashes of the current using artifacts for the using_artifacts and commit_artifacts calls in the Node
@@ -129,7 +146,7 @@ class Consumer:
         using_bundle = []
         for artifact_hash in using_artifacts:
             content = self.stream.load_artifact(artifact_hash)
-            using_bundle.append((content, artifact_hash))
+            using_bundle.append(content)
             
         return using_bundle
 
@@ -140,6 +157,18 @@ class Consumer:
         # it might be better to get the last bundle by checking which items are marked as "using"
 
         while not self._stop.is_set():
+            if self.restart:
+                if self.conn_manager is None:
+                    self.conn_manager = ConnectionManager(db_path=self.db_path, logger=self.logger)
+                
+                using_bundle = self.get_using_artifacts()
+                if using_bundle:
+                    self.logger.info(f"{self.name} yielding {len(using_bundle)} artifacts from last partial bundle after restart")
+                    yield using_bundle
+                else:
+                    self.logger.info(f"{self.name} no artifacts in last partial bundle after restart")
+                self.restart = False
+
             bundle_items, bundle_hashes = self.items_queue.get(block=True)
             self.bundle_hashes = bundle_hashes  # store the hashes of the current bundle for the using_artifacts and commit_artifacts calls in the Node
             yield bundle_items

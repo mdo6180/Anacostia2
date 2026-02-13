@@ -63,6 +63,10 @@ combined_producer = Producer(name="combined_producer", directory=output_combined
 
 node = Node(name="TestNode", consumers=[stream_consumer_odd, stream_consumer_even], producers=[odd_producer, even_producer, combined_producer], logger=logger)
 
+@node.restart
+def restart_logic():
+    logger.info(f"Node {node.name} executing custom restart logic for run {node.run_id}")
+
 @node.entrypoint
 def node_func():
     for bundle1, bundle2 in zip(stream_consumer_odd, stream_consumer_even):
@@ -75,7 +79,9 @@ def node_func():
                 time.sleep(1)   # checkpoint 2
                 
                 # simulate failure at run 1, iter 0 (first iteration of the second run)
-                stop_if(current_run=node.run_id, current_iter=i, target_run=1, target_iter=0, mode="sigint", logger=logger) 
+                # disable this stop_if after restart to allow the pipeline to continue and finish processing
+                if args.restart == False:
+                    stop_if(current_run=node.run_id, current_iter=i, target_run=1, target_iter=0, mode="sigint", logger=logger) 
                 
                 combined_producer.write(filename=f"processed_combined_{node.run_id}.txt", content=f"Processed {item1} and {item2} from combined streams\n")
                 time.sleep(1)   # checkpoint 3
