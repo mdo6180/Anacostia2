@@ -9,7 +9,7 @@ from typing import Callable, List
 import traceback
 
 from connection import ConnectionManager
-from consumers.consumer import Consumer
+from consumer import Consumer
 from producers.producer import Producer
 
 sql = str   # Create an alias of the str for syntax highlighting using the Python Inline Source Syntax Highlighting extension in VSCode.
