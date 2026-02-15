@@ -8,7 +8,7 @@ from contextlib import contextmanager
 from typing import Callable, List
 import traceback
 
-from connection import ConnectionManager
+from utils.connection import ConnectionManager
 from consumer import Consumer
 from producers.producer import Producer
 

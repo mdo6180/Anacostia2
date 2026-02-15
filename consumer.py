@@ -4,7 +4,7 @@ import queue
 from typing import Callable, Any, Optional, List, Tuple
 from logging import Logger
 
-from connection import ConnectionManager
+from utils.connection import ConnectionManager
 from streams.directory import DirectoryStream
 
 

@@ -5,7 +5,7 @@ import time
 from typing import Any, Generator, Tuple
 from datetime import datetime
 
-from connection import ConnectionManager
+from utils.connection import ConnectionManager
 
 sql = str   # Create an alias of the str for syntax highlighting using the Python Inline Source Syntax Highlighting extension in VSCode.
 
