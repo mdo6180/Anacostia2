@@ -8,7 +8,7 @@ from utils.connection import ConnectionManager
 from streams.directory import DirectoryStream
 
 
-sql = str   # Create an alias of the str for syntax highlighting using the Python Inline Source Syntax Highlighting extension in VSCode.
+sql = str   # alias of the str type for syntax highlighting using the Python Inline Source Syntax Highlighting extension by Sam Willis in VSCode.
 
 
 

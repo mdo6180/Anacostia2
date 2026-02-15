@@ -5,7 +5,7 @@ import os
 from node import Node
 from utils.connection import ConnectionManager
 
-sql = str   # Create an alias of the str for syntax highlighting using the Python Inline Source Syntax Highlighting extension in VSCode.
+sql = str   # alias of the str type for syntax highlighting using the Python Inline Source Syntax Highlighting extension by Sam Willis in VSCode.
 
 
 

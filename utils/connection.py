@@ -1,7 +1,8 @@
 import sqlite3
 from contextlib import contextmanager
 import logging
-from typing import List
+
+sql = str   # alias of the str type for syntax highlighting using the Python Inline Source Syntax Highlighting extension by Sam Willis in VSCode.
 
 
 
@@ -69,13 +70,12 @@ class ConnectionManager:
     def start_run(self, node_name: str, run_id: int) -> int:
         try:
             with self.write_cursor() as cursor:
-                cursor.execute(
-                    """
-                    INSERT INTO run_events (node_name, run_id, timestamp, event_type)
+                query: sql = """
+                    INSERT INTO run_events 
+                    (node_name, run_id, timestamp, event_type)
                     VALUES (?, ?, CURRENT_TIMESTAMP, 'start');
-                    """,
-                    (node_name, run_id)
-                )
+                    """
+                cursor.execute(query, (node_name, run_id))
                 return run_id
     
         except sqlite3.IntegrityError as e:
@@ -87,13 +87,12 @@ class ConnectionManager:
     def end_run(self, node_name: str, run_id: int) -> int:
         with self.write_cursor() as cursor:
             try:
-                cursor.execute(
-                    """
-                    INSERT INTO run_events (node_name, run_id, timestamp, event_type)
+                query: sql = """
+                    INSERT INTO run_events 
+                    (node_name, run_id, timestamp, event_type)
                     VALUES (?, ?, CURRENT_TIMESTAMP, 'end');
-                    """,
-                    (node_name, run_id)
-                )
+                """
+                cursor.execute(query, (node_name, run_id))
                 return run_id
             
             except sqlite3.IntegrityError as e:
@@ -104,32 +103,27 @@ class ConnectionManager:
     
     def run_ended(self, node_name: str, run_id: int) -> bool:
         with self.read_cursor() as cursor:
-            cursor.execute(
-                """
+            query: sql = """
                 SELECT 1 FROM run_events WHERE node_name = ? AND run_id = ? AND event_type = 'end' LIMIT 1;
-                """,
-                (node_name, run_id)
-            )
+            """
+            cursor.execute(query, (node_name, run_id))
             return cursor.fetchone() is not None
     
     def resume_run(self, node_name: str, run_id: int) -> None:
         with self.write_cursor() as cursor:
-            cursor.execute(
-                """
-                INSERT INTO run_events (node_name, run_id, timestamp, event_type)
+            query: sql = """
+                INSERT INTO run_events 
+                (node_name, run_id, timestamp, event_type)
                 VALUES (?, ?, CURRENT_TIMESTAMP, 'restart');
-                """,
-                (node_name, run_id)
-            )
+                """
+            cursor.execute(query, (node_name, run_id))
 
     def get_latest_run_id(self, node_name: str) -> int:
         with self.read_cursor() as cursor:
-            cursor.execute(
-                """
+            query: sql = """
                 SELECT MAX(run_id) FROM run_events WHERE node_name = ?;
-                """,
-                (node_name,)
-            )
+            """
+            cursor.execute(query, (node_name,))
             result = cursor.fetchone()
             if result and result[0] is not None:
                 # if there is at least one run, return the latest run_id
