@@ -74,7 +74,7 @@ class ConnectionManager:
                     INSERT INTO run_events 
                     (node_name, run_id, timestamp, event_type)
                     VALUES (?, ?, CURRENT_TIMESTAMP, 'start');
-                    """
+                """
                 cursor.execute(query, (node_name, run_id))
                 return run_id
     
@@ -115,7 +115,7 @@ class ConnectionManager:
                 INSERT INTO run_events 
                 (node_name, run_id, timestamp, event_type)
                 VALUES (?, ?, CURRENT_TIMESTAMP, 'restart');
-                """
+            """
             cursor.execute(query, (node_name, run_id))
 
     def get_latest_run_id(self, node_name: str) -> int:
