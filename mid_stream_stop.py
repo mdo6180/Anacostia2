@@ -7,7 +7,7 @@ import time
 from streams.directory import DirectoryStream
 from producers.producer import Producer
 from consumers.consumer import Consumer
-from nodes.node import Node
+from node import Node
 from dag import Graph
 from utils.debug import stop_if
 

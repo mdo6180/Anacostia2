@@ -2,7 +2,7 @@ from typing import List
 from logging import Logger
 import os
 
-from nodes.node import Node
+from node import Node
 from connection import ConnectionManager
 
 sql = str   # Create an alias of the str for syntax highlighting using the Python Inline Source Syntax Highlighting extension in VSCode.
