@@ -7,6 +7,8 @@ from datetime import datetime
 
 from connection import ConnectionManager
 
+sql = str   # Create an alias of the str for syntax highlighting using the Python Inline Source Syntax Highlighting extension in VSCode.
+
 
 
 class DirectoryStream:
@@ -34,8 +36,7 @@ class DirectoryStream:
     
     def setup(self):
         with self.conn_manager.write_cursor() as cursor:
-            cursor.execute(
-                f"""
+            query: sql = f"""
                 CREATE TABLE IF NOT EXISTS {self.local_table_name} (
                     artifact_index INTEGER PRIMARY KEY AUTOINCREMENT,
                     artifact_path TEXT NOT NULL,
@@ -45,40 +46,42 @@ class DirectoryStream:
                     UNIQUE(artifact_path, artifact_hash),
                     UNIQUE(artifact_hash)
                 );
-                """
-            )
+            """
+            cursor.execute(query)
 
     def register_artifact(self, filepath: str, artifact_hash: str) -> None:
         timestamp = datetime.now()
 
         with self.conn_manager.write_cursor() as cursor:
-            cursor.execute(
-                f"INSERT OR IGNORE INTO {self.local_table_name} (artifact_path, timestamp, artifact_hash, hash_algorithm) VALUES (?, ?, ?, ?);",
-                (filepath, timestamp, artifact_hash, "sha256")
-            )
-            cursor.execute(
-                f"""
-                INSERT OR IGNORE INTO {self.global_usage_table_name} (artifact_hash, node_name, state, details) 
+            query: sql = f"""
+                INSERT OR IGNORE INTO {self.local_table_name} 
+                (artifact_path, timestamp, artifact_hash, hash_algorithm) 
                 VALUES (?, ?, ?, ?);
-                """,
-                (artifact_hash, self.name, "detected", filepath)
-            )
+            """
+            cursor.execute(query, (filepath, timestamp, artifact_hash, "sha256"))
+
+            query: sql = f"""
+                INSERT OR IGNORE INTO {self.global_usage_table_name} 
+                (artifact_hash, node_name, state, details) 
+                VALUES (?, ?, ?, ?);
+            """
+            cursor.execute(query, (artifact_hash, self.name, "detected", filepath))
             # self.logger.info(f"Registered artifact {filepath} with hash {artifact_hash} in stream {self.name} at {timestamp}")
     
     def is_artifact_registered(self, filepath: str) -> bool:
         with self.conn_manager.read_cursor() as cursor:
-            cursor.execute(
-                f"SELECT 1 FROM {self.local_table_name} WHERE artifact_path = ? LIMIT 1;",
-                (filepath,)
-            )
+            query: sql = f"""
+                SELECT 1 FROM {self.local_table_name} WHERE artifact_path = ? LIMIT 1;
+            """
+            cursor.execute(query, (filepath,))
             return cursor.fetchone() is not None
     
     def get_artifact_path(self, artifact_hash: str) -> str:
         with self.conn_manager.read_cursor() as cursor:
-            cursor.execute(
-                f"SELECT artifact_path FROM {self.local_table_name} WHERE artifact_hash = ? LIMIT 1;",
-                (artifact_hash,)
-            )
+            query: sql = f"""
+                SELECT artifact_path FROM {self.local_table_name} WHERE artifact_hash = ? LIMIT 1;
+            """
+            cursor.execute(query, (artifact_hash,))
             result = cursor.fetchone()
             if result is None:
                 raise ValueError(f"Artifact with hash {artifact_hash} not found in local stream table.")
@@ -102,7 +105,10 @@ class DirectoryStream:
     
     def list_artifacts_chronological(self) -> list[str]:
         with self.conn_manager.read_cursor() as cursor:
-            cursor.execute(f"SELECT artifact_hash FROM {self.local_table_name} ORDER BY timestamp ASC;")
+            query: sql = f"""
+                SELECT artifact_hash FROM {self.local_table_name} ORDER BY timestamp ASC;
+            """
+            cursor.execute(query)
             hashes = cursor.fetchall()
             if hashes is None:
                 return []

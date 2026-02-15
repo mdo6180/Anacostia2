@@ -12,6 +12,8 @@ from connection import ConnectionManager
 from consumers.consumer import Consumer
 from producers.producer import Producer
 
+sql = str   # Create an alias of the str for syntax highlighting using the Python Inline Source Syntax Highlighting extension in VSCode.
+
 
 
 class Node(threading.Thread, ABC):
@@ -58,23 +60,21 @@ class Node(threading.Thread, ABC):
 
     def start_using_artifact(self, filepath: str, artifact_hash: str) -> None:
         with self.conn_manager.write_cursor() as cursor:
-            cursor.execute(
-                f"""
-                INSERT OR IGNORE INTO {self.global_usage_table_name} (artifact_hash, node_name, run_id, state, details)
+            query: sql = f"""
+                INSERT OR IGNORE INTO {self.global_usage_table_name} 
+                (artifact_hash, node_name, run_id, state, details) 
                 VALUES (?, ?, ?, ?, ?);
-                """,
-                (artifact_hash, self.name, self.run_id, "using", filepath)
-            )
+            """
+            cursor.execute(query, (artifact_hash, self.name, self.run_id, "using", filepath))
     
     def finished_using_artifact(self, filepath: str, artifact_hash: str) -> None:
         with self.conn_manager.write_cursor() as cursor:
-            cursor.execute(
-                f"""
-                INSERT OR IGNORE INTO {self.global_usage_table_name} (artifact_hash, node_name, run_id, state, details)
+            query: sql = f"""
+                INSERT OR IGNORE INTO {self.global_usage_table_name} 
+                (artifact_hash, node_name, run_id, state, details) 
                 VALUES (?, ?, ?, ?, ?);
-                """,
-                (artifact_hash, self.name, self.run_id, "used", filepath)
-            )
+            """
+            cursor.execute(query, (artifact_hash, self.name, self.run_id, "used", filepath))
     
     def using_artifacts(self):
         for consumer in self.consumers:

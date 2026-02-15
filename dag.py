@@ -5,6 +5,8 @@ import os
 from nodes.node import Node
 from connection import ConnectionManager
 
+sql = str   # Create an alias of the str for syntax highlighting using the Python Inline Source Syntax Highlighting extension in VSCode.
+
 
 
 class Graph:
@@ -23,17 +25,16 @@ class Graph:
 
         self.conn_manager = ConnectionManager(db_path, logger=self.logger)
         with self.conn_manager.write_cursor() as cursor:
-            cursor.execute(
-                """
+            query: sql = f"""
                 CREATE TABLE IF NOT EXISTS nodes (
                     node_name TEXT UNIQUE,
                     node_type TEXT,
                     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
                 );
-                """
-            )
-            cursor.execute(
-                f"""
+            """
+            cursor.execute(query)
+
+            query: sql = f"""
                 CREATE TABLE IF NOT EXISTS artifact_usage_events (
                     artifact_hash TEXT,
                     node_name TEXT,
@@ -42,10 +43,10 @@ class Graph:
                     details TEXT DEFAULT NULL,
                     timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
                 );
-                """
-            )
-            cursor.execute(
-                f"""
+            """
+            cursor.execute(query)
+
+            query: sql = f"""
                 CREATE TABLE IF NOT EXISTS provenance_graph (
                     predecessor_hash TEXT DEFAULT NULL,
                     predecessor_type TEXT CHECK (predecessor_type IN ( 'artifact', 'node' )) DEFAULT NULL,
@@ -56,9 +57,9 @@ class Graph:
                     details TEXT DEFAULT NULL
                 );
                 """
-            )
-            cursor.execute(
-                """
+            cursor.execute(query)
+
+            query: sql = f"""
                 CREATE TABLE IF NOT EXISTS run_events (
                     node_name TEXT,
                     run_id INTEGER,
@@ -66,8 +67,8 @@ class Graph:
                     event_type TEXT NOT NULL CHECK (event_type IN ('start', 'end', 'error', 'restart')),
                     PRIMARY KEY (node_name, run_id, event_type)
                 );
-                """
-            )
+            """
+            cursor.execute(query)
         
         for node in self.nodes:
             # initialize DB connection for each node, its consumers, and producers

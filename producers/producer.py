@@ -4,6 +4,8 @@ import hashlib
 
 from utils.connection import ConnectionManager
 
+sql = str   # Create an alias of the str for syntax highlighting using the Python Inline Source Syntax Highlighting extension in VSCode.
+
 
 
 class Producer:
@@ -37,13 +39,12 @@ class Producer:
             self.logger.info(f"Producer {self.name} registering created artifact {path} with hash {artifact_hash} in run {self.run_id}")
 
         with self.conn_manager.write_cursor() as cursor:
-            cursor.executemany(
-                f"""
-                INSERT OR IGNORE INTO {self.global_usage_table_name} (artifact_hash, node_name, run_id, state, details)
+            query: sql = f"""
+                INSERT OR IGNORE INTO {self.global_usage_table_name} 
+                (artifact_hash, node_name, run_id, state, details) 
                 VALUES (?, ?, ?, ?, ?);
-                """,
-                entries
-            )
+            """
+            cursor.executemany(query, entries)
 
     def hash_artifact(self, filepath: str) -> str:
         sha256 = hashlib.sha256()

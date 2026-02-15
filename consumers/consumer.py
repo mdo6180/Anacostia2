@@ -8,6 +8,9 @@ from connection import ConnectionManager
 from streams.directory import DirectoryStream
 
 
+sql = str   # Create an alias of the str for syntax highlighting using the Python Inline Source Syntax Highlighting extension in VSCode.
+
+
 
 class Consumer:
     def __init__(
@@ -76,36 +79,32 @@ class Consumer:
         filepath = self.stream.get_artifact_path(artifact_hash)
 
         with self.conn_manager.write_cursor() as cursor:
-            cursor.execute(
-                f"""
-                INSERT OR IGNORE INTO {self.global_usage_table_name} (artifact_hash, node_name, state, details)
+            query: sql = f"""
+                INSERT OR IGNORE INTO {self.global_usage_table_name} 
+                (artifact_hash, node_name, state, details) 
                 VALUES (?, ?, ?, ?);
-                """,
-                (artifact_hash, self.name, "primed", filepath)
-            )
-    
+            """
+            cursor.execute(query, (artifact_hash, self.name, "primed", filepath))
+
     def ignore_artifact(self, artifact_hash: str) -> None:
         # delete this query in future if we don't need to store file paths for ignored artifacts
         filepath = self.stream.get_artifact_path(artifact_hash)
 
         with self.conn_manager.write_cursor() as cursor:
-            cursor.execute(
-                f"""
-                INSERT OR IGNORE INTO {self.global_usage_table_name} (artifact_hash, node_name, state, details)
+            query: sql = f"""
+                INSERT OR IGNORE INTO {self.global_usage_table_name} 
+                (artifact_hash, node_name, state, details) 
                 VALUES (?, ?, ?, ?);
-                """,
-                (artifact_hash, self.name, "ignored", filepath)
-            )
+            """
+            cursor.execute(query, (artifact_hash, self.name, "ignored", filepath))
     
     def is_artifact_used(self, artifact_hash: str) -> bool:
         with self.conn_manager.read_cursor() as cursor:
-            cursor.execute(
-                f"""
+            query: sql = f"""
                 SELECT COUNT(*) FROM {self.global_usage_table_name}
                 WHERE node_name = ? AND artifact_hash = ? AND state = 'using';
-                """,
-                (self.node_name, artifact_hash)
-            )
+            """
+            cursor.execute(query, (self.node_name, artifact_hash))
             result = cursor.fetchone()
             return result[0] > 0   # returns True if count > 0, else False
 
@@ -144,15 +143,13 @@ class Consumer:
     def get_using_artifacts(self) -> List[Tuple[Any, str]]:
         using_artifacts = []
         with self.conn_manager.read_cursor() as cursor:
-            cursor.execute(
-                f"""
+            query: sql = f"""
                 SELECT artifact_hash FROM {self.global_usage_table_name}
                 WHERE node_name = ? AND run_id = ? AND state = 'using' AND artifact_hash IN (
                     SELECT artifact_hash FROM {self.stream.local_table_name}
                 );
-                """,
-                (self.node_name, self.run_id)
-            )
+            """
+            cursor.execute(query, (self.node_name, self.run_id))
             using_artifacts = cursor.fetchall()
             self.logger.info(f"querying using {self.node_name} run {self.run_id}: found {len(using_artifacts)} artifacts in 'using' state")
         
@@ -169,16 +166,14 @@ class Consumer:
     def get_unused_artifacts(self) -> List[Tuple[Any, str]]:
         unused_artifacts = []
         with self.conn_manager.read_cursor() as cursor:
-            cursor.execute(
-                f"""
+            query: sql = f"""
                 SELECT artifact_hash FROM {self.global_usage_table_name}
                 WHERE node_name = ? AND state = 'primed' AND artifact_hash NOT IN (
                     SELECT artifact_hash FROM {self.global_usage_table_name}
                     WHERE node_name = ? AND state = 'using'
                 );
-                """,
-                (self.name, self.node_name,)
-            )
+            """
+            cursor.execute(query, (self.name, self.node_name,))
             unused_artifacts = cursor.fetchall()
             # self.logger.info(f"querying primed {self.node_name} run {self.run_id}: found {len(unused_artifacts)} artifacts in 'primed' state")
         
