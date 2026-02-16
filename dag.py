@@ -39,7 +39,7 @@ class Graph:
                     artifact_hash TEXT,
                     node_name TEXT,
                     run_id INTEGER DEFAULT NULL,
-                    state TEXT CHECK (state IN ( 'created', 'committed', 'detected', 'primed', 'using', 'used', 'ignored')),
+                    state TEXT CHECK (state IN ('created', 'committed', 'detected', 'primed', 'using', 'used', 'ignored')),
                     details TEXT DEFAULT NULL,
                     timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
                 );

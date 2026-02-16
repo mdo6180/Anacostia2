@@ -20,6 +20,11 @@ class Producer:
             self.logger.info(f"Directory {directory} does not exist. Creating it.")
             os.makedirs(directory)
 
+        self.staging_directory = os.path.join(directory, ".staging")
+        if os.path.exists(self.staging_directory) is False:
+            self.logger.info(f"Temporary directory {self.staging_directory} does not exist. Creating it.")
+            os.makedirs(self.staging_directory)
+
         self.global_usage_table_name = "artifact_usage_events"
 
         # keep track of artifact paths created in the current run, so that we can log warnings if the same path is being overwritten in the same run
@@ -34,9 +39,19 @@ class Producer:
     def register_created_artifacts(self) -> None:
         entries = []
         for path in self.paths_in_current_run:
+            # hash the artifact
             artifact_hash = self.hash_artifact(path)
-            entries.append((artifact_hash, self.name, self.run_id, "created", path))
-            self.logger.info(f"Producer {self.name} registering created artifact {path} with hash {artifact_hash} in run {self.run_id}")
+
+            # move to final location in the producer's directory
+            relative_path = os.path.relpath(path, self.staging_directory)   # /producer_directory/.staging/subdir/filename.txt -> /subdir/filename.txt
+            final_path = os.path.join(self.directory, relative_path)        # /producer_directory/subdir/filename.txt
+            os.makedirs(os.path.dirname(final_path), exist_ok=True)         # create /producer_directory/subdir if it doesn't exist
+            os.replace(path, final_path)                                    # atomic publish to /producer_directory/subdir/filename.txt
+
+            # add entry to local producer table and global usage table with state "created". 
+            # The consumer will later update the state to "in_use" when it starts using the artifact and then to "used" when it's done with the artifact.
+            entries.append((artifact_hash, self.name, self.run_id, "created", final_path))
+            self.logger.info(f"Producer {self.name} registering created artifact {final_path} with hash {artifact_hash} in run {self.run_id}")
 
         with self.conn_manager.write_cursor() as cursor:
             query: sql = f"""
@@ -57,8 +72,10 @@ class Producer:
         # check if the path already exists in the current run, if not, add it to the set. 
         # at the end of the run, hash and create DB entry for all paths in the set, then clear the set for the next run. 
         # This way we can avoid hashing the same file multiple times in the same run and also preserve file paths for artifacts in the DB.
+        # we also write to a temp file in the staging directory first and then move it to the final location in the producer's directory 
+        # after hashing to avoid the consumer trying to consume an artifact that is not fully written yet.
 
-        path = os.path.join(self.directory, filename)
+        path = os.path.join(self.staging_directory, filename)
         if path not in self.paths_in_current_run:
             self.paths_in_current_run.add(path)
 
