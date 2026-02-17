@@ -79,12 +79,10 @@ def node_func():
                 even_producer.create_artifact(filename=f"processed_even_{node.run_id}.txt", content=f"Processed {item2} from even stream\n")
                 time.sleep(1)   # checkpoint 2
                 
-                """
                 # simulate failure at run 1, iter 0 (first iteration of the second run)
                 # disable this stop_if after restart to allow the pipeline to continue and finish processing
                 if args.restart == False:
                     stop_if(current_run=node.run_id, current_iter=i, target_run=1, target_iter=0, mode="sigint", logger=logger) 
-                """
                 
                 combined_producer.create_artifact(filename=f"processed_combined_{node.run_id}.txt", content=f"Processed {item1} and {item2} from combined streams\n")
                 time.sleep(1)   # checkpoint 3
