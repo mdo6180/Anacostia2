@@ -35,6 +35,13 @@ class Producer:
 
     def initialize_db_connection(self, filename: str):
         self.conn_manager = ConnectionManager(db_path=filename, logger=self.logger)
+    
+    def restart_producer(self):
+        # clear any temp files in the staging directory from previous runs, so that we don't have any leftover temp files when we start a new run
+        for filename in os.listdir(self.staging_directory):
+            path = os.path.join(self.staging_directory, filename)
+            if os.path.isfile(path):
+                os.remove(path)
 
     def register_created_artifacts(self) -> None:
         entries = []

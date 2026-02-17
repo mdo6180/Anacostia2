@@ -183,6 +183,9 @@ class Node(threading.Thread, ABC):
                 # restart mode 1 means the latest run ended 
                 consumer.set_restart_mode(mode=1)   
 
+            for producer in self.producers:
+                producer.restart_producer()
+
             if self._restart is not None:
                 self._restart()
         
@@ -195,6 +198,11 @@ class Node(threading.Thread, ABC):
             for consumer in self.consumers:
                 # restart mode 2 means the latest run did not end
                 consumer.set_restart_mode(mode=2)
+            
+            # clear any temp files in the staging directory that were not moved to the final location due to the failure. 
+            # we don't have any leftover temp files after restart 
+            for producer in self.producers:
+                producer.restart_producer()
 
             if self._restart is not None:
                 self._restart()
