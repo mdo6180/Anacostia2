@@ -217,6 +217,8 @@ class Consumer:
                     self.bundle_hashes.append(file_hash)
             else:
                 self.logger.info(f"{self.name} yielding bundle_items: {self.bundle_items}, bundle_hashes: {self.bundle_hashes}")
-                yield self.bundle_items
-                self.bundle_items = []
-                self.bundle_hashes = []
+                yield self.bundle_items[:self.bundle_size]  # yield only a batch of items based on the bundle size
+
+                # remove the items that were just yielded from the bundle_items list, keep the remaining items for the next yield
+                self.bundle_items = self.bundle_items[self.bundle_size:]
+                self.bundle_hashes = self.bundle_hashes[self.bundle_size:]

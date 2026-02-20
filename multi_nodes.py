@@ -108,17 +108,24 @@ def node2_func():
                 model_registry_producer.create_artifact(filename=model_name, content=f"Model retrained with:\n")
                 logger.info(f"ModelRetrainingNode writing: 'Model retrained with:\n' to {model_name} in run {node2.run_id}")
                 time.sleep(1)   # checkpoint
-                
+
+                """
                 # simulate failure at run 1, iter 0 (first iteration of the second run)
                 # disable this stop_if after restart to allow the pipeline to continue and finish processing
                 if args.restart == False:
                     stop_if(current_run=node2.run_id, current_iter=i, target_run=1, target_iter=0, mode="sigint", logger=logger) 
                     #model_registry_producer.create_artifact(filename=model_name, content=f"restarting\n")
+                """ 
 
                 model_registry_producer.create_artifact(filename=model_name, content=f"{item}\n")
                 logger.info(f"ModelRetrainingNode writing: '{item}\n' to {model_name} in run {node2.run_id}")
                 time.sleep(1)   # checkpoint
 
+        # simulate failure at run 1, iter 0 (first iteration of the second run)
+        # disable this stop_if after restart to allow the pipeline to continue and finish processing
+        if args.restart == False:
+            stop_if(current_run=node2.run_id, current_iter=i, target_run=1, target_iter=0, mode="sigint", logger=logger) 
+            #model_registry_producer.create_artifact(filename=model_name, content=f"restarting\n")
 
 graph = Graph(name="TestGraph", nodes=[node, node2], db_folder=db_folder_path, logger=logger)
 
