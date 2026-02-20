@@ -133,7 +133,10 @@ class DirectoryStream:
         Yields single items: (content, file_hash). User implemented method.
         """
         while True:
-            for filename in sorted(os.listdir(self.directory)):
+            # sort files by last modification time to ensure chronological order, and ignore any temp files that are not yet ready to be consumed
+            # since modification = creation/arrival time because we assume files are written once, then never modified again.
+            for filename in sorted(os.listdir(self.directory), key=lambda e: os.stat(os.path.join(self.directory, e)).st_mtime):
+
                 # skip temp files, Anacostia Producer creates temp files inside the .staging folder 
                 # before moving them to the final location in the producer's directory, 
                 # so we can use this convention to ignore any temp files that are not yet ready to be consumed

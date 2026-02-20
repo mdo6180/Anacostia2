@@ -147,7 +147,8 @@ class Consumer:
                 SELECT artifact_hash FROM {self.global_usage_table_name}
                 WHERE node_name = ? AND run_id = ? AND state = 'using' AND artifact_hash IN (
                     SELECT artifact_hash FROM {self.stream.local_table_name}
-                );
+                )
+                ORDER BY timestamp ASC;
             """
             cursor.execute(query, (self.node_name, self.run_id))
             using_artifacts = cursor.fetchall()
@@ -171,7 +172,8 @@ class Consumer:
                 WHERE node_name = ? AND state = 'primed' AND artifact_hash NOT IN (
                     SELECT artifact_hash FROM {self.global_usage_table_name}
                     WHERE node_name = ? AND state = 'using'
-                );
+                )
+                ORDER BY timestamp ASC;
             """
             cursor.execute(query, (self.name, self.node_name,))
             unused_artifacts = cursor.fetchall()
@@ -216,7 +218,7 @@ class Consumer:
                     self.bundle_items.append(item)
                     self.bundle_hashes.append(file_hash)
             else:
-                self.logger.info(f"{self.name} yielding bundle_items: {self.bundle_items}, bundle_hashes: {self.bundle_hashes}")
+                self.logger.info(f"{self.name} yielding bundle_items: {self.bundle_items[:self.bundle_size]}, bundle_hashes: {self.bundle_hashes[:self.bundle_size]}")
                 yield self.bundle_items[:self.bundle_size]  # yield only a batch of items based on the bundle size
 
                 # remove the items that were just yielded from the bundle_items list, keep the remaining items for the next yield
