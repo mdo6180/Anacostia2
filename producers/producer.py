@@ -1,6 +1,7 @@
 from logging import Logger
 import os
 import hashlib
+from typing import List
 
 from utils.connection import ConnectionManager
 
@@ -9,11 +10,13 @@ sql = str   # alias of the str type for syntax highlighting using the Python Inl
 
 
 class Producer:
-    def __init__(self, name: str, directory: str, hash_chunk_size: int = 1_048_576, logger: Logger = None):
+    def __init__(self, name: str, directory: str, hash_chunk_size: int = 1_048_576, transports: List = None, logger: Logger = None):
         self.name = name
         self.hash_chunk_size = hash_chunk_size
         self.logger = logger
         self.run_id = 0
+
+        self.transports = transports if transports is not None else []
     
         self.directory = directory
         if os.path.exists(directory) is False:
@@ -67,6 +70,9 @@ class Producer:
                 VALUES (?, ?, ?, ?, ?);
             """
             cursor.executemany(query, entries)
+        
+        for transport in self.transports:
+            transport.send(final_path, artifact_hash)
 
     def hash_artifact(self, filepath: str) -> str:
         sha256 = hashlib.sha256()
