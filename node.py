@@ -10,7 +10,7 @@ import traceback
 
 from utils.connection import ConnectionManager
 from consumer import Consumer
-from producers.producer import Producer
+from producer import Producer
 
 sql = str   # alias of the str type for syntax highlighting using the Python Inline Source Syntax Highlighting extension by Sam Willis in VSCode.
 

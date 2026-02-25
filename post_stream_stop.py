@@ -5,7 +5,7 @@ import shutil
 import time
 
 from streams.directory import DirectoryStream
-from producers.producer import Producer
+from producer import Producer
 from consumer import Consumer
 from node import Node
 from dag import Graph
