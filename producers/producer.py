@@ -33,6 +33,9 @@ class Producer:
         # keep track of artifact paths created in the current run, so that we can log warnings if the same path is being overwritten in the same run
         self.paths_in_current_run = set()   
     
+    def get_staging_directory(self) -> str:
+        return self.staging_directory
+    
     def set_run_id(self, run_id: int):
         self.run_id = run_id
 
@@ -47,6 +50,11 @@ class Producer:
                 os.remove(path)
 
     def register_created_artifacts(self) -> None:
+        for path in os.listdir(self.staging_directory):
+            full_path = os.path.join(self.staging_directory, path)
+            if os.path.isfile(full_path):
+                self.paths_in_current_run.add(full_path)
+
         entries = []
         for path in self.paths_in_current_run:
             # hash the artifact
@@ -80,17 +88,3 @@ class Producer:
             while chunk := f.read(self.hash_chunk_size):
                 sha256.update(chunk)
         return sha256.hexdigest()
-
-    def create_artifact(self, filename: str, content: str):
-        # check if the path already exists in the current run, if not, add it to the set. 
-        # at the end of the run, hash and create DB entry for all paths in the set, then clear the set for the next run. 
-        # This way we can avoid hashing the same file multiple times in the same run and also preserve file paths for artifacts in the DB.
-        # we also write to a temp file in the staging directory first and then move it to the final location in the producer's directory 
-        # after hashing to avoid the consumer trying to consume an artifact that is not fully written yet.
-
-        path = os.path.join(self.staging_directory, filename)
-        if path not in self.paths_in_current_run:
-            self.paths_in_current_run.add(path)
-
-        with open(path, "a") as file:
-            file.write(content)

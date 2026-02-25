@@ -69,16 +69,26 @@ def restart_logic():
 
 @node.entrypoint
 def node_func():
+    odd_staging_path = odd_producer.get_staging_directory()
+    even_staging_path = even_producer.get_staging_directory()
+    combined_staging_path = combined_producer.get_staging_directory()
+
     for bundle1, bundle2 in zip(stream_consumer_odd, stream_consumer_even):
         with node.stage_run():
             for i, (item1, item2) in enumerate(zip(bundle1, bundle2)):
-                odd_producer.create_artifact(filename=f"processed_odd_{node.run_id}.txt", content=f"Processed {item1} from odd stream\n")
+                with open(os.path.join(odd_staging_path, f"processed_odd_{node.run_id}.txt"), "a") as file:
+                    file.write(f"Processed {item1} from odd stream\n")
+                
                 time.sleep(1)   # checkpoint 1
                 
-                even_producer.create_artifact(filename=f"processed_even_{node.run_id}.txt", content=f"Processed {item2} from even stream\n")
+                with open(os.path.join(even_staging_path, f"processed_even_{node.run_id}.txt"), "a") as file:
+                    file.write(f"Processed {item2} from even stream\n")
+                
                 time.sleep(1)   # checkpoint 2
                 
-                combined_producer.create_artifact(filename=f"processed_combined_{node.run_id}.txt", content=f"Processed {item1} and {item2} from combined streams\n")
+                with open(os.path.join(combined_staging_path, f"processed_combined_{node.run_id}.txt"), "a") as file:
+                    file.write(f"Processed {item1} and {item2} from combined streams\n")
+                
                 time.sleep(1)   # checkpoint 3
 
         # simulate failure at run 1, iter 0 (first iteration of the second run)
