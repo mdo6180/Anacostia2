@@ -7,6 +7,7 @@ import time
 from streams.directory import DirectoryStream
 from producer import Producer
 from consumer import Consumer
+from transports.local import FileSystemTransport
 from node import Node
 from dag import Graph
 from utils.debug import stop_if
@@ -19,6 +20,7 @@ input_path2 = f"{tests_path}/incoming2"
 output_path1 = f"{tests_path}/processed1"
 output_path2 = f"{tests_path}/processed2"
 output_combined_path = f"{tests_path}/processed_combined"
+transport_dest_path = f"{tests_path}/transport_dest"
 model_registry_path = f"{tests_path}/model_registry"
 
 parser = argparse.ArgumentParser(description="Run the pipeline after restart test")
@@ -60,7 +62,12 @@ stream_consumer_even = Consumer(
 )
 odd_producer = Producer(name="odd_producer", directory=output_path1, logger=logger)   # example producer
 even_producer = Producer(name="even_producer", directory=output_path2, logger=logger)   # example producer
-combined_producer = Producer(name="combined_producer", directory=output_combined_path, logger=logger)   # example producer to write combined results
+
+# example transport to move artifacts from producers to the transport's destination directory
+file_transport = FileSystemTransport(name="file_transport", dest_directory=transport_dest_path, logger=logger)
+
+# example producer to write combined results and send to transport
+combined_producer = Producer(name="combined_producer", directory=output_combined_path, transports=[file_transport], logger=logger)
 
 odd_staging_path = odd_producer.get_staging_directory()
 even_staging_path = even_producer.get_staging_directory()
@@ -102,7 +109,7 @@ def node_func():
 
 combined_consumer = Consumer(
     name="combined_consumer", 
-    stream=DirectoryStream(name="combined_folder", directory=output_combined_path, logger=logger), 
+    stream=DirectoryStream(name="combined_folder", directory=transport_dest_path, logger=logger), 
     logger=logger
 )
 model_registry_producer = Producer(name="model_registry_producer", directory=model_registry_path, logger=logger)

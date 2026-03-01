@@ -82,6 +82,9 @@ class Graph:
                 
             for producer in node.producers:
                 producer.initialize_db_connection(db_path)
+
+                for transport in producer.transports:
+                    transport.initialize_db_connection(db_path)
     
     def start(self):
         self.log(f"Starting graph '{self.name}' with {len(self.nodes)} nodes.", level="INFO")

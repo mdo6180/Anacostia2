@@ -48,8 +48,37 @@ class Producer:
             path = os.path.join(self.staging_directory, filename)
             if os.path.isfile(path):
                 os.remove(path)
+    
+    def save_metadata(self, **kwargs) -> dict:
+        """
+        User implemented method to save custom metadata to be associated with the artifact. 
+        The saved metadata will be inserted into the stream's local table when the artifact is detected by the stream.
+        The producer and the stream serve as the bookends of the artifact's journey, with the producer responsible for saving the artifact and its metadata, 
+        and the stream responsible for loading the artifact and its metadata and making it available to consumers.
+
+        This enables nodes to pass the artifact, its metadata, and its hash to other nodes over the network, ensuring provenance and traceability of artifacts across the entire DAG, even when nodes are running on different machines or in different environments. 
+
+        The user can implement this method to save any custom metadata they want to associate with the artifact, such as hyperparameters used to generate a model artifact, metrics associated with an evaluation artifact, or any other relevant information about the artifact. 
+        The saved metadata will then be available in the stream's local table for consumers to query and use as needed.
+        """
+        pass
 
     def register_created_artifacts(self) -> None:
+        # zip all files in the staging directory and then move it to the producer's directory.
+        # once file is transported, DirectoryStream will load in the zipped envelope, extract the metadata from metadata.json,
+        # extract the artifact file, load the artifact content, load the artifact hash and other associated metadata from metadata.json, 
+        # and then insert the artifact hash and metadata into the stream's local table.
+
+        # user is responsible for overriding save_metadata(**kwargs) method to add custom metadata they want to the metadata.json. 
+        # user is also responsible for implementing a load_metadata() method in the DirectoryStream to load the custom metadata from the metadata.json
+        # and add the metadata to the stream's local table when the artifact is detected by the stream.
+        # essentially, the producer and the stream serve as the bookends of the artifact's journey, 
+        # with the producer responsible for saving the artifact and its metadata, 
+        # and the stream responsible for loading the artifact and its metadata and making it available to consumers.
+
+        # in the future, this enables nodes to pass the artifact, its metadata, and its hash to other nodes over the network
+        # ensuring provenance and traceability of artifacts across the entire DAG, even when nodes are running on different machines or in different environments. 
+
         for path in os.listdir(self.staging_directory):
             full_path = os.path.join(self.staging_directory, path)
             if os.path.isfile(full_path):
