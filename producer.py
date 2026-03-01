@@ -89,26 +89,23 @@ class Producer:
             return cursor.fetchall()
 
     def register_created_artifacts(self) -> None:
+        entries = []
         for path in os.listdir(self.staging_directory):
             full_path = os.path.join(self.staging_directory, path)
             if os.path.isfile(full_path):
-                self.paths_in_current_run.add(full_path)
+                # hash the artifact
+                artifact_hash = self.hash_artifact(full_path)
 
-        entries = []
-        for path in self.paths_in_current_run:
-            # hash the artifact
-            artifact_hash = self.hash_artifact(path)
+                # move to final location in the producer's directory
+                relative_path = os.path.relpath(full_path, self.staging_directory)   # /producer_directory/.staging/subdir/filename.txt -> /subdir/filename.txt
+                final_path = os.path.join(self.directory, relative_path)        # /producer_directory/subdir/filename.txt
+                os.makedirs(os.path.dirname(final_path), exist_ok=True)         # create /producer_directory/subdir if it doesn't exist
+                os.replace(full_path, final_path)                                    # atomic publish to /producer_directory/subdir/filename.txt
 
-            # move to final location in the producer's directory
-            relative_path = os.path.relpath(path, self.staging_directory)   # /producer_directory/.staging/subdir/filename.txt -> /subdir/filename.txt
-            final_path = os.path.join(self.directory, relative_path)        # /producer_directory/subdir/filename.txt
-            os.makedirs(os.path.dirname(final_path), exist_ok=True)         # create /producer_directory/subdir if it doesn't exist
-            os.replace(path, final_path)                                    # atomic publish to /producer_directory/subdir/filename.txt
-
-            # add entry to local producer table and global usage table with state "created". 
-            # The consumer will later update the state to "in_use" when it starts using the artifact and then to "used" when it's done with the artifact.
-            entries.append((artifact_hash, self.name, self.run_id, "created", final_path))
-            self.logger.info(f"Producer {self.name} registering created artifact {final_path} with hash {artifact_hash} in run {self.run_id}")
+                # add entry to local producer table and global usage table with state "created". 
+                # The consumer will later update the state to "in_use" when it starts using the artifact and then to "used" when it's done with the artifact.
+                entries.append((artifact_hash, self.name, self.run_id, "created", final_path))
+                self.logger.info(f"Producer {self.name} registering created artifact {final_path} with hash {artifact_hash} in run {self.run_id}")
 
         with self.conn_manager.write_cursor() as cursor:
             query: sql = f"""
