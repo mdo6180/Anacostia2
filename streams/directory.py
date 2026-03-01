@@ -35,6 +35,15 @@ class DirectoryStream:
         # associate the file paths with file hashes in the DB for this stream
     
     def setup(self):
+        """
+        Create the local table for this stream to track seen artifacts and their hashes.
+        User implemented method (call super().setup() if overriding).
+        To add additonal columns to the local table, user can execute an ALTER TABLE statement in their overridden setup() method.
+        To add additional tables, user can execute CREATE TABLE statements in their overridden setup() method.
+        Make sure table names are unique to avoid conflicts with other streams and producers. 
+        We recommend using the convention of prefixing table names with the stream or producer name, 
+        e.g. {stream_name}_artifacts for a stream's local table to track artifacts.
+        """
         with self.conn_manager.write_cursor() as cursor:
             query: sql = f"""
                 CREATE TABLE IF NOT EXISTS {self.local_table_name} (
@@ -50,16 +59,23 @@ class DirectoryStream:
             cursor.execute(query)
 
     def register_artifact(self, filepath: str, artifact_hash: str) -> None:
-        timestamp = datetime.now()
-
+        """
+        Register the artifact in the local stream table and the global usage table in the DB.
+        User implemented method (call super().register_artifact() if overriding).
+        Remember to register the artifact in both the local stream table and the global usage table and make sure all information in local table is accurate.
+        """
         with self.conn_manager.write_cursor() as cursor:
             query: sql = f"""
                 INSERT OR IGNORE INTO {self.local_table_name} 
-                (artifact_path, timestamp, artifact_hash, hash_algorithm) 
-                VALUES (?, ?, ?, ?);
+                (artifact_path, artifact_hash, hash_algorithm) 
+                VALUES (?, ?, ?);
             """
-            cursor.execute(query, (filepath, timestamp, artifact_hash, "sha256"))
+            cursor.execute(query, (filepath, artifact_hash, "sha256"))
+        
+        self.register_artifact_global(artifact_hash, filepath)
 
+    def register_artifact_global(self, artifact_hash: str, filepath: str = None) -> None:
+        with self.conn_manager.write_cursor() as cursor:
             query: sql = f"""
                 INSERT OR IGNORE INTO {self.global_usage_table_name} 
                 (artifact_hash, node_name, state, details) 
@@ -88,6 +104,9 @@ class DirectoryStream:
             return result[0]
 
     def hash_file(self, filepath: str) -> str:
+        """
+        Hash the file using the specified hash algorithm and return the hash value. User implemented method.
+        """
         sha256 = hashlib.sha256()
         with open(filepath, 'rb') as f:
             while chunk := f.read(self.hash_chunk_size):
@@ -103,31 +122,6 @@ class DirectoryStream:
             content = file.read()
             return content
     
-    def list_artifacts_chronological(self) -> list[str]:
-        with self.conn_manager.read_cursor() as cursor:
-            query: sql = f"""
-                SELECT artifact_hash FROM {self.local_table_name} ORDER BY timestamp ASC;
-            """
-            cursor.execute(query)
-            hashes = cursor.fetchall()
-            if hashes is None:
-                return []
-            return [h[0] for h in hashes]
-
-    def __getitem__(self, index) -> Tuple[Any, str]:
-        """
-        Get the content and hash of the artifact at the given index in chronological order. User implemented method.
-        """
-        # Note: this method is useful for getting a certain artifact (such as the latest model needed for resume after a restart)
-        # latest_model = stream[-1] to get the latest model artifact for example, or model = stream[model_index] to get a specific model artifact by index
-        artifact_entries = self.list_artifacts_chronological()
-        if index >= len(artifact_entries):
-            raise IndexError("Index out of range for available artifacts in stream.")
-        
-        artifact_hash = artifact_entries[index]
-        content = self.load_artifact(artifact_hash)
-        return content, artifact_hash
-
     def __iter__(self) -> Generator[Any, Any, str]:
         """
         Yields single items: (content, file_hash). User implemented method.
