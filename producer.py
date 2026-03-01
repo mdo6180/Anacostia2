@@ -112,20 +112,20 @@ class Producer:
 
         with self.conn_manager.write_cursor() as cursor:
             query: sql = f"""
-                INSERT OR IGNORE INTO {self.global_usage_table_name} 
-                (artifact_hash, node_name, run_id, state, details) 
-                VALUES (?, ?, ?, ?, ?);
-            """
-            cursor.executemany(query, entries)
-        
-        with self.conn_manager.write_cursor() as cursor:
-            query: sql = f"""
                 INSERT OR IGNORE INTO {self.local_table_name} 
                 (artifact_path, artifact_hash, hash_algorithm) 
                 VALUES (?, ?, ?);
             """
             local_entries = [(final_path, artifact_hash, "sha256") for artifact_hash, _, _, _, final_path in entries]
             cursor.executemany(query, local_entries)
+        
+        with self.conn_manager.write_cursor() as cursor:
+            query: sql = f"""
+                INSERT OR IGNORE INTO {self.global_usage_table_name} 
+                (artifact_hash, node_name, run_id, state, details) 
+                VALUES (?, ?, ?, ?, ?);
+            """
+            cursor.executemany(query, entries)
         
         for transport in self.transports:
             transport.send(final_path, artifact_hash)
