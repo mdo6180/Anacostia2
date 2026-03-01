@@ -82,6 +82,7 @@ class Graph:
                 
             for producer in node.producers:
                 producer.initialize_db_connection(db_path)
+                producer.setup()
 
                 for transport in producer.transports:
                     transport.initialize_db_connection(db_path)

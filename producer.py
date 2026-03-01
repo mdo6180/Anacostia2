@@ -29,10 +29,26 @@ class Producer:
             os.makedirs(self.staging_directory)
 
         self.global_usage_table_name = "artifact_usage_events"
+        self.local_table_name = f"{self.name}_local"
 
         # keep track of artifact paths created in the current run, so that we can log warnings if the same path is being overwritten in the same run
         self.paths_in_current_run = set()   
     
+    def setup(self):
+        with self.conn_manager.write_cursor() as cursor:
+            query: sql = f"""
+                CREATE TABLE IF NOT EXISTS {self.local_table_name} (
+                    artifact_index INTEGER PRIMARY KEY AUTOINCREMENT,
+                    artifact_path TEXT NOT NULL,
+                    artifact_hash TEXT NOT NULL,
+                    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    hash_algorithm TEXT,
+                    UNIQUE(artifact_path, artifact_hash),
+                    UNIQUE(artifact_hash)
+                );
+            """
+            cursor.execute(query)
+
     def get_staging_directory(self) -> str:
         return self.staging_directory
     
@@ -48,6 +64,13 @@ class Producer:
             path = os.path.join(self.staging_directory, filename)
             if os.path.isfile(path):
                 os.remove(path)
+        
+        # on restart, check which files in the producer's directory have been sent.
+        # if the file has not been sent, then we send it. 
+        # if the file has been sent, check if the file has been detected by a stream.
+        # if the file has been sent but not detected by a stream, then we resend it 
+        # (this handles the case where the producer sent the artifact but crashed before it could log the send event in the DB, 
+        # so the consumer is unaware that the artifact has been sent and is waiting for it to be sent).
     
     def register_created_artifacts(self) -> None:
         for path in os.listdir(self.staging_directory):
