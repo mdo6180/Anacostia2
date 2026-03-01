@@ -72,6 +72,22 @@ class Producer:
         # (this handles the case where the producer sent the artifact but crashed before it could log the send event in the DB, 
         # so the consumer is unaware that the artifact has been sent and is waiting for it to be sent).
     
+    def get_unsent_artifacts(self, transport_name: str) -> List[tuple]:
+        """
+        Get the list of artifacts that have been created by the producer but have not been sent by the transport yet.
+        This is used on producer restart to determine which artifacts still need to be sent by the transport.
+        """
+        with self.conn_manager.read_cursor() as cursor:
+            query: sql = f"""
+                SELECT artifact_path, artifact_hash FROM {self.local_table_name} 
+                WHERE artifact_hash NOT IN (
+                    SELECT artifact_hash FROM {self.global_usage_table_name} 
+                    WHERE state = 'sent' AND node_name = ?
+                );
+            """
+            cursor.execute(query, (transport_name,))
+            return cursor.fetchall()
+
     def register_created_artifacts(self) -> None:
         for path in os.listdir(self.staging_directory):
             full_path = os.path.join(self.staging_directory, path)
@@ -101,6 +117,15 @@ class Producer:
                 VALUES (?, ?, ?, ?, ?);
             """
             cursor.executemany(query, entries)
+        
+        with self.conn_manager.write_cursor() as cursor:
+            query: sql = f"""
+                INSERT OR IGNORE INTO {self.local_table_name} 
+                (artifact_path, artifact_hash, hash_algorithm) 
+                VALUES (?, ?, ?);
+            """
+            local_entries = [(final_path, artifact_hash, "sha256") for artifact_hash, _, _, _, final_path in entries]
+            cursor.executemany(query, local_entries)
         
         for transport in self.transports:
             transport.send(final_path, artifact_hash)
