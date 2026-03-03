@@ -71,7 +71,25 @@ class Producer:
         # if the file has been sent but not detected by a stream, then we resend it 
         # (this handles the case where the producer sent the artifact but crashed before it could log the send event in the DB, 
         # so the consumer is unaware that the artifact has been sent and is waiting for it to be sent).
+
+        for transport in self.transports:
+            unsent_artifacts = self.get_unsent_artifacts(transport_name=transport.name)
+            self.logger.info(f"Producer {self.name} restarting. Found {len(unsent_artifacts)} unsent artifacts for transport {transport.name}. Resending them.")
+            
+            '''
+            for artifact_path, artifact_hash in unsent_artifacts:
+                transport.send(artifact_path, artifact_hash)
+            '''
     
+    def register_artifact_send(self, transport_name: str, filepath: str, artifact_hash: str) -> None:
+        with self.conn_manager.write_cursor() as cursor:
+            query: sql = f"""
+                INSERT OR IGNORE INTO {self.global_usage_table_name} 
+                (artifact_hash, node_name, state, details) 
+                VALUES (?, ?, ?, ?);
+            """
+            cursor.execute(query, (artifact_hash, transport_name, "sent", filepath))
+
     def get_unsent_artifacts(self, transport_name: str) -> List[tuple]:
         """
         Get the list of artifacts that have been created by the producer but have not been sent by the transport yet.
@@ -125,7 +143,8 @@ class Producer:
             cursor.executemany(query, entries)
         
         for transport in self.transports:
-            transport.send(final_path, artifact_hash)
+            transport.send(final_path)
+            self.register_artifact_send(transport_name=transport.name, filepath=final_path, artifact_hash=artifact_hash)
 
     def hash_artifact(self, filepath: str) -> str:
         sha256 = hashlib.sha256()
