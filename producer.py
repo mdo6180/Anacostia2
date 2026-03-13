@@ -72,14 +72,19 @@ class Producer:
         # (this handles the case where the producer sent the artifact but crashed before it could log the send event in the DB, 
         # so the consumer is unaware that the artifact has been sent and is waiting for it to be sent).
 
+        # in the future, we need to make sure the Stream monitoring the transport's directory detects the artifact and sends the acknowledgment 
+        # back to the producer before we can mark the artifact as sent in the DB. 
+        # This way, if the producer crashes after sending the artifact but before receiving the ACK, 
+        # we can check for ACKs on restart to determine which artifacts have been sent and detected by the stream and which ones need to be resent.
+        # the ACK is simply a "detected" entry for that artifact's hash.
+
         for transport in self.transports:
             unsent_artifacts = self.get_unsent_artifacts(transport_name=transport.name)
             self.logger.info(f"Producer {self.name} restarting. Found {len(unsent_artifacts)} unsent artifacts for transport {transport.name}. Resending them.")
             
-            '''
             for artifact_path, artifact_hash in unsent_artifacts:
-                transport.send(artifact_path, artifact_hash)
-            '''
+                self.register_artifact_send(transport_name=transport.name, filepath=artifact_path, artifact_hash=artifact_hash)
+                transport.send(artifact_path)
     
     def register_artifact_send(self, transport_name: str, filepath: str, artifact_hash: str) -> None:
         with self.conn_manager.write_cursor() as cursor:
@@ -89,6 +94,8 @@ class Producer:
                 VALUES (?, ?, ?, ?);
             """
             cursor.execute(query, (artifact_hash, transport_name, "sent", filepath))
+
+        self.logger.info(f"Producer {self.name} sent artifact {filepath} with hash {artifact_hash} via transport {transport_name} in run {self.run_id}")
 
     def get_unsent_artifacts(self, transport_name: str) -> List[tuple]:
         """
@@ -100,10 +107,10 @@ class Producer:
                 SELECT artifact_path, artifact_hash FROM {self.local_table_name} 
                 WHERE artifact_hash NOT IN (
                     SELECT artifact_hash FROM {self.global_usage_table_name} 
-                    WHERE state = 'sent' AND node_name = ?
+                    WHERE state = 'detected'
                 );
             """
-            cursor.execute(query, (transport_name,))
+            cursor.execute(query, ())
             return cursor.fetchall()
 
     def register_created_artifacts(self) -> None:
@@ -142,9 +149,10 @@ class Producer:
             """
             cursor.executemany(query, entries)
         
-        for transport in self.transports:
-            transport.send(final_path)
-            self.register_artifact_send(transport_name=transport.name, filepath=final_path, artifact_hash=artifact_hash)
+        for artifact_hash, _, _, _, final_path in entries:
+            for transport in self.transports:
+                self.register_artifact_send(transport_name=transport.name, filepath=final_path, artifact_hash=artifact_hash)
+                transport.send(final_path)
 
     def hash_artifact(self, filepath: str) -> str:
         sha256 = hashlib.sha256()
