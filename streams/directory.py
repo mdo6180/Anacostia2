@@ -61,8 +61,13 @@ class DirectoryStream:
         """
         Register the artifact in the local stream table and the global usage table in the DB.
         User implemented method (call super().register_artifact() if overriding).
-        Remember to register the artifact in both the local stream table and the global usage table and make sure all information in local table is accurate.
+        If overriding, remember to add whatever additional data to fill out the additional columns in the local table 
+        if you added additional columns in the setup() method.
         """
+        self.register_artifact_local(artifact_hash, filepath)
+        self.register_artifact_global(artifact_hash, filepath)
+    
+    def register_artifact_local(self, artifact_hash: str, filepath: str = None) -> None:
         with self.conn_manager.write_cursor() as cursor:
             query: sql = f"""
                 INSERT OR IGNORE INTO {self.local_table_name} 
@@ -70,8 +75,6 @@ class DirectoryStream:
                 VALUES (?, ?, ?);
             """
             cursor.execute(query, (filepath, artifact_hash, "sha256"))
-        
-        self.register_artifact_global(artifact_hash, filepath)
 
     def register_artifact_global(self, artifact_hash: str, filepath: str = None) -> None:
         with self.conn_manager.write_cursor() as cursor:
@@ -102,9 +105,9 @@ class DirectoryStream:
                 raise ValueError(f"Artifact with hash {artifact_hash} not found in local stream table.")
             return result[0]
 
-    def hash_file(self, filepath: str) -> str:
+    def hash_artifact(self, filepath: str) -> str:
         """
-        Hash the file using the specified hash algorithm and return the hash value. User implemented method.
+        Hash the artifact using the specified hash algorithm and return the hash value. User implemented method.
         """
         sha256 = hashlib.sha256()
         with open(filepath, 'rb') as f:
@@ -145,7 +148,7 @@ class DirectoryStream:
                     continue
 
                 # if the file is new, hash it, register it in the DB, and yield its content and hash
-                file_hash = self.hash_file(path)
+                file_hash = self.hash_artifact(path)
 
                 self.register_artifact(path, file_hash)
 
