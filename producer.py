@@ -68,19 +68,8 @@ class Producer:
             if os.path.isfile(path):
                 os.remove(path)
         
-        # on restart, check which files in the producer's directory have been sent.
-        # if the file has not been sent, then we send it. 
-        # if the file has been sent, check if the file has been detected by a stream.
-        # if the file has been sent but not detected by a stream, then we resend it 
-        # (this handles the case where the producer sent the artifact but crashed before it could log the send event in the DB, 
-        # so the consumer is unaware that the artifact has been sent and is waiting for it to be sent).
-
-        # in the future, we need to make sure the Stream monitoring the transport's directory detects the artifact and sends the acknowledgment 
-        # back to the producer before we can mark the artifact as sent in the DB. 
-        # This way, if the producer crashes after sending the artifact but before receiving the ACK, 
-        # we can check for ACKs on restart to determine which artifacts have been sent and detected by the stream and which ones need to be resent.
-        # the ACK is simply a "detected" entry for that artifact's hash.
-
+        # on restart, check which files in the producer's directory has not been detected by the transport's destination stream and send/resend it.
+        # doing so handles the following two cases: 1) the destination stream has not received it or 2) the producer has not sent it yet before shutting off. 
         for transport in self.transports:
             unsent_artifacts = self.get_unsent_artifacts(dest_stream_name=transport.dest_stream_name)
             self.logger.info(f"Producer {self.name} restarting. Found {len(unsent_artifacts)} unsent artifacts for transport {transport.name}. Resending them.")
