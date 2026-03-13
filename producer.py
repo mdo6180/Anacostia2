@@ -23,11 +23,6 @@ class Producer:
             self.logger.info(f"Directory {directory} does not exist. Creating it.")
             os.makedirs(directory)
 
-        self.staging_directory = os.path.join(directory, ".staging")
-        if os.path.exists(self.staging_directory) is False:
-            self.logger.info(f"Temporary directory {self.staging_directory} does not exist. Creating it.")
-            os.makedirs(self.staging_directory)
-
         self.global_usage_table_name = "artifact_usage_events"
         self.local_table_name = f"{self.name}_local"
 
@@ -48,6 +43,14 @@ class Producer:
                 );
             """
             cursor.execute(query)
+
+    def set_db_folder(self, db_folder: str):
+        self.db_folder = db_folder
+        
+        self.staging_directory = os.path.join(db_folder, self.name)
+        if os.path.exists(self.staging_directory) is False:
+            self.logger.info(f"Temporary directory {self.staging_directory} does not exist. Creating it.")
+            os.makedirs(self.staging_directory)
 
     def get_staging_directory(self) -> str:
         return self.staging_directory

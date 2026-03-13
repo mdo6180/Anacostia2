@@ -71,10 +71,6 @@ file_transport = FileSystemTransport(name="file_transport", dest_directory=trans
 # example producer to write combined results and send to transport
 combined_producer = Producer(name="combined_producer", directory=output_combined_path, transports=[file_transport], logger=logger)
 
-odd_staging_path = odd_producer.get_staging_directory()
-even_staging_path = even_producer.get_staging_directory()
-combined_staging_path = combined_producer.get_staging_directory()
-
 node = Node(name="TestNode", consumers=[stream_consumer_odd, stream_consumer_even], producers=[odd_producer, even_producer, combined_producer], logger=logger)
 
 @node.restart
@@ -83,6 +79,14 @@ def restart_logic():
 
 @node.entrypoint
 def node_func():
+    # IMPORTANT: .get_staging_directory() must be called after the producer has been initialized with the DB connection in the node's setup() method, 
+    # since the staging directory is created inside the DB folder.
+    # Thus, best practice is to call .get_staging_directory() inside the node's entrypoint function, 
+    # because the producer's setup() method will be called before the entrypoint function.
+    odd_staging_path = odd_producer.get_staging_directory()
+    even_staging_path = even_producer.get_staging_directory()
+    combined_staging_path = combined_producer.get_staging_directory()
+
     for bundle1, bundle2 in zip(stream_consumer_odd, stream_consumer_even):
         with node.stage_run():
             for i, (item1, item2) in enumerate(zip(bundle1, bundle2)):
@@ -115,12 +119,13 @@ combined_consumer = Consumer(
     logger=logger
 )
 model_registry_producer = Producer(name="model_registry_producer", directory=model_registry_path, logger=logger)
-model_registry_staging_path = model_registry_producer.get_staging_directory()
 
 node2 = Node(name="ModelRetrainingNode", consumers=[combined_consumer], producers=[model_registry_producer], logger=logger)
 
 @node2.entrypoint
 def node2_func():
+    model_registry_staging_path = model_registry_producer.get_staging_directory()
+
     for bundle in combined_consumer:
         with node2.stage_run():
             for i, item in enumerate(bundle):

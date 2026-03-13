@@ -134,12 +134,6 @@ class DirectoryStream:
             # since modification = creation/arrival time because we assume files are written once, then never modified again.
             for filename in sorted(os.listdir(self.directory), key=lambda e: os.stat(os.path.join(self.directory, e)).st_mtime):
 
-                # skip temp files, Anacostia Producer creates temp files inside the .staging folder 
-                # before moving them to the final location in the producer's directory, 
-                # so we can use this convention to ignore any temp files that are not yet ready to be consumed
-                if filename.startswith(".staging"):
-                    continue
-
                 path = os.path.join(self.directory, filename)
                 if not os.path.isfile(path):
                     continue

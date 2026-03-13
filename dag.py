@@ -81,6 +81,7 @@ class Graph:
                 consumer.stream.setup()
                 
             for producer in node.producers:
+                producer.set_db_folder(self.db_folder)
                 producer.initialize_db_connection(db_path)
                 producer.setup()
 
