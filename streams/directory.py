@@ -2,8 +2,7 @@ import hashlib
 from logging import Logger
 import os
 import time
-from typing import Any, Generator, Tuple
-from datetime import datetime
+from typing import Any, Generator
 
 from utils.connection import ConnectionManager
 
@@ -124,6 +123,7 @@ class DirectoryStream:
     
     def __iter__(self) -> Generator[Any, Any, str]:
         """
+        Poll the resource for new artifacts, register the artifacts into the DB, and yield their content and hashes.
         Yields single items: (content, file_hash). User implemented method.
         """
         while True:
