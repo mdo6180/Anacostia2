@@ -64,7 +64,9 @@ odd_producer = Producer(name="odd_producer", directory=output_path1, logger=logg
 even_producer = Producer(name="even_producer", directory=output_path2, logger=logger)   # example producer
 
 # example transport to move artifacts from producers to the transport's destination directory
-file_transport = FileSystemTransport(name="file_transport", dest_directory=transport_dest_path, logger=logger)
+# Note: make sure the dest_stream_name corresponds to the name of the stream monitoring the destination directory for this transport 
+# (in this case, "combined_folder") so that the stream can correctly track the artifacts in its local table and the global usage table in the DB.
+file_transport = FileSystemTransport(name="file_transport", dest_directory=transport_dest_path, dest_stream_name="combined_folder", logger=logger)
 
 # example producer to write combined results and send to transport
 combined_producer = Producer(name="combined_producer", directory=output_combined_path, transports=[file_transport], logger=logger)

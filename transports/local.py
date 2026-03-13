@@ -6,9 +6,10 @@ sql = str   # alias of the str type for syntax highlighting using the Python Inl
 
 
 class FileSystemTransport:
-    def __init__(self, name: str, dest_directory: str, logger: Logger = None):
+    def __init__(self, name: str, dest_directory: str, dest_stream_name: str, logger: Logger = None):
         self.name = name
         self.logger = logger
+        self.dest_stream_name = dest_stream_name
 
         self.dest_directory = dest_directory
         if os.path.exists(dest_directory) is False:

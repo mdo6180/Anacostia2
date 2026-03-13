@@ -1,6 +1,12 @@
+from logging import Logger
+
+
 class HTTPSTransport:
-    def __init__(self, url: str):
-        self.url = url
+    def __init__(self, name: str, dest_url: str, dest_stream_name="combined_folder", logger: Logger = None):
+        self.name = name
+        self.dest_url = dest_url
+        self.dest_stream_name = dest_stream_name
+        self.logger = logger
     
     def send(self, filepath: str):
         pass

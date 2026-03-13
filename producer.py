@@ -79,7 +79,7 @@ class Producer:
         # the ACK is simply a "detected" entry for that artifact's hash.
 
         for transport in self.transports:
-            unsent_artifacts = self.get_unsent_artifacts(transport_name=transport.name)
+            unsent_artifacts = self.get_unsent_artifacts(dest_stream_name=transport.dest_stream_name)
             self.logger.info(f"Producer {self.name} restarting. Found {len(unsent_artifacts)} unsent artifacts for transport {transport.name}. Resending them.")
             
             for artifact_path, artifact_hash in unsent_artifacts:
@@ -97,7 +97,7 @@ class Producer:
 
         self.logger.info(f"Producer {self.name} sent artifact {filepath} with hash {artifact_hash} via transport {transport_name} in run {self.run_id}")
 
-    def get_unsent_artifacts(self, transport_name: str) -> List[tuple]:
+    def get_unsent_artifacts(self, dest_stream_name: str) -> List[tuple]:
         """
         Get the list of artifacts that have been created by the producer but have not been sent by the transport yet.
         This is used on producer restart to determine which artifacts still need to be sent by the transport.
@@ -107,10 +107,10 @@ class Producer:
                 SELECT artifact_path, artifact_hash FROM {self.local_table_name} 
                 WHERE artifact_hash NOT IN (
                     SELECT artifact_hash FROM {self.global_usage_table_name} 
-                    WHERE state = 'detected'
+                    WHERE state = 'detected' AND node_name = ?
                 );
             """
-            cursor.execute(query, ())
+            cursor.execute(query, (dest_stream_name,))
             return cursor.fetchall()
 
     def register_created_artifacts(self) -> None:
