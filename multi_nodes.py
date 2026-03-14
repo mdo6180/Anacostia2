@@ -129,11 +129,15 @@ def node2_func():
     for bundle in combined_consumer:
         with node2.stage_run():
             for i, item in enumerate(bundle):
-                model_name = f"model_{node2.run_id}.txt"
-                with open(os.path.join(model_registry_staging_path, model_name), "a") as file:
+
+                subdir = os.path.join(model_registry_staging_path, f"model_dir_{node2.run_id}")
+                os.makedirs(subdir, exist_ok=True)
+                model_path = os.path.join(subdir, f"model_{node2.run_id}.txt")
+
+                with open(model_path, "a") as file:
                     file.write(f"Model retrained with:\n")
 
-                logger.info(f"ModelRetrainingNode writing: 'Model retrained with:\n' to {model_name} in run {node2.run_id}")
+                logger.info(f"ModelRetrainingNode writing: 'Model retrained with:' to {model_path} in run {node2.run_id}")
                 time.sleep(1)   # checkpoint
 
                 # simulate failure at run 1, iter 0 (first iteration of the second run)
@@ -142,9 +146,9 @@ def node2_func():
                     stop_if(current_run=node2.run_id, current_iter=i, target_run=1, target_iter=0, mode="sigint", logger=logger) 
                     #model_registry_producer.create_artifact(filename=model_name, content=f"restarting\n")
 
-                with open(os.path.join(model_registry_staging_path, model_name), "a") as file:
+                with open(model_path, "a") as file:
                     file.write(f"{item}\n")
-                logger.info(f"ModelRetrainingNode writing: '{item}\n' to {model_name} in run {node2.run_id}")
+                logger.info(f"ModelRetrainingNode writing: '{item}' to {model_path} in run {node2.run_id}")
                 time.sleep(1)   # checkpoint
 
                 """ 
