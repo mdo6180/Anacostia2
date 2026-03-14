@@ -90,6 +90,10 @@ def node_func():
     even_staging_path = even_producer.get_staging_directory()
     combined_staging_path = combined_producer.get_staging_directory()
 
+    # Note: all code that comes before this for loop will be executed only on pipeline start and restart, but not on subsequent runs. 
+    # All code inside this for loop will be executed on every run, including the first run and subsequent runs after restart. 
+    # So if you want some code to be executed only on restart but not on the first run, 
+    # you can check if node.run_id == 0 to determine if it's the first run or a restart, and execute the code accordingly.
     for bundle1, bundle2 in zip(stream_consumer_odd, stream_consumer_even):
         with node.stage_run():
             for i, (item1, item2) in enumerate(zip(bundle1, bundle2)):
