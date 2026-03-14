@@ -114,7 +114,7 @@ class Producer:
             if path.is_dir():
                 artifact_hash = self.hash_directory(path)
             elif path.is_file():
-                artifact_hash = self.hash_artifact(path)
+                artifact_hash = self.hash_file(path)
             else:
                 raise ValueError(f"Unsupported file type for artifact: {path}")
 
@@ -146,7 +146,7 @@ class Producer:
                 self.register_artifact_send(transport_name=transport.name, filepath=final_path, artifact_hash=artifact_hash)
                 transport.send(final_path, artifact_hash)
 
-    def hash_artifact(self, filepath: str) -> str:
+    def hash_file(self, filepath: str) -> str:
         sha256 = hashlib.sha256()
         with open(filepath, 'rb') as f:
             while chunk := f.read(self.hash_chunk_size):
