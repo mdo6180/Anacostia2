@@ -2,6 +2,8 @@ from logging import Logger
 import os
 import hashlib
 from typing import List
+from pathlib import Path
+import shutil
 
 from utils.connection import ConnectionManager
 
@@ -108,22 +110,19 @@ class Producer:
 
     def register_created_artifacts(self) -> None:
         entries = []
-        for path in os.listdir(self.staging_directory):
-            full_path = os.path.join(self.staging_directory, path)
-            if os.path.isfile(full_path):
-                # hash the artifact
-                artifact_hash = self.hash_artifact(full_path)
+        for path in Path(self.staging_directory).iterdir():
+            if path.is_dir():
+                artifact_hash = self.hash_directory(path)
+            elif path.is_file():
+                artifact_hash = self.hash_artifact(path)
+            else:
+                raise ValueError(f"Unsupported file type for artifact: {path}")
 
-                # move to final location in the producer's directory
-                relative_path = os.path.relpath(full_path, self.staging_directory)   # /producer_directory/.staging/subdir/filename.txt -> /subdir/filename.txt
-                final_path = os.path.join(self.directory, relative_path)        # /producer_directory/subdir/filename.txt
-                os.makedirs(os.path.dirname(final_path), exist_ok=True)         # create /producer_directory/subdir if it doesn't exist
-                os.replace(full_path, final_path)                                    # atomic publish to /producer_directory/subdir/filename.txt
+            dest_path = Path(self.directory) / f"{path.name}"
+            shutil.move(path, dest_path)
 
-                # add entry to local producer table and global usage table with state "created". 
-                # The consumer will later update the state to "in_use" when it starts using the artifact and then to "used" when it's done with the artifact.
-                entries.append((artifact_hash, self.name, self.run_id, "created", final_path))
-                self.logger.info(f"Producer {self.name} registering created artifact {final_path} with hash {artifact_hash} in run {self.run_id}")
+            entries.append((artifact_hash, self.name, self.run_id, "created", str(dest_path)))
+            self.logger.info(f"Producer {self.name} registering created artifact {dest_path} with hash {artifact_hash} in run {self.run_id}")
 
         with self.conn_manager.write_cursor() as cursor:
             query: sql = f"""
@@ -153,3 +152,39 @@ class Producer:
             while chunk := f.read(self.hash_chunk_size):
                 sha256.update(chunk)
         return sha256.hexdigest()
+
+    def hash_directory(self, directory: str) -> str:
+        """
+        Compute a deterministic SHA256 hash of a directory and all its contents.
+
+        Hash includes:
+        - relative file paths
+        - file contents
+
+        Files are processed in sorted order to ensure determinism.
+        """
+
+        root = Path(directory).resolve()
+
+        if not root.is_dir():
+            raise ValueError(f"{directory} is not a directory")
+
+        hasher = hashlib.sha256()
+
+        # Walk files in deterministic order
+        for path in sorted(root.rglob("*")):
+            if path.is_file():
+                rel_path = path.relative_to(root)
+
+                # Hash relative path first (prevents rename collisions)
+                hasher.update(str(rel_path).encode("utf-8"))
+                hasher.update(b"\0")
+
+                # Hash file contents
+                with open(path, "rb") as f:
+                    while chunk := f.read(self.hash_chunk_size):
+                        hasher.update(chunk)
+
+                hasher.update(b"\0")
+
+        return hasher.hexdigest()

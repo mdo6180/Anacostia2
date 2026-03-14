@@ -24,7 +24,6 @@ class Node(threading.Thread, ABC):
         self.logger = logger
         
         self._entrypoint = None
-        self._restart = None
         
         self.global_usage_table_name = "artifact_usage_events"
 
@@ -112,33 +111,6 @@ class Node(threading.Thread, ABC):
         except Exception as e:
             self.logger.error(f"Error in node {self.name} during run {self.run_id}: {e}\n{traceback.format_exc()}")
 
-    def restart(self, func: Callable[[], None]):
-        # 🔒 Enforce exactly ONE restart
-        if self._restart is not None:
-            prev_file = inspect.getsourcefile(self._restart)
-            new_file = inspect.getsourcefile(func)
-
-            prev_line = inspect.getsourcelines(self._restart)[1]
-            new_line = inspect.getsourcelines(func)[1]
-
-            prev_name = os.path.basename(prev_file) if prev_file else "<unknown>"
-            new_name = os.path.basename(new_file) if new_file else "<unknown>"
-
-            raise RuntimeError(
-                f"Node '{self.name}' already has restart '{self._restart.__name__}' "
-                f"(defined in {prev_name}:{prev_line}). "
-                f"Attempted second restart '{func.__name__}' "
-                f"(defined in {new_name}:{new_line})."
-            )
-
-        self._restart = func
-
-        @wraps(func)
-        def wrapper():
-            return func()
-
-        return wrapper
-
     def entrypoint(self, func: Callable[[], None]):
         # 🔒 Enforce exactly ONE entrypoint
         if self._entrypoint is not None:
@@ -185,9 +157,6 @@ class Node(threading.Thread, ABC):
             for producer in self.producers:
                 producer.restart_producer()
 
-            if self._restart is not None:
-                self._restart()
-        
         else:
             # upon restart, if the latest run has not ended, resume from that run
             self.set_run_id(latest_run_id)
@@ -203,9 +172,6 @@ class Node(threading.Thread, ABC):
             for producer in self.producers:
                 producer.restart_producer()
 
-            if self._restart is not None:
-                self._restart()
-        
         if self._entrypoint is None:
             raise RuntimeError(f"No entrypoint registered for node {self.name}. Use @node.entrypoint")
 

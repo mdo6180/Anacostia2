@@ -73,12 +73,15 @@ combined_producer = Producer(name="combined_producer", directory=output_combined
 
 node = Node(name="TestNode", consumers=[stream_consumer_odd, stream_consumer_even], producers=[odd_producer, even_producer, combined_producer], logger=logger)
 
-@node.restart
-def restart_logic():
-    logger.info(f"Node {node.name} executing custom restart logic for run {node.run_id}")
-
 @node.entrypoint
 def node_func():
+    if node.run_id == 0:
+        # if it's the first run (i.e. if it's the first time this pipeline has ever been ran), execute the normal entrypoint logic
+        logger.info(f"Node {node.name} starting entrypoint function for run {node.run_id}")
+    else:
+        # if it's a restart, execute custom logic before resuming the entrypoint function
+        logger.info(f"Node {node.name} executing custom restart logic for run {node.run_id}")
+
     # IMPORTANT: .get_staging_directory() must be called after the producer has been initialized with the DB connection in the node's setup() method, 
     # since the staging directory is created inside the DB folder.
     # Thus, best practice is to call .get_staging_directory() inside the node's entrypoint function, 
@@ -124,6 +127,7 @@ node2 = Node(name="ModelRetrainingNode", consumers=[combined_consumer], producer
 
 @node2.entrypoint
 def node2_func():
+    logger.info(f"Node {node2.name} starting entrypoint function for run {node2.run_id}")
     model_registry_staging_path = model_registry_producer.get_staging_directory()
 
     for bundle in combined_consumer:
