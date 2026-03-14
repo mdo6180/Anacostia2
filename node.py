@@ -110,8 +110,7 @@ class Node(threading.Thread, ABC):
             self.set_run_id(self.run_id + 1)  # prepare for next run
 
         except Exception as e:
-            self.logger.error(f"Error in node {self.name} during run {self.run_id}: {e}")
-            # log the error in DB here, used to display run error on GUI
+            self.logger.error(f"Error in node {self.name} during run {self.run_id}: {e}\n{traceback.format_exc()}")
 
     def restart(self, func: Callable[[], None]):
         # 🔒 Enforce exactly ONE restart
