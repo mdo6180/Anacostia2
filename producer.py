@@ -36,6 +36,7 @@ class Producer:
                     artifact_index INTEGER PRIMARY KEY AUTOINCREMENT,
                     artifact_path TEXT NOT NULL,
                     artifact_hash TEXT NOT NULL,
+                    node_name TEXT NOT NULL,
                     timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
                     hash_algorithm TEXT,
                     UNIQUE(artifact_path, artifact_hash),
@@ -76,7 +77,7 @@ class Producer:
             
             for artifact_path, artifact_hash in unsent_artifacts:
                 self.register_artifact_send(transport_name=transport.name, filepath=artifact_path, artifact_hash=artifact_hash)
-                transport.send(artifact_path)
+                transport.send(artifact_path, artifact_hash)
     
     def register_artifact_send(self, transport_name: str, filepath: str, artifact_hash: str) -> None:
         with self.conn_manager.write_cursor() as cursor:
@@ -127,10 +128,10 @@ class Producer:
         with self.conn_manager.write_cursor() as cursor:
             query: sql = f"""
                 INSERT OR IGNORE INTO {self.local_table_name} 
-                (artifact_path, artifact_hash, hash_algorithm) 
-                VALUES (?, ?, ?);
+                (artifact_path, artifact_hash, node_name, hash_algorithm) 
+                VALUES (?, ?, ?, ?);
             """
-            local_entries = [(final_path, artifact_hash, "sha256") for artifact_hash, _, _, _, final_path in entries]
+            local_entries = [(final_path, artifact_hash, self.name, "sha256") for artifact_hash, _, _, _, final_path in entries]
             cursor.executemany(query, local_entries)
         
         with self.conn_manager.write_cursor() as cursor:
@@ -144,7 +145,7 @@ class Producer:
         for artifact_hash, _, _, _, final_path in entries:
             for transport in self.transports:
                 self.register_artifact_send(transport_name=transport.name, filepath=final_path, artifact_hash=artifact_hash)
-                transport.send(final_path)
+                transport.send(final_path, artifact_hash)
 
     def hash_artifact(self, filepath: str) -> str:
         sha256 = hashlib.sha256()

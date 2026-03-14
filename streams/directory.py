@@ -49,6 +49,7 @@ class DirectoryStream:
                     artifact_index INTEGER PRIMARY KEY AUTOINCREMENT,
                     artifact_path TEXT NOT NULL,
                     artifact_hash TEXT NOT NULL,
+                    node_name TEXT NOT NULL,
                     timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
                     hash_algorithm TEXT,
                     UNIQUE(artifact_path, artifact_hash),
@@ -65,25 +66,26 @@ class DirectoryStream:
         if you added additional columns in the setup() method.
         """
         self.register_artifact_local(artifact_hash, filepath)
-        self.register_artifact_global(artifact_hash, filepath)
+        self.register_artifact_global(artifact_hash)
     
     def register_artifact_local(self, artifact_hash: str, filepath: str = None) -> None:
         with self.conn_manager.write_cursor() as cursor:
             query: sql = f"""
                 INSERT OR IGNORE INTO {self.local_table_name} 
-                (artifact_path, artifact_hash, hash_algorithm) 
-                VALUES (?, ?, ?);
+                (artifact_path, artifact_hash, node_name, hash_algorithm) 
+                VALUES (?, ?, ?, ?);
             """
-            cursor.execute(query, (filepath, artifact_hash, "sha256"))
+            cursor.execute(query, (filepath, artifact_hash, self.name, "sha256"))
 
-    def register_artifact_global(self, artifact_hash: str, filepath: str = None) -> None:
+    def register_artifact_global(self, artifact_hash: str) -> None:
+        artifact_path = self.get_artifact_path(artifact_hash)
         with self.conn_manager.write_cursor() as cursor:
             query: sql = f"""
                 INSERT OR IGNORE INTO {self.global_usage_table_name} 
                 (artifact_hash, node_name, state, details) 
                 VALUES (?, ?, ?, ?);
             """
-            cursor.execute(query, (artifact_hash, self.name, "detected", filepath))
+            cursor.execute(query, (artifact_hash, self.name, "detected", artifact_path))
             # self.logger.info(f"Registered artifact {filepath} with hash {artifact_hash} in stream {self.name} at {timestamp}")
     
     def is_artifact_registered(self, filepath: str) -> bool:
