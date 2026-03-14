@@ -94,6 +94,7 @@ def node_func():
     # All code inside this for loop will be executed on every run, including the first run and subsequent runs after restart. 
     # So if you want some code to be executed only on restart but not on the first run, 
     # you can check if node.run_id == 0 to determine if it's the first run or a restart, and execute the code accordingly.
+    # Restart logic example: load previously trained model and the state of the optimizer from the model registry and continue training in the current run.
     for bundle1, bundle2 in zip(stream_consumer_odd, stream_consumer_even):
         with node.stage_run():
             for i, (item1, item2) in enumerate(zip(bundle1, bundle2)):
