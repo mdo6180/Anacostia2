@@ -3,6 +3,7 @@ import os
 import argparse
 import shutil
 import time
+from pathlib import Path
 
 from streams.directory import DirectoryStream
 from producer import Producer
@@ -11,6 +12,9 @@ from transports.local import FileSystemTransport
 from node import Node
 from dag import Graph
 from utils.debug import stop_if
+
+sql = str   # alias of the str type for syntax highlighting using the Python Inline Source Syntax Highlighting extension by Sam Willis in VSCode.
+
 
 
 tests_path = "./testing_artifacts"
@@ -63,10 +67,29 @@ stream_consumer_even = Consumer(
 odd_producer = Producer(name="odd_producer", directory=output_path1, logger=logger)   # example producer
 even_producer = Producer(name="even_producer", directory=output_path2, logger=logger)   # example producer
 
+class FolderTransport(FileSystemTransport):
+    def __init__(self, name: str, dest_directory: str, dest_stream_name: str, logger: logging.Logger = None):
+        super().__init__(name, dest_directory, dest_stream_name, logger)
+
+    def send(self, folderpath: str, artifact_hash: str) -> None:
+        foldername = os.path.basename(folderpath)
+        dest_path = os.path.join(self.dest_directory, foldername)
+        
+        # the protocol to actually send the artifact
+        shutil.copytree(folderpath, dest_path)
+
+        with self.conn_manager.write_cursor() as cursor:
+            query: sql = f"""
+                INSERT OR IGNORE INTO {self.local_table_name} 
+                (artifact_src_path, artifact_dest_path, artifact_hash, node_name, hash_algorithm)
+                VALUES (?, ?, ?, ?, ?);
+            """
+            cursor.execute(query, (folderpath, dest_path, artifact_hash, self.name, "sha256"))
+
 # example transport to move artifacts from producers to the transport's destination directory
 # Note: make sure the dest_stream_name corresponds to the name of the stream monitoring the destination directory for this transport 
 # (in this case, "combined_folder") so that the stream can correctly track the artifacts in its local table and the global usage table in the DB.
-file_transport = FileSystemTransport(name="file_transport", dest_directory=transport_dest_path, dest_stream_name="combined_folder", logger=logger)
+file_transport = FolderTransport(name="file_transport", dest_directory=transport_dest_path, dest_stream_name="combined_folder", logger=logger)
 
 # example producer to write combined results and send to transport
 combined_producer = Producer(name="combined_producer", directory=output_combined_path, transports=[file_transport], logger=logger)
@@ -115,15 +138,32 @@ def node_func():
                     stop_if(current_run=node.run_id, current_iter=i, target_run=1, target_iter=0, mode="sigint", logger=logger) 
                 """
                 
-                with open(os.path.join(combined_staging_path, f"processed_combined_{node.run_id}.txt"), "a") as file:
+                subdir = os.path.join(combined_staging_path, f"combined_dir_{node.run_id}")
+                os.makedirs(subdir, exist_ok=True)
+                file_path = os.path.join(subdir, f"processed_combined_{node.run_id}.txt")
+                with open(file_path, "a") as file:
                     file.write(f"Processed {item1} and {item2} from combined streams\n")
                 
                 time.sleep(1)   # checkpoint 3
 
 
+class CombinedStream(DirectoryStream):
+    def __init__(self, name: str, directory: str, poll_interval: float = 0.1, hash_chunk_size: int = 1_048_576, logger: logging.Logger = None):
+        super().__init__(name, directory, poll_interval, hash_chunk_size, logger)
+
+    def load_artifact(self, artifact_hash):
+        folder_path = self.get_artifact_path(artifact_hash)
+        folder_path = Path(folder_path)
+        for filename in folder_path.iterdir():
+            if filename.is_file():
+                with open(filename, "r") as file:
+                    content = file.read()
+                return content
+
+
 combined_consumer = Consumer(
     name="combined_consumer", 
-    stream=DirectoryStream(name="combined_folder", directory=transport_dest_path, logger=logger), 
+    stream=CombinedStream(name="combined_folder", directory=transport_dest_path, logger=logger), 
     logger=logger
 )
 model_registry_producer = Producer(name="model_registry_producer", directory=model_registry_path, logger=logger)

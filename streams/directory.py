@@ -3,6 +3,7 @@ from logging import Logger
 import os
 import time
 from typing import Any, Generator
+from pathlib import Path
 
 from utils.connection import ConnectionManager
 
@@ -117,6 +118,42 @@ class DirectoryStream:
                 sha256.update(chunk)
         return sha256.hexdigest()
     
+    def hash_directory(self, directory: str) -> str:
+        """
+        Compute a deterministic SHA256 hash of a directory and all its contents.
+
+        Hash includes:
+        - relative file paths
+        - file contents
+
+        Files are processed in sorted order to ensure determinism.
+        """
+
+        root = Path(directory).resolve()
+
+        if not root.is_dir():
+            raise ValueError(f"{directory} is not a directory")
+
+        hasher = hashlib.sha256()
+
+        # Walk files in deterministic order
+        for path in sorted(root.rglob("*")):
+            if path.is_file():
+                rel_path = path.relative_to(root)
+
+                # Hash relative path first (prevents rename collisions)
+                hasher.update(str(rel_path).encode("utf-8"))
+                hasher.update(b"\0")
+
+                # Hash file contents
+                with open(path, "rb") as f:
+                    while chunk := f.read(self.hash_chunk_size):
+                        hasher.update(chunk)
+
+                hasher.update(b"\0")
+
+        return hasher.hexdigest()
+
     def load_artifact(self, artifact_hash: str) -> str:
         """
         Load and return the content of the artifact given its hash. User implemented method.
@@ -131,26 +168,34 @@ class DirectoryStream:
         Poll the resource for new artifacts, register the artifacts into the DB, and yield their content and hashes.
         Yields single items: (content, file_hash). User implemented method.
         """
+        directory = Path(self.directory)
+
         while True:
-            # sort files by last modification time to ensure chronological order, and ignore any temp files that are not yet ready to be consumed
-            # since modification = creation/arrival time because we assume files are written once, then never modified again.
-            for filename in sorted(os.listdir(self.directory), key=lambda e: os.stat(os.path.join(self.directory, e)).st_mtime):
+            # sort files by last modification time
+            for path in sorted(directory.iterdir(), key=lambda p: p.stat().st_mtime):
 
-                path = os.path.join(self.directory, filename)
-                if not os.path.isfile(path):
+                path_str = str(path)
+
+                # skip artifacts already registered
+                if self.is_artifact_registered(path_str):
                     continue
 
-                if self.is_artifact_registered(path):  # check if we've already seen this artifact in the DB, if so skip it
-                    continue
+                # hash and register artifact
+                if path.is_file():
+                    file_hash = self.hash_artifact(path_str)
+                    self.register_artifact(path_str, file_hash)
+                
+                elif path.is_dir():
+                    file_hash = self.hash_directory(path_str)
+                    self.register_artifact(path_str, file_hash)
+                
+                else:
+                    raise ValueError(f"Unsupported artifact type for path {path_str}")
 
-                # if the file is new, hash it, register it in the DB, and yield its content and hash
-                file_hash = self.hash_artifact(path)
-
-                self.register_artifact(path, file_hash)
-
-                # Read file content, user will implement their own logic to extract the content from the artifact
+                # user-defined content loader
                 content = self.load_artifact(file_hash)
+
                 yield content, file_hash
 
-            # IMPORTANT: put this sleep here so the polling doesn't block the main thread.
+            # IMPORTANT: prevent polling from blocking main thread
             time.sleep(self.poll_interval)

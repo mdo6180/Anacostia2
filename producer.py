@@ -6,6 +6,7 @@ from pathlib import Path
 import shutil
 
 from utils.connection import ConnectionManager
+from transports.local import FileSystemTransport
 
 sql = str   # alias of the str type for syntax highlighting using the Python Inline Source Syntax Highlighting extension by Sam Willis in VSCode.
 
@@ -18,7 +19,7 @@ class Producer:
         self.logger = logger
         self.run_id = 0
 
-        self.transports = transports if transports is not None else []
+        self.transports: List[FileSystemTransport] = transports if transports is not None else []
     
         self.directory = directory
         if os.path.exists(directory) is False:
