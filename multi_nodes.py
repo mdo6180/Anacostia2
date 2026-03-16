@@ -180,7 +180,7 @@ def node2_func():
             for i, item in enumerate(bundle):
 
                 subdir = os.path.join(model_registry_staging_path, f"model_dir_{node2.run_id}")
-                os.makedirs(subdir, exist_ok=True)
+                os.makedirs(subdir, exist_ok=False)
                 model_path = os.path.join(subdir, f"model_{node2.run_id}.txt")
 
                 with open(model_path, "a") as file:
