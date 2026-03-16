@@ -68,14 +68,9 @@ class Producer:
     
     def restart_producer(self):
         # clear any temp files in the staging directory from previous runs, so that we don't have any leftover temp files when we start a new run
-        for filename in os.listdir(self.staging_directory):
-            path = os.path.join(self.staging_directory, filename)
-            if os.path.isfile(path):
-                self.logger.warning(f"Producer {self.name} found leftover file {path} in staging directory from previous run. Removing it.")
-                os.remove(path)
-            elif os.path.isdir(path):
-                self.logger.warning(f"Producer {self.name} found leftover directory {path} in staging directory from previous run. Removing it.")
-                shutil.rmtree(path)
+        self.logger.info(f"Producer {self.name} restarting. Clearing staging directory {self.staging_directory} of any leftover temp files from previous runs.")
+        shutil.rmtree(self.staging_directory)
+        self.initialize_staging_directory()
         
         # on restart, check which files in the producer's directory has not been detected by the transport's destination stream and send/resend it.
         # doing so handles the following two cases: 1) the destination stream has not received it or 2) the producer has not sent it yet before shutting off. 
