@@ -103,6 +103,10 @@ class Node(threading.Thread, ABC):
             
             yield
             
+            # committing artifacts at the end provides an advantage in that hashing takes place after work is done, 
+            # so we don't have to wait for hashing to complete before continuing the work.
+            # in the future, we can consider calling commit_artifacts() in another thread as soon as the producer creates the artifact, 
+            # so that we can do the hashing while the node starts working on the next run.
             self.commit_artifacts()   # mark artifacts as committed in the DB
             self.logger.info(f"\nNode {self.name} finished run {self.run_id}")    # end_run DB call in future
             self.conn_manager.end_run(self.name, self.run_id)   # end_run DB call
