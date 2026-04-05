@@ -172,6 +172,18 @@ node2 = Node(name="ModelRetrainingNode", consumers=[combined_consumer], producer
 
 @node2.entrypoint
 def node2_func():
+    with node2.conn_manager.write_cursor() as cursor:
+        query: sql = f"""
+            CREATE TABLE IF NOT EXISTS metrics (
+                run_id INT,
+                epoch INT,
+                accuracy FLOAT,
+                model_path TEXT,
+                model_hash TEXT
+            );
+        """
+        cursor.execute(query)
+
     logger.info(f"Node {node2.name} starting entrypoint function for run {node2.run_id}")
     model_registry_staging_path = model_registry_producer.get_staging_directory()
 
@@ -199,6 +211,10 @@ def node2_func():
                     file.write(f"{item}\n")
                 logger.info(f"ModelRetrainingNode writing: '{item}' to {model_path} in run {node2.run_id}")
                 time.sleep(1)   # checkpoint
+
+        # user can log metadata here after the run is done if they need the artifacts' hashes because hashes are only computed at the end of the run. 
+        # this is done by design because hashing large artifacts is quite time consuming; so it's better to finish the work for the run, then hash.
+        # but if the user does not need the artifacts' hashes, then they can log metadata during the run.  
 
                 """ 
         # simulate failure at run 1, iter 0 (first iteration of the second run)

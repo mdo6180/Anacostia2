@@ -73,6 +73,7 @@ class Graph:
         for node in self.nodes:
             # initialize DB connection for each node, its consumers, and producers
             node.set_db_path(db_path)
+            node.initialize_db_connection(db_path)
             node.setup()
 
             for consumer in node.consumers:
