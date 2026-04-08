@@ -31,19 +31,12 @@ class Node(threading.Thread, ABC):
         super().__init__(name=name, daemon=True)
     
         self.global_usage_table_name = "artifact_usage_events"
-        self.local_table_name = f"{self.name}_local"
 
     def set_db_path(self, db_path: str):
         self.db_path = db_path
 
     def setup(self):
-        with self.conn_manager.write_cursor() as cursor:
-            query: sql = f"""
-                CREATE TABLE IF NOT EXISTS {self.local_table_name} (
-                    run_id INTEGER
-                );
-            """
-            cursor.execute(query)
+        pass
 
     def initialize_db_connection(self, filename: str):
         self.conn_manager = ConnectionManager(db_path=filename, logger=self.logger)

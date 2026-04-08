@@ -161,6 +161,43 @@ class CombinedStream(DirectoryStream):
                 return content
 
 
+class ModelRetrainingNode(Node):
+    def __init__(self, name: str, consumers: list[Consumer], producers: list[Producer], logger: logging.Logger = None):
+        super().__init__(name, consumers, producers, logger)
+        self.metrics_table_name = f"{self.name}_metrics"
+
+    def setup(self):
+        with self.conn_manager.write_cursor() as cursor:
+            query: sql = f"""
+                CREATE TABLE IF NOT EXISTS {self.metrics_table_name} (
+                    run_id INT,
+                    epoch INT,
+                    accuracy FLOAT,
+                    model_path TEXT,
+                    model_hash TEXT
+                );
+                """
+            cursor.execute(query)
+    
+    def log_metrics(self, epoch: int, accuracy: float, model_path: str):
+        with self.conn_manager.write_cursor() as cursor:
+            query: sql = f"""
+                INSERT INTO {self.metrics_table_name} (run_id, epoch, accuracy, model_path, model_hash)
+                VALUES (?, ?, ?, ?, ?);
+                """
+            cursor.execute(query, (self.run_id, epoch, accuracy, model_path, None))
+    
+    def log_model_hash(self, model_path: str, model_hash: str) -> str:
+        with self.conn_manager.write_cursor() as cursor:
+            query: sql = f"""
+                UPDATE {self.metrics_table_name}
+                SET model_hash = ?
+                WHERE model_path = ?;
+            """
+            cursor.execute(query, (model_hash, model_path))
+        return model_hash
+
+
 combined_consumer = Consumer(
     name="combined_consumer", 
     stream=CombinedStream(name="combined_folder", directory=transport_dest_path, logger=logger), 
@@ -168,22 +205,10 @@ combined_consumer = Consumer(
 )
 model_registry_producer = Producer(name="model_registry_producer", directory=model_registry_path, logger=logger)
 
-node2 = Node(name="ModelRetrainingNode", consumers=[combined_consumer], producers=[model_registry_producer], logger=logger)
+node2 = ModelRetrainingNode(name="ModelRetrainingNode", consumers=[combined_consumer], producers=[model_registry_producer], logger=logger)
 
 @node2.entrypoint
 def node2_func():
-    with node2.conn_manager.write_cursor() as cursor:
-        query: sql = f"""
-            CREATE TABLE IF NOT EXISTS metrics (
-                run_id INT,
-                epoch INT,
-                accuracy FLOAT,
-                model_path TEXT,
-                model_hash TEXT
-            );
-        """
-        cursor.execute(query)
-
     logger.info(f"Node {node2.name} starting entrypoint function for run {node2.run_id}")
     model_registry_staging_path = model_registry_producer.get_staging_directory()
 
@@ -211,6 +236,8 @@ def node2_func():
                     file.write(f"{item}\n")
                 logger.info(f"ModelRetrainingNode writing: '{item}' to {model_path} in run {node2.run_id}")
                 time.sleep(1)   # checkpoint
+
+                node2.log_metrics(epoch=i, accuracy=0.8 + i*0.01, model_path=model_path)   # example metrics logging
 
         # user can log metadata here after the run is done if they need the artifacts' hashes because hashes are only computed at the end of the run. 
         # this is done by design because hashing large artifacts is quite time consuming; so it's better to finish the work for the run, then hash.
