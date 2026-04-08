@@ -1,0 +1,3 @@
+ALTER TABLE ModelRetrainingNode_model_retraining_local ADD COLUMN epoch INTEGER;
+
+ALTER TABLE ModelRetrainingNode_model_retraining_local ADD COLUMN accuracy REAL;
