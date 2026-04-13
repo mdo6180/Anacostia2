@@ -60,6 +60,19 @@ class Producer:
     def get_staging_directory(self) -> str:
         return self.staging_directory
     
+    def get_artifact_hash(self, artifact_path: str) -> str:
+        with self.conn_manager.read_cursor() as cursor:
+            query: sql = f"""
+                SELECT artifact_hash FROM {self.local_table_name} 
+                WHERE artifact_path = ?;
+            """
+            cursor.execute(query, (artifact_path,))
+            result = cursor.fetchone()
+            if result is not None:
+                return result[0]
+            else:
+                raise ValueError(f"Artifact path {artifact_path} not found in local table {self.local_table_name}.")
+    
     def set_run_id(self, run_id: int):
         self.run_id = run_id
 

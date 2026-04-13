@@ -211,6 +211,7 @@ node2 = ModelRetrainingNode(name="ModelRetrainingNode", consumers=[combined_cons
 def node2_func():
     logger.info(f"Node {node2.name} starting entrypoint function for run {node2.run_id}")
     model_registry_staging_path = model_registry_producer.get_staging_directory()
+    model_registry_final_path = model_registry_producer.directory
 
     for bundle in combined_consumer:
         with node2.stage_run():
@@ -237,19 +238,35 @@ def node2_func():
                 logger.info(f"ModelRetrainingNode writing: '{item}' to {model_path} in run {node2.run_id}")
                 time.sleep(1)   # checkpoint
 
-                node2.log_metrics(epoch=i, accuracy=0.8 + i*0.01, model_path=model_path)   # example metrics logging
+                # example metrics logging
+                final_subdir = os.path.join(model_registry_final_path, f"model_dir_{node2.run_id}")
+                final_model_path = os.path.join(final_subdir, f"model_{node2.run_id}.txt")
+                node2.log_metrics(epoch=1, accuracy=0.8, model_path=final_model_path)
 
         # user can log metadata here after the run is done if they need the artifacts' hashes because hashes are only computed at the end of the run. 
         # this is done by design because hashing large artifacts is quite time consuming; so it's better to finish the work for the run, then hash.
         # but if the user does not need the artifacts' hashes, then they can log metadata during the run.  
 
-                """ 
+        # get the artifact hash for the directory the model is stored in (the producer is hashing the entire directory as one artifact).
+        # for this example, we are going to use the directory's hash as the model hash, but in practice, 
+        # the producer can be set up to hash individual files and log their hashes in the local table, 
+        # and then the user can query the local table to get the hashes of individual files instead of the entire directory if they want.
+
+        # consider enforcing the use of pathlib Paths for artifact paths in the producer's local table and throughout the codebase, 
+        # because it provides a lot of useful methods for manipulating paths and makes the code more robust and easier to read.
+        # pathlib Paths also provide a consistent standard for representing paths across the codebase, 
+        # which can help prevent bugs related to path manipulation and string formatting.
+        final_subdir = str(Path(final_subdir))   # convert to Path object to get rid of the "./" prefix or it won't match the path in the local table
+        model_hash = model_registry_producer.get_artifact_hash(artifact_path=final_subdir)
+        node2.log_model_hash(model_path=final_model_path, model_hash=model_hash)   # example model hash logging
+
+        """ 
         # simulate failure at run 1, iter 0 (first iteration of the second run)
         # disable this stop_if after restart to allow the pipeline to continue and finish processing
         if args.restart == False:
             stop_if(current_run=node2.run_id, current_iter=i, target_run=1, target_iter=0, mode="sigint", logger=logger) 
             #model_registry_producer.create_artifact(filename=model_name, content=f"restarting\n")
-                """ 
+        """ 
 
 graph = Graph(name="TestGraph", nodes=[node, node2], db_folder=db_folder_path, logger=logger)
 
