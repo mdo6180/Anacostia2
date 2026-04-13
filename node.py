@@ -32,6 +32,9 @@ class Node(threading.Thread, ABC):
     
         self.global_usage_table_name = "artifact_usage_events"
 
+    def set_db_folder(self, db_folder: str):
+        self.db_folder = db_folder
+        
     def set_db_path(self, db_path: str):
         self.db_path = db_path
 
@@ -40,6 +43,12 @@ class Node(threading.Thread, ABC):
 
     def initialize_db_connection(self, filename: str):
         self.conn_manager = ConnectionManager(db_path=filename, logger=self.logger)
+
+    def initialize_staging_directory(self):
+        self.staging_directory = os.path.join(self.db_folder, self.name)
+        if os.path.exists(self.staging_directory) is False:
+            self.logger.info(f"Temporary directory {self.staging_directory} does not exist. Creating it.")
+            os.makedirs(self.staging_directory)
 
     def start_consumers(self):
         for consumer in self.consumers:

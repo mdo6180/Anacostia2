@@ -74,6 +74,8 @@ class Graph:
             # initialize DB connection for each node, its consumers, and producers
             node.set_db_path(db_path)
             node.initialize_db_connection(db_path)
+            node.set_db_folder(self.db_folder)
+            node.initialize_staging_directory()
             node.setup()
 
             for consumer in node.consumers:
