@@ -13,6 +13,7 @@ class FileSystemTransport:
         self.logger = logger
         self.dest_stream_name = dest_stream_name
         self.local_table_name = f"{self.name}_local"
+        self.global_usage_table_name = "artifact_usage_events"
 
         self.dest_directory = dest_directory
         if os.path.exists(dest_directory) is False:
@@ -47,6 +48,15 @@ class FileSystemTransport:
             """
             cursor.execute(query)
 
+    def register_artifact_send(self, filepath: str, artifact_hash: str) -> None:
+        with self.conn_manager.write_cursor() as cursor:
+            query: sql = f"""
+                INSERT OR IGNORE INTO {self.global_usage_table_name} 
+                (artifact_hash, node_name, state, details) 
+                VALUES (?, ?, ?, ?);
+            """
+            cursor.execute(query, (artifact_hash, self.name, "sent", filepath))
+
     def send(self, filepath: str, artifact_hash: str) -> None:
         filename = os.path.basename(filepath)
         dest_path = os.path.join(self.dest_directory, filename)
@@ -61,3 +71,5 @@ class FileSystemTransport:
                 VALUES (?, ?, ?, ?, ?);
             """
             cursor.execute(query, (filepath, dest_path, artifact_hash, self.name, "sha256"))
+        
+        self.register_artifact_send(filepath=dest_path, artifact_hash=artifact_hash)
