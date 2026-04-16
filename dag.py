@@ -75,7 +75,6 @@ class Graph:
             node.set_db_path(db_path)
             node.initialize_db_connection(db_path)
             node.set_db_folder(self.db_folder)
-            node.initialize_staging_directory()
             node.setup()
 
             for consumer in node.consumers:
@@ -89,9 +88,11 @@ class Graph:
                 producer.initialize_db_connection(db_path)
                 producer.setup()
 
-                for transport in producer.transports:
-                    transport.initialize_db_connection(db_path)
-                    transport.setup()
+            '''
+            for transport in node.transports:
+                transport.initialize_db_connection(db_path)
+                transport.setup()
+            '''
 
     def start(self):
         self.log(f"Starting graph '{self.name}' with {len(self.nodes)} nodes.", level="INFO")

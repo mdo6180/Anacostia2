@@ -11,15 +11,24 @@ import traceback
 from utils.connection import ConnectionManager
 from consumer import Consumer
 from producer import Producer
+from transports.local import FileSystemTransport
 
 sql = str   # alias of the str type for syntax highlighting using the Python Inline Source Syntax Highlighting extension by Sam Willis in VSCode.
 
 
 
 class Node(threading.Thread, ABC):
-    def __init__(self, name: str, consumers: List[Consumer], producers: List[Producer], logger: Logger = None):
+    def __init__(
+        self, 
+        name: str, 
+        consumers: List[Consumer], 
+        producers: List[Producer] = None, 
+        transports: List[FileSystemTransport] = None, 
+        logger: Logger = None
+    ):
         self.consumers = consumers
-        self.producers = producers
+        self.producers = producers if producers is not None else []
+        self.transports = transports if transports is not None else []
         self.run_id = 0
         self.logger = logger
         
@@ -43,12 +52,6 @@ class Node(threading.Thread, ABC):
 
     def initialize_db_connection(self, filename: str):
         self.conn_manager = ConnectionManager(db_path=filename, logger=self.logger)
-
-    def initialize_staging_directory(self):
-        self.staging_directory = os.path.join(self.db_folder, self.name)
-        if os.path.exists(self.staging_directory) is False:
-            self.logger.info(f"Temporary directory {self.staging_directory} does not exist. Creating it.")
-            os.makedirs(self.staging_directory)
 
     def start_consumers(self):
         for consumer in self.consumers:
@@ -104,10 +107,6 @@ class Node(threading.Thread, ABC):
                 self.finished_using_artifact(artifact_path, artifact_hash)
                 self.logger.info(f"Node {self.name} committed artifact {artifact_path} with hash {artifact_hash} in run {self.run_id}")
         
-        for producer in self.producers:
-            producer.register_created_artifacts()   # register all created artifacts in the DB
-            producer.paths_in_current_run.clear()   # clear the set for the next run
-
     @contextmanager
     def stage_run(self):
         try:
