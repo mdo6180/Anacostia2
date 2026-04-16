@@ -104,12 +104,10 @@ def node_func():
                 
                 time.sleep(1)   # checkpoint 2
                 
-                """
                 # simulate failure at run 1, iter 0 (first iteration of the second run)
                 # disable this stop_if after restart to allow the pipeline to continue and finish processing
                 if args.restart == False:
                     stop_if(current_run=node.run_id, current_iter=i, target_run=1, target_iter=0, mode="sigint", logger=logger) 
-                """
                 
                 with open(combined_staging_path, "a") as file:
                     file.write(f"Processed {item1} and {item2} from combined streams\n")
