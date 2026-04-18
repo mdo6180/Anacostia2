@@ -31,6 +31,12 @@ class FileSystemTransport:
     def initialize_db_connection(self, filename: str):
         self.conn_manager = ConnectionManager(db_path=filename, logger=self.logger)
 
+    def set_run_id(self, run_id: int):
+        self.run_id = run_id
+
+    def initialize_db_connection(self, filename: str):
+        self.conn_manager = ConnectionManager(db_path=filename, logger=self.logger)
+    
     def setup(self):
         """
         Create the local table for this stream to track seen artifacts and their hashes.
@@ -102,31 +108,36 @@ class FileSystemTransport:
         })
     
     def package(self) -> Tuple[Path, str]:
+        # create the metadata file
         with open(self.get_staging_directory() / "metadata.json", "w") as f:
             json.dump(self.metadata, f, indent=4)
         
+        # reset metadata
+        self.metadata = []
+        
+        # create the destination directory
         package_path = self.dest_directory / f"run_{self.run_id}"
         os.makedirs(package_path, exist_ok=True)
 
+        # hash the package
         package_hash = self.hash_directory(package_path)
         
+        # move package to destination directory
         shutil.move(self.get_staging_directory(), package_path)
+
+        # register package in global database
+        self.register_artifact_packaged(package_path, package_hash)
+
         return package_path, package_hash
     
-    def set_run_id(self, run_id: int):
-        self.run_id = run_id
-
-    def initialize_db_connection(self, filename: str):
-        self.conn_manager = ConnectionManager(db_path=filename, logger=self.logger)
-    
-    def register_artifact_packaged(self, filepath: str, artifact_hash: str) -> None:
+    def register_artifact_packaged(self, package_path: Path, package_hash: str) -> None:
         with self.conn_manager.write_cursor() as cursor:
             query: sql = f"""
                 INSERT OR IGNORE INTO {self.global_usage_table_name} 
                 (artifact_hash, node_name, state, details) 
                 VALUES (?, ?, ?, ?);
             """
-            cursor.execute(query, (artifact_hash, self.name, "packaged", filepath))
+            cursor.execute(query, (package_hash, self.name, "packaged", str(package_path)))
 
     def restart_transport(self):
         self.clear_staging_directory()
