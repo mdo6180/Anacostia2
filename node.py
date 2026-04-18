@@ -129,6 +129,11 @@ class Node(threading.Thread, ABC):
             # clear staging directories of producers
             for producer in self.producers:
                 producer.clear_staging_directory()
+            
+            # Note: we do not clear the staging directory for the transports because unlike producers, 
+            # transport staging directories are meant to be used as staging areas for packaging. 
+            # this means that when the user calls package(), all the artifacts in the staging directory are moved to the final package directory.
+            # thus, there is no need to clear the staging directory after every run because we assume the user will call Transport.package()
 
             self.logger.info(f"\nNode {self.name} finished run {self.run_id}")    # end_run DB call in future
             self.conn_manager.end_run(self.name, self.run_id)   # end_run DB call

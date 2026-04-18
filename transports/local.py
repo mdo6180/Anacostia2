@@ -97,8 +97,10 @@ class FileSystemTransport:
         if not artifact_staging_path.is_relative_to(self.staging_directory):
             raise ValueError(f"Artifact final path {artifact_staging_path} is not within the staging directory {self.staging_directory}")
 
-        # move the artifact
+        # recreate the staging directory and create the parent directories if they don't exist
         artifact_staging_path.parent.mkdir(parents=True, exist_ok=True)
+        
+        # move the artifact
         shutil.copy2(artifact_path, artifact_staging_path)
 
         relative_path = artifact_staging_path.relative_to(self.staging_directory)
@@ -122,8 +124,8 @@ class FileSystemTransport:
         # hash the package
         package_hash = self.hash_directory(package_path)
         
-        # move package to destination directory
-        shutil.move(self.get_staging_directory(), package_path)
+        # rename staging directory to final package directory (this also deletes the staging directory)
+        self.get_staging_directory().rename(package_path)
 
         # register package in global database
         self.register_artifact_packaged(package_path, package_hash)
