@@ -8,6 +8,7 @@ from pathlib import Path
 from streams.directory import DirectoryStream
 from consumer import Consumer
 from producer import Producer
+from transports.local import FileSystemTransport
 from node import Node
 from dag import Graph
 from utils.debug import stop_if
@@ -68,10 +69,13 @@ odd_producer = Producer(name="odd_producer", directory=output_path1, logger=logg
 even_producer = Producer(name="even_producer", directory=output_path2, logger=logger)   # example producer
 combined_producer = Producer(name="combined_producer", directory=output_combined_path, logger=logger)   # example producer
 
+combined_transport = FileSystemTransport(name="combined_transport", dest_directory=transport_dest_path, logger=logger)
+
 node = Node(
     name="TestNode", 
     consumers=[stream_consumer_odd, stream_consumer_even], 
     producers=[odd_producer, even_producer, combined_producer], 
+    transports=[combined_transport],
     logger=logger
 )
 
@@ -118,6 +122,14 @@ def node_func():
                 artifact_staging_path=combined_staging_path, 
                 artifact_final_path=combined_producer.get_final_directory() / f"processed_combined_{node.run_id}.txt"
             )
+
+            combined_transport.stage_artifact(
+                artifact_path=combined_file_path, 
+                artifact_staging_path=combined_transport.get_staging_directory() / f"processed_combined_{node.run_id}.txt",
+                artifact_hash=combined_file_hash
+            )
+
+            combined_transport.package()
 
 
 graph = Graph(name="TestGraph", nodes=[node], db_folder=db_folder_path, logger=logger)

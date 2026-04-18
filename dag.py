@@ -88,11 +88,11 @@ class Graph:
                 producer.initialize_db_connection(db_path)
                 producer.setup()
 
-            '''
             for transport in node.transports:
+                transport.set_db_folder(self.db_folder)
+                transport.initialize_staging_directory()
                 transport.initialize_db_connection(db_path)
                 transport.setup()
-            '''
 
     def start(self):
         self.log(f"Starting graph '{self.name}' with {len(self.nodes)} nodes.", level="INFO")

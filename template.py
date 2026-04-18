@@ -1,3 +1,6 @@
+from venv import logger
+
+
 @node.entrypoint
 def entrypoint():
     # startup logic
@@ -22,6 +25,7 @@ combined_consumer = Consumer(
     logger=logger
 )
 model_registry_producer = Producer(name="model_registry_producer", directory=model_registry_path, logger=logger)
+isafe_transport = iSafeTransport(name="isafe_transport", directory=isafe_transport_path, logger=logger)
 
 node2 = ModelRetrainingNode(name="ModelRetrainingNode", consumers=[combined_consumer], producers=[model_registry_producer], logger=logger)
 
@@ -79,5 +83,13 @@ def node2_func():
                 file.write(f"model card for {final_model_path}, hash: {model_hash}")
 
             final_model_card_path, model_card_hash = model_registry_producer.commit_artifact(artifact_path=model_card_path)
+
+            # add artifacts to the transport's staging area to prepare for packaging
+            isafe_transport.stage_artifact(artifact_path=final_model_card_path, artifact_hash=model_card_hash)
+            isafe_transport.stage_artifact(artifact_path=final_model_path, artifact_hash=model_hash)
+
+            # package the artifacts into one artifact to prepare to be sent via Intelink iSafe
+            package_path, package_hash = isafe_transport.package()
+            isafe_transport.send(package_path=package_path, package_hash=package_hash)
 
         # user code executed after run ends (e.g., cleanup)

@@ -27,8 +27,8 @@ class Node(threading.Thread, ABC):
         logger: Logger = None
     ):
         self.consumers = consumers
-        self.producers = producers if producers is not None else []
-        self.transports = transports if transports is not None else []
+        self.producers: List[Producer] = producers if producers is not None else []
+        self.transports: List[FileSystemTransport] = transports if transports is not None else []
         self.run_id = 0
         self.logger = logger
         
@@ -74,6 +74,9 @@ class Node(threading.Thread, ABC):
         
         for producer in self.producers:
             producer.set_run_id(run_id)
+        
+        for transport in self.transports:
+            transport.set_run_id(run_id)
 
     def start_using_artifact(self, filepath: str, artifact_hash: str) -> None:
         with self.conn_manager.write_cursor() as cursor:
@@ -122,6 +125,11 @@ class Node(threading.Thread, ABC):
             # in the future, we can consider calling commit_artifacts() in another thread as soon as the producer creates the artifact, 
             # so that we can do the hashing while the node starts working on the next run.
             self.commit_artifacts()   # mark artifacts as committed in the DB
+            
+            # clear staging directories of producers
+            for producer in self.producers:
+                producer.clear_staging_directory()
+
             self.logger.info(f"\nNode {self.name} finished run {self.run_id}")    # end_run DB call in future
             self.conn_manager.end_run(self.name, self.run_id)   # end_run DB call
             self.set_run_id(self.run_id + 1)  # prepare for next run
@@ -174,6 +182,9 @@ class Node(threading.Thread, ABC):
 
             for producer in self.producers:
                 producer.restart_producer()
+            
+            for transport in self.transports:
+                transport.restart_transport()
 
         else:
             # upon restart, if the latest run has not ended, resume from that run
@@ -189,6 +200,9 @@ class Node(threading.Thread, ABC):
             # we don't have any leftover temp files after restart 
             for producer in self.producers:
                 producer.restart_producer()
+
+            for transport in self.transports:
+                transport.restart_transport()
 
         if self._entrypoint is None:
             raise RuntimeError(f"No entrypoint registered for node {self.name}. Use @node.entrypoint")

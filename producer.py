@@ -79,7 +79,7 @@ class Producer:
     def initialize_db_connection(self, filename: str):
         self.conn_manager = ConnectionManager(db_path=filename, logger=self.logger)
     
-    def restart_producer(self):
+    def clear_staging_directory(self):
         # clear any temp files in the staging directory from previous runs, so that we don't have any leftover temp files when we start a new run
         for filename in os.listdir(self.staging_directory):
             path = os.path.join(self.staging_directory, filename)
@@ -89,34 +89,10 @@ class Producer:
             elif os.path.isdir(path):
                 self.logger.warning(f"Producer {self.name} found leftover directory {path} in staging directory from previous run. Removing it.")
                 shutil.rmtree(path)
-        
-    def register_artifact_send(self, transport_name: str, filepath: str, artifact_hash: str) -> None:
-        with self.conn_manager.write_cursor() as cursor:
-            query: sql = f"""
-                INSERT OR IGNORE INTO {self.global_usage_table_name} 
-                (artifact_hash, node_name, state, details) 
-                VALUES (?, ?, ?, ?);
-            """
-            cursor.execute(query, (artifact_hash, transport_name, "sent", filepath))
-
-        self.logger.info(f"Producer {self.name} sent artifact {filepath} with hash {artifact_hash} via transport {transport_name} in run {self.run_id}")
-
-    def get_unsent_artifacts(self, dest_stream_name: str) -> List[tuple]:
-        """
-        Get the list of artifacts that have been created by the producer but have not been sent by the transport yet.
-        This is used on producer restart to determine which artifacts still need to be sent by the transport.
-        """
-        with self.conn_manager.read_cursor() as cursor:
-            query: sql = f"""
-                SELECT artifact_path, artifact_hash FROM {self.local_table_name} 
-                WHERE artifact_hash NOT IN (
-                    SELECT artifact_hash FROM {self.global_usage_table_name} 
-                    WHERE state = 'detected' AND node_name = ?
-                );
-            """
-            cursor.execute(query, (dest_stream_name,))
-            return cursor.fetchall()
     
+    def restart_producer(self):
+        self.clear_staging_directory()
+        
     def commit_artifact(self, artifact_staging_path: Path, artifact_final_path: Path) -> Tuple[Path, str]:
         """
         Commit an artifact by moving it from the staging directory to the final directory,
