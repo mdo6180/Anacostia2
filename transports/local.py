@@ -138,6 +138,15 @@ class FileSystemTransport:
 
         return package_path, package_hash
     
+    def register_artifact_send(self, package_path: Path, package_hash: str) -> None:
+        with self.conn_manager.write_cursor() as cursor:
+            query: sql = f"""
+                INSERT OR IGNORE INTO {self.global_usage_table_name} 
+                (artifact_hash, node_name, state, details) 
+                VALUES (?, ?, ?, ?);
+            """
+            cursor.execute(query, (package_hash, self.name, "sent", str(package_path)))
+    
     def register_artifact_packaged(self, package_path: Path, package_hash: str) -> None:
         with self.conn_manager.write_cursor() as cursor:
             query: sql = f"""
@@ -161,12 +170,27 @@ class FileSystemTransport:
                 self.logger.warning(f"Transport {self.name} found leftover directory {path} in staging directory from previous run. Removing it.")
                 shutil.rmtree(path)
     
-    def send(self, filepath: str, artifact_hash: str) -> None:
-        filename = os.path.basename(filepath)
-        dest_path = os.path.join(self.dest_directory, filename)
-        
-        # the protocol to actually send the artifact
-        shutil.copy2(filepath, dest_path)
+    def send(self, package_path: Path, package_hash: str, dest_directory: Path) -> None:
+        if not isinstance(package_path, Path):
+            raise TypeError("package_path must be of type pathlib.Path")
+
+        if not isinstance(dest_directory, Path):
+            raise TypeError("dest_directory must be of type pathlib.Path")
+
+        self.initialize_staging_directory()
+        staging_directory = self.get_staging_directory()
+
+        temp_path = staging_directory / "temp"
+
+        # Ensure destination directory exists
+        dest_directory.mkdir(parents=True, exist_ok=True)
+
+        # Step 1: copy into temp directory
+        shutil.copytree(package_path, temp_path)
+
+        # Step 2: atomic rename into final location
+        final_path = dest_directory / package_path.name
+        temp_path.rename(final_path)
 
         with self.conn_manager.write_cursor() as cursor:
             query: sql = f"""
@@ -174,9 +198,15 @@ class FileSystemTransport:
                 (artifact_src_path, artifact_dest_path, artifact_hash, node_name, hash_algorithm) 
                 VALUES (?, ?, ?, ?, ?);
             """
-            cursor.execute(query, (filepath, dest_path, artifact_hash, self.name, "sha256"))
-        
-        self.register_artifact_send(filepath=dest_path, artifact_hash=artifact_hash)
+            cursor.execute(
+                query,
+                (str(package_path), str(final_path), package_hash, self.name, "sha256")
+            )
+
+        self.register_artifact_send(package_path=final_path, package_hash=package_hash)
+
+        os.rmdir(staging_directory)
+
 
     def hash_directory(self, directory: str) -> str:
         """

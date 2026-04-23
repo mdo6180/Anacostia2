@@ -24,9 +24,8 @@ input_path2 = f"{tests_path}/incoming2"
 output_path1 = f"{tests_path}/processed1"
 output_path2 = f"{tests_path}/processed2"
 output_combined_path = f"{tests_path}/processed_combined"
-test_node_path = f"{tests_path}/test_node"
 transport_package_dir = f"{tests_path}/transport_dir"
-model_registry_path = f"{tests_path}/model_registry"
+pipeline2_receiver = f"{tests_path}/transport_receiver"
 
 parser = argparse.ArgumentParser(description="Run the pipeline after restart test")
 parser.add_argument("-r", "--restart", action="store_true", help="Flag to indicate if this is a restart")
@@ -129,7 +128,13 @@ def node_func():
                 artifact_hash=combined_file_hash
             )
 
-            combined_transport.package()
+            package_path, package_hash = combined_transport.package()
+
+            combined_transport.send(
+                package_path=package_path,
+                package_hash=package_hash,
+                dest_directory=Path(pipeline2_receiver)
+            )
 
 
 graph = Graph(name="TestGraph", nodes=[node], db_folder=db_folder_path, logger=logger)
