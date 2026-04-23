@@ -25,7 +25,7 @@ output_path1 = f"{tests_path}/processed1"
 output_path2 = f"{tests_path}/processed2"
 output_combined_path = f"{tests_path}/processed_combined"
 test_node_path = f"{tests_path}/test_node"
-transport_dest_path = f"{tests_path}/transport_dest"
+transport_package_dir = f"{tests_path}/transport_dir"
 model_registry_path = f"{tests_path}/model_registry"
 
 parser = argparse.ArgumentParser(description="Run the pipeline after restart test")
@@ -69,7 +69,7 @@ odd_producer = Producer(name="odd_producer", directory=output_path1, logger=logg
 even_producer = Producer(name="even_producer", directory=output_path2, logger=logger)   # example producer
 combined_producer = Producer(name="combined_producer", directory=output_combined_path, logger=logger)   # example producer
 
-combined_transport = FileSystemTransport(name="combined_transport", dest_directory=transport_dest_path, logger=logger)
+combined_transport = FileSystemTransport(name="combined_transport", packages_directory=transport_package_dir, logger=logger)
 
 node = Node(
     name="TestNode", 
@@ -101,7 +101,7 @@ def node_func():
                 with open(odd_path, "a") as file:
                     file.write(f"Processed {item1} from odd stream\n")
                 
-                time.sleep(1)   # checkpoint 1
+                #time.sleep(1)   # checkpoint 1
                 
                 with open(even_path, "a") as file:
                     file.write(f"Processed {item2} from even stream\n")
@@ -116,7 +116,7 @@ def node_func():
                 with open(combined_staging_path, "a") as file:
                     file.write(f"Processed {item1} and {item2} from combined streams\n")
                 
-                time.sleep(1)   # checkpoint 3
+                #time.sleep(1)   # checkpoint 3
             
             combined_file_path, combined_file_hash = combined_producer.commit_artifact(
                 artifact_staging_path=combined_staging_path, 

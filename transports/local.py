@@ -12,14 +12,20 @@ sql = str   # alias of the str type for syntax highlighting using the Python Inl
 
 
 class FileSystemTransport:
-    def __init__(self, name: str, dest_directory: str, logger: Logger = None):
+    def __init__(self, name: str, packages_directory: str, logger: Logger = None):
+        """
+        name: name of the Transport
+        packages_directory: directory where all of the Transport's packages will be stored.
+        logger: logger for logging statements
+        """
+
         self.name = name
         self.logger = logger
         self.run_id = 0
         self.local_table_name = f"{self.name}_local"
         self.global_usage_table_name = "artifact_usage_events"
 
-        self.dest_directory = Path(dest_directory)
+        self.dest_directory = Path(packages_directory)
         if not self.dest_directory.exists():
             os.makedirs(self.dest_directory)
         
