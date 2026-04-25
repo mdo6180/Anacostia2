@@ -87,8 +87,16 @@ def node_func():
         # if it's a restart, execute custom logic before resuming the entrypoint function
         logger.info(f"Node {node.name} executing custom restart logic for run {node.run_id}")
 
+    # All code that comes before this for loop will be executed only on pipeline start and restart, but not on subsequent runs. 
+
     for bundle1, bundle2 in zip(stream_consumer_odd, stream_consumer_even):
+        
+        # All code here will execute prior to the run starting
+        
         with node.stage_run():
+
+            # All code here will execute during the run
+
             odd_path = odd_producer.get_staging_directory() / f"processed_odd_{node.run_id}.txt"
             even_path = even_producer.get_staging_directory() / f"processed_even_{node.run_id}.txt"
             
@@ -97,6 +105,9 @@ def node_func():
             combined_staging_path = subdir / f"processed_combined_{node.run_id}.txt"
 
             for i, (item1, item2) in enumerate(zip(bundle1, bundle2)):
+
+                # All code here will execute on each item in the bundle
+
                 with open(odd_path, "a") as file:
                     file.write(f"Processed {item1} from odd stream\n")
                 
@@ -117,24 +128,33 @@ def node_func():
                 
                 #time.sleep(1)   # checkpoint 3
             
+            # All code here will execute before the run ends but after you are done using the bundle
+
+            # commit artifacts you want to keep track of. uncommited artifacts will be deleted when run ends. 
             combined_file_path, combined_file_hash = combined_producer.commit_artifact(
                 artifact_staging_path=combined_staging_path, 
                 artifact_final_path=combined_producer.get_final_directory() / f"processed_combined_{node.run_id}.txt"
             )
 
+            # stage artifact for prepare for transport packaging
             combined_transport.stage_artifact(
                 artifact_path=combined_file_path, 
                 artifact_staging_path=combined_transport.get_staging_directory() / f"processed_combined_{node.run_id}.txt",
                 artifact_hash=combined_file_hash
             )
 
+            # package the artifact to create transport package
             package_path, package_hash = combined_transport.package()
 
+            # optional: use the transport to send the artifact to another pipeline
+            # you can also skip this step if you are manually transporting artifact over air gap.
             combined_transport.send(
                 package_path=package_path,
                 package_hash=package_hash,
                 dest_directory=Path(pipeline2_receiver)
             )
+        
+        # All code here outside the node.stage_run() context manager will execute after the run ends but before the next run begins
 
 
 graph = Graph(name="TestGraph", nodes=[node], db_folder=db_folder_path, logger=logger)

@@ -12,7 +12,25 @@ def entrypoint():
             # run-start logic
 
             for item in bundle:
+                # extract items from the bundle
                 # per-item logic
+
+            # post-run, pre-exit logic
+
+        # cleanup logic
+
+
+@node.entrypoint
+def entrypoint():
+    # startup logic
+
+    for bundle in consumer:
+        # pre-run logic
+
+        with node.stage_run():
+            # run-start logic
+
+            # use the entire bundle
 
             # post-run, pre-exit logic
 
