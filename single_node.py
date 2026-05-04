@@ -17,31 +17,31 @@ sql = str   # alias of the str type for syntax highlighting using the Python Inl
 
 
 
-tests_path = "./testing_artifacts"
-db_folder_path = f"{tests_path}/.anacostia"
-input_path1 = Path(f"{tests_path}/incoming1")
-input_path2 = Path(f"{tests_path}/incoming2")
-output_path1 = f"{tests_path}/processed1"
-output_path2 = f"{tests_path}/processed2"
-output_combined_path = f"{tests_path}/processed_combined"
-transport_package_dir = f"{tests_path}/transport_dir"
-pipeline2_receiver = Path(f"{tests_path}/transport_receiver")
+tests_path = Path("./testing_artifacts")
+db_folder_path = tests_path / ".anacostia"
+input_path1 = tests_path / "incoming1"
+input_path2 = tests_path / "incoming2"
+output_path1 = tests_path / "processed1"
+output_path2 = tests_path / "processed2"
+output_combined_path = tests_path / "processed_combined"
+transport_package_dir = tests_path / "transport_dir"
+pipeline2_receiver = tests_path / "transport_receiver"
 
 parser = argparse.ArgumentParser(description="Run the pipeline after restart test")
 parser.add_argument("-r", "--restart", action="store_true", help="Flag to indicate if this is a restart")
 args = parser.parse_args()
 
 if args.restart == False:
-    if os.path.exists(tests_path) is True:
+    if tests_path.exists() is True:
         shutil.rmtree(tests_path)
-    os.makedirs(tests_path)
+    tests_path.mkdir(parents=True, exist_ok=True)
 
-log_path = f"{tests_path}/anacostia.log"
+log_path = tests_path / "anacostia.log"
 logging.basicConfig(
     level=logging.DEBUG,
     format='%(asctime)s - %(levelname)s - %(message)s',
     datefmt='%Y-%m-%d %H:%M:%S',
-    filename=log_path,
+    filename=str(log_path),
     filemode='a'
 )
 logger = logging.getLogger(__name__)

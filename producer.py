@@ -12,13 +12,13 @@ sql = str   # alias of the str type for syntax highlighting using the Python Inl
 
 
 class Producer:
-    def __init__(self, name: str, directory: str, hash_chunk_size: int = 1_048_576, logger: Logger = None):
+    def __init__(self, name: str, directory: Path, hash_chunk_size: int = 1_048_576, logger: Logger = None):
         self.name = name
         self.hash_chunk_size = hash_chunk_size
         self.logger = logger
         self.run_id = 0
 
-        self.directory = Path(directory)
+        self.directory = directory
         if not self.directory.exists():
             self.logger.info(f"Directory {self.directory} does not exist. Creating it.")
             self.directory.mkdir(parents=True, exist_ok=True)
@@ -54,10 +54,10 @@ class Producer:
             self.logger.info(f"Temporary directory {self.staging_directory} does not exist. Creating it.")
             os.makedirs(self.staging_directory)
 
-    def get_staging_directory(self) -> str:
+    def get_staging_directory(self) -> Path:
         return Path(self.staging_directory)
     
-    def get_final_directory(self) -> str:
+    def get_final_directory(self) -> Path:
         return self.directory
     
     def get_artifact_hash(self, artifact_path: str) -> str:
