@@ -12,14 +12,14 @@ sql = str   # alias of the str type for syntax highlighting using the Python Inl
 
 
 class DirectoryStream:
-    def __init__(self, name: str, directory: str, poll_interval: float = 0.1, hash_chunk_size: int = 1_048_576, logger: Logger = None):
+    def __init__(self, name: str, directory: Path, poll_interval: float = 0.1, hash_chunk_size: int = 1_048_576, logger: Logger = None):
         self.logger = logger
         if os.path.exists(directory) is False:
             self.logger.info(f"Directory {directory} does not exist. Creating it.")
             os.makedirs(directory)
 
         self.name = name
-        self.directory = directory
+        self.directory: Path = directory
         self.poll_interval = poll_interval
         self.hash_chunk_size = hash_chunk_size
 
@@ -168,11 +168,10 @@ class DirectoryStream:
         Poll the resource for new artifacts, register the artifacts into the DB, and yield their content and hashes.
         Yields single items: (content, file_hash). User implemented method.
         """
-        directory = Path(self.directory)
 
         while True:
             # sort files by last modification time
-            for path in sorted(directory.iterdir(), key=lambda p: p.stat().st_mtime):
+            for path in sorted(self.directory.iterdir(), key=lambda p: p.stat().st_mtime):
 
                 path_str = str(path)
 

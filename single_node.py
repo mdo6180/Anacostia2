@@ -19,13 +19,13 @@ sql = str   # alias of the str type for syntax highlighting using the Python Inl
 
 tests_path = "./testing_artifacts"
 db_folder_path = f"{tests_path}/.anacostia"
-input_path1 = f"{tests_path}/incoming1"
-input_path2 = f"{tests_path}/incoming2"
+input_path1 = Path(f"{tests_path}/incoming1")
+input_path2 = Path(f"{tests_path}/incoming2")
 output_path1 = f"{tests_path}/processed1"
 output_path2 = f"{tests_path}/processed2"
 output_combined_path = f"{tests_path}/processed_combined"
 transport_package_dir = f"{tests_path}/transport_dir"
-pipeline2_receiver = f"{tests_path}/transport_receiver"
+pipeline2_receiver = Path(f"{tests_path}/transport_receiver")
 
 parser = argparse.ArgumentParser(description="Run the pipeline after restart test")
 parser.add_argument("-r", "--restart", action="store_true", help="Flag to indicate if this is a restart")
@@ -151,7 +151,7 @@ def node_func():
             combined_transport.send(
                 package_path=package_path,
                 package_hash=package_hash,
-                dest_directory=Path(pipeline2_receiver)
+                dest_directory=pipeline2_receiver
             )
         
         # All code here outside the node.stage_run() context manager will execute after the run ends but before the next run begins

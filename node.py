@@ -103,13 +103,6 @@ class Node(threading.Thread, ABC):
                 self.start_using_artifact(artifact_path, artifact_hash)
                 self.logger.info(f"Node {self.name} started using artifact {artifact_path} with hash {artifact_hash} in run {self.run_id}")
     
-    def commit_artifacts(self):
-        for consumer in self.consumers:
-            for artifact_hash in consumer.bundle_hashes:
-                artifact_path = consumer.stream.get_artifact_path(artifact_hash)
-                self.finished_using_artifact(artifact_path, artifact_hash)
-                self.logger.info(f"Node {self.name} committed artifact {artifact_path} with hash {artifact_hash} in run {self.run_id}")
-        
     @contextmanager
     def stage_run(self):
         try:
@@ -124,7 +117,11 @@ class Node(threading.Thread, ABC):
             # so we don't have to wait for hashing to complete before continuing the work.
             # in the future, we can consider calling commit_artifacts() in another thread as soon as the producer creates the artifact, 
             # so that we can do the hashing while the node starts working on the next run.
-            self.commit_artifacts()   # mark artifacts as committed in the DB
+            for consumer in self.consumers:
+                for artifact_hash in consumer.bundle_hashes:
+                    artifact_path = consumer.stream.get_artifact_path(artifact_hash)
+                    self.finished_using_artifact(artifact_path, artifact_hash)
+                    self.logger.info(f"Node {self.name} finished using artifact {artifact_path} with hash {artifact_hash} in run {self.run_id}")
             
             # clear staging directories of producers
             for producer in self.producers:
