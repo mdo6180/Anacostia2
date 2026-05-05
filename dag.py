@@ -1,6 +1,6 @@
 from typing import List
 from logging import Logger
-import os
+from pathlib import Path
 
 from node import Node
 from utils.connection import ConnectionManager
@@ -10,17 +10,17 @@ sql = str   # alias of the str type for syntax highlighting using the Python Inl
 
 
 class Graph:
-    def __init__(self, name: str, nodes: List[Node], db_folder: str = ".anacostia", logger: Logger = None) -> None:
+    def __init__(self, name: str, nodes: List[Node], db_folder: Path = ".anacostia", logger: Logger = None) -> None:
         self.name = name
         self.nodes = nodes
         self.db_folder = db_folder
         self.logger = logger
 
-        if not os.path.exists(self.db_folder):
-            os.makedirs(self.db_folder)
+        if not self.db_folder.exists():
+            self.db_folder.mkdir(parents=True, exist_ok=True)
         
-        db_path = os.path.join(self.db_folder, 'anacostia.db')
-        if os.path.exists(db_path) is True:
+        db_path = self.db_folder / 'anacostia.db'
+        if db_path.exists() is True:
             self.log(f"Database found at {db_path}. Connecting...", level="INFO")
 
         self.conn_manager = ConnectionManager(db_path, logger=self.logger)

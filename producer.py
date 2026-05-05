@@ -1,7 +1,7 @@
 from logging import Logger
 import os
 import hashlib
-from typing import List, Tuple
+from typing import Tuple
 from pathlib import Path
 import shutil
 
@@ -45,17 +45,17 @@ class Producer:
             """
             cursor.execute(query)
 
-    def set_db_folder(self, db_folder: str):
-        self.db_folder = db_folder
+    def set_db_folder(self, db_folder: Path):
+        self.db_folder: Path = db_folder
         
     def initialize_staging_directory(self):
-        self.staging_directory = os.path.join(self.db_folder, self.name)
-        if os.path.exists(self.staging_directory) is False:
+        self.staging_directory = self.db_folder / self.name
+        if not self.staging_directory.exists():
             self.logger.info(f"Temporary directory {self.staging_directory} does not exist. Creating it.")
-            os.makedirs(self.staging_directory)
+            self.staging_directory.mkdir(parents=True, exist_ok=True)
 
     def get_staging_directory(self) -> Path:
-        return Path(self.staging_directory)
+        return self.staging_directory
     
     def get_final_directory(self) -> Path:
         return self.directory
@@ -81,9 +81,8 @@ class Producer:
     
     def clear_staging_directory(self):
         # clear any temp files in the staging directory from previous runs, so that we don't have any leftover temp files when we start a new run
-        for filename in os.listdir(self.staging_directory):
-            path = os.path.join(self.staging_directory, filename)
-            if os.path.isfile(path):
+        for path in self.staging_directory.iterdir():
+            if path.is_file():
                 self.logger.warning(f"Producer {self.name} found leftover file {path} in staging directory from previous run. Removing it.")
                 os.remove(path)
             elif os.path.isdir(path):
