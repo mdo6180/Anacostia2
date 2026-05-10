@@ -48,12 +48,13 @@ class Graph:
 
             query: sql = f"""
                 CREATE TABLE IF NOT EXISTS provenance_graph (
-                    predecessor_hash TEXT DEFAULT NULL,
-                    predecessor_type TEXT CHECK (predecessor_type IN ( 'artifact', 'node' )) DEFAULT NULL,
-                    successor_hash TEXT,
-                    successor_type TEXT CHECK (successor_type IN ( 'artifact', 'node' )),
+                    predecessor_name TEXT DEFAULT NULL,
+                    predecessor_type TEXT DEFAULT NULL,
+                    successor_name TEXT DEFAULT NULL,
+                    successor_type TEXT DEFAULT NULL,
+                    artifact_name TEXT DEFAULT NULL,
+                    artifact_hash TEXT DEFAULT NULL,
                     run_id INTEGER,
-                    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
                     details TEXT DEFAULT NULL
                 );
                 """
