@@ -34,6 +34,9 @@ class FileSystemTransport:
     def set_db_folder(self, db_folder: str):
         self.db_folder = db_folder
         
+    def set_node_name(self, node_name: str):
+        self.name = node_name
+        
     def initialize_db_connection(self, filename: str):
         self.conn_manager = ConnectionManager(db_path=filename, logger=self.logger)
 

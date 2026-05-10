@@ -34,6 +34,9 @@ class DirectoryStream:
         # add a way to get indexes from seen artifacts to help with resuming streams after restart
         # associate the file paths with file hashes in the DB for this stream
     
+    def set_node_name(self, node_name: str):
+        self.name = node_name
+        
     def setup(self):
         """
         Create the local table for this stream to track seen artifacts and their hashes.
