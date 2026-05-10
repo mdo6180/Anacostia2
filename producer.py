@@ -49,7 +49,7 @@ class Producer:
         self.db_folder: Path = db_folder
     
     def set_node_name(self, node_name: str):
-        self.name = node_name
+        self.node_name = node_name
         
     def initialize_staging_directory(self):
         self.staging_directory = self.db_folder / self.name
