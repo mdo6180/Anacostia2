@@ -130,7 +130,6 @@ def node_func():
             
             # All code here will execute before the run ends but after you are done using the bundle
 
-            '''
             odd_producer.commit_artifact(
                 artifact_staging_path=odd_path, 
                 artifact_final_path=odd_producer.get_final_directory() / f"processed_odd_{node.run_id}.txt"
@@ -140,7 +139,6 @@ def node_func():
                 artifact_staging_path=even_path, 
                 artifact_final_path=even_producer.get_final_directory() / f"processed_even_{node.run_id}.txt"
             )
-            '''
 
             # commit artifacts you want to keep track of. uncommited artifacts will be deleted when run ends. 
             combined_file_path, combined_file_hash = combined_producer.commit_artifact(
