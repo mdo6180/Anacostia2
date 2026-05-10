@@ -26,6 +26,7 @@ class DirectoryStream:
         self.conn_manager: ConnectionManager = None
         self.local_table_name = f"{self.name}_local"
         self.global_usage_table_name = "artifact_usage_events"
+        self.provenance_graph_table_name = "provenance_graph"
 
     def initialize_db_connection(self, filename: str):
         self.conn_manager = ConnectionManager(db_path=filename, logger=self.logger)
@@ -91,7 +92,7 @@ class DirectoryStream:
             """
             cursor.execute(query, (artifact_hash, self.name, "detected", artifact_path))
             # self.logger.info(f"Registered artifact {filepath} with hash {artifact_hash} in stream {self.name} at {timestamp}")
-    
+
     def is_artifact_registered(self, filepath: str) -> bool:
         with self.conn_manager.read_cursor() as cursor:
             query: sql = f"""

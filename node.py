@@ -41,6 +41,15 @@ class Node(threading.Thread, ABC):
     
         self.global_usage_table_name = "artifact_usage_events"
 
+        for consumer in self.consumers:
+            consumer.set_node_name(self.name)
+        
+        for producer in self.producers:
+            producer.set_node_name(self.name)
+        
+        for transport in self.transports:
+            transport.set_node_name(self.name)
+
     def set_db_folder(self, db_folder: str):
         self.db_folder = db_folder
         
@@ -54,9 +63,6 @@ class Node(threading.Thread, ABC):
         self.conn_manager = ConnectionManager(db_path=filename, logger=self.logger)
 
     def start_consumers(self):
-        for consumer in self.consumers:
-            consumer.set_node_name(self.name)
-
         # in the future, add logic here to check if there are any primed artifacts that haven't been marked as being used in the DB 
         # and yield those first before starting to consume new artifacts from the stream
         for consumer in self.consumers:
