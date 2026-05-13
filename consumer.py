@@ -113,6 +113,7 @@ class Consumer:
             )
     
     def record_provenance(self, run_id: int, details: str = None) -> None:
+        # record edges between the stream and the consumer for all artifacts detected between the start of the current run and the previous run
         for artifact_path, artifact_hash in self.get_detected_artifacts(current_run_id=run_id):
             self.add_provenance_edge(
                 predecessor_name=self.stream.name, predecessor_type="stream",
@@ -123,6 +124,7 @@ class Consumer:
                 details=details
             )
 
+        # record edges between the consumer and the node for the artifacts in the current bundle
         for artifact_hash in self.bundle_hashes[:self.bundle_size]:
             self.add_provenance_edge(
                 predecessor_name=self.name, predecessor_type="consumer",
