@@ -1,6 +1,6 @@
 from typing import List
 from logging import Logger
-import os
+from pathlib import Path
 
 from node import Node
 from utils.connection import ConnectionManager
@@ -10,17 +10,17 @@ sql = str   # alias of the str type for syntax highlighting using the Python Inl
 
 
 class Graph:
-    def __init__(self, name: str, nodes: List[Node], db_folder: str = ".anacostia", logger: Logger = None) -> None:
+    def __init__(self, name: str, nodes: List[Node], db_folder: Path = ".anacostia", logger: Logger = None) -> None:
         self.name = name
         self.nodes = nodes
         self.db_folder = db_folder
         self.logger = logger
 
-        if not os.path.exists(self.db_folder):
-            os.makedirs(self.db_folder)
+        if not self.db_folder.exists():
+            self.db_folder.mkdir(parents=True, exist_ok=True)
         
-        db_path = os.path.join(self.db_folder, 'anacostia.db')
-        if os.path.exists(db_path) is True:
+        db_path = self.db_folder / 'anacostia.db'
+        if db_path.exists() is True:
             self.log(f"Database found at {db_path}. Connecting...", level="INFO")
 
         self.conn_manager = ConnectionManager(db_path, logger=self.logger)
@@ -39,7 +39,7 @@ class Graph:
                     artifact_hash TEXT,
                     node_name TEXT,
                     run_id INTEGER DEFAULT NULL,
-                    state TEXT CHECK (state IN ('created', 'committed', 'detected', 'primed', 'using', 'used', 'ignored', 'sent', 'received')),
+                    state TEXT CHECK (state IN ('created', 'committed', 'detected', 'primed', 'using', 'used', 'ignored', 'sent', 'received', 'packaged')),
                     details TEXT DEFAULT NULL,
                     timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
                 );
@@ -48,12 +48,13 @@ class Graph:
 
             query: sql = f"""
                 CREATE TABLE IF NOT EXISTS provenance_graph (
-                    predecessor_hash TEXT DEFAULT NULL,
-                    predecessor_type TEXT CHECK (predecessor_type IN ( 'artifact', 'node' )) DEFAULT NULL,
-                    successor_hash TEXT,
-                    successor_type TEXT CHECK (successor_type IN ( 'artifact', 'node' )),
+                    predecessor_name TEXT DEFAULT NULL,
+                    predecessor_type TEXT DEFAULT NULL,
+                    successor_name TEXT DEFAULT NULL,
+                    successor_type TEXT DEFAULT NULL,
+                    artifact_name TEXT DEFAULT NULL,
+                    artifact_hash TEXT DEFAULT NULL,
                     run_id INTEGER,
-                    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
                     details TEXT DEFAULT NULL
                 );
                 """
@@ -73,6 +74,8 @@ class Graph:
         for node in self.nodes:
             # initialize DB connection for each node, its consumers, and producers
             node.set_db_path(db_path)
+            node.initialize_db_connection(db_path)
+            node.set_db_folder(self.db_folder)
             node.setup()
 
             for consumer in node.consumers:
@@ -86,9 +89,11 @@ class Graph:
                 producer.initialize_db_connection(db_path)
                 producer.setup()
 
-                for transport in producer.transports:
-                    transport.initialize_db_connection(db_path)
-                    transport.setup()
+            for transport in node.transports:
+                transport.set_db_folder(self.db_folder)
+                transport.initialize_staging_directory()
+                transport.initialize_db_connection(db_path)
+                transport.setup()
 
     def start(self):
         self.log(f"Starting graph '{self.name}' with {len(self.nodes)} nodes.", level="INFO")

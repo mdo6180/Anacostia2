@@ -1,30 +1,27 @@
 from logging import Logger
 import os
 import hashlib
-from typing import List
+from typing import Tuple
 from pathlib import Path
 import shutil
 
 from utils.connection import ConnectionManager
-from transports.local import FileSystemTransport
 
 sql = str   # alias of the str type for syntax highlighting using the Python Inline Source Syntax Highlighting extension by Sam Willis in VSCode.
 
 
 
 class Producer:
-    def __init__(self, name: str, directory: str, hash_chunk_size: int = 1_048_576, transports: List = None, logger: Logger = None):
+    def __init__(self, name: str, directory: Path, hash_chunk_size: int = 1_048_576, logger: Logger = None):
         self.name = name
         self.hash_chunk_size = hash_chunk_size
         self.logger = logger
         self.run_id = 0
 
-        self.transports: List[FileSystemTransport] = transports if transports is not None else []
-    
         self.directory = directory
-        if os.path.exists(directory) is False:
-            self.logger.info(f"Directory {directory} does not exist. Creating it.")
-            os.makedirs(directory)
+        if not self.directory.exists():
+            self.logger.info(f"Directory {self.directory} does not exist. Creating it.")
+            self.directory.mkdir(parents=True, exist_ok=True)
 
         self.global_usage_table_name = "artifact_usage_events"
         self.local_table_name = f"{self.name}_local"
@@ -48,17 +45,36 @@ class Producer:
             """
             cursor.execute(query)
 
-    def set_db_folder(self, db_folder: str):
-        self.db_folder = db_folder
+    def set_db_folder(self, db_folder: Path):
+        self.db_folder: Path = db_folder
+    
+    def set_node_name(self, node_name: str):
+        self.node_name = node_name
         
     def initialize_staging_directory(self):
-        self.staging_directory = os.path.join(self.db_folder, self.name)
-        if os.path.exists(self.staging_directory) is False:
+        self.staging_directory = self.db_folder / self.name
+        if not self.staging_directory.exists():
             self.logger.info(f"Temporary directory {self.staging_directory} does not exist. Creating it.")
-            os.makedirs(self.staging_directory)
+            self.staging_directory.mkdir(parents=True, exist_ok=True)
 
-    def get_staging_directory(self) -> str:
+    def get_staging_directory(self) -> Path:
         return self.staging_directory
+    
+    def get_final_directory(self) -> Path:
+        return self.directory
+    
+    def get_artifact_hash(self, artifact_path: str) -> str:
+        with self.conn_manager.read_cursor() as cursor:
+            query: sql = f"""
+                SELECT artifact_hash FROM {self.local_table_name} 
+                WHERE artifact_path = ?;
+            """
+            cursor.execute(query, (artifact_path,))
+            result = cursor.fetchone()
+            if result is not None:
+                return result[0]
+            else:
+                raise ValueError(f"Artifact path {artifact_path} not found in local table {self.local_table_name}.")
     
     def set_run_id(self, run_id: int):
         self.run_id = run_id
@@ -66,86 +82,73 @@ class Producer:
     def initialize_db_connection(self, filename: str):
         self.conn_manager = ConnectionManager(db_path=filename, logger=self.logger)
     
-    def restart_producer(self):
+    def clear_staging_directory(self):
         # clear any temp files in the staging directory from previous runs, so that we don't have any leftover temp files when we start a new run
-        self.logger.info(f"Producer {self.name} restarting. Clearing staging directory {self.staging_directory} of any leftover temp files from previous runs.")
-        shutil.rmtree(self.staging_directory)
-        self.initialize_staging_directory()
-        
-        # on restart, check which files in the producer's directory has not been detected by the transport's destination stream and send/resend it.
-        # doing so handles the following two cases: 1) the destination stream has not received it or 2) the producer has not sent it yet before shutting off. 
-        for transport in self.transports:
-            unsent_artifacts = self.get_unsent_artifacts(dest_stream_name=transport.dest_stream_name)
-            self.logger.info(f"Producer {self.name} restarting. Found {len(unsent_artifacts)} unsent artifacts for transport {transport.name}. Resending them.")
-            
-            for artifact_path, artifact_hash in unsent_artifacts:
-                self.register_artifact_send(transport_name=transport.name, filepath=artifact_path, artifact_hash=artifact_hash)
-                transport.send(artifact_path, artifact_hash)
+        for path in self.staging_directory.iterdir():
+            if path.is_file():
+                self.logger.warning(f"Producer {self.name} found leftover file {path} in staging directory from previous run. Removing it.")
+                os.remove(path)
+            elif os.path.isdir(path):
+                self.logger.warning(f"Producer {self.name} found leftover directory {path} in staging directory from previous run. Removing it.")
+                shutil.rmtree(path)
     
-    def register_artifact_send(self, transport_name: str, filepath: str, artifact_hash: str) -> None:
-        with self.conn_manager.write_cursor() as cursor:
-            query: sql = f"""
-                INSERT OR IGNORE INTO {self.global_usage_table_name} 
-                (artifact_hash, node_name, state, details) 
-                VALUES (?, ?, ?, ?);
-            """
-            cursor.execute(query, (artifact_hash, transport_name, "sent", filepath))
-
-        self.logger.info(f"Producer {self.name} sent artifact {filepath} with hash {artifact_hash} via transport {transport_name} in run {self.run_id}")
-
-    def get_unsent_artifacts(self, dest_stream_name: str) -> List[tuple]:
+    def restart_producer(self):
+        self.clear_staging_directory()
+        
+    def commit_artifact(self, artifact_staging_path: Path, artifact_final_path: Path) -> Tuple[Path, str]:
         """
-        Get the list of artifacts that have been created by the producer but have not been sent by the transport yet.
-        This is used on producer restart to determine which artifacts still need to be sent by the transport.
+        Commit an artifact by moving it from the staging directory to the final directory,
+        hashing it, and registering it in the local and global databases.
+
+        Args:
+            artifact_staging_path (Path): The path to the artifact in the staging directory.
+            artifact_final_path (Path): The path to move the artifact to in the final directory. 
+            Note: The final path must be within the directory specified in the directory argument in the class constructor.
+
+        Returns:
+            Tuple[Path, str]: The final path of where the artifact was moved to and its hash.
         """
-        with self.conn_manager.read_cursor() as cursor:
-            query: sql = f"""
-                SELECT artifact_path, artifact_hash FROM {self.local_table_name} 
-                WHERE artifact_hash NOT IN (
-                    SELECT artifact_hash FROM {self.global_usage_table_name} 
-                    WHERE state = 'detected' AND node_name = ?
-                );
-            """
-            cursor.execute(query, (dest_stream_name,))
-            return cursor.fetchall()
 
-    def register_created_artifacts(self) -> None:
-        entries = []
-        for path in Path(self.staging_directory).iterdir():
-            if path.is_dir():
-                artifact_hash = self.hash_directory(path)
-            elif path.is_file():
-                artifact_hash = self.hash_file(path)
-            else:
-                raise ValueError(f"Unsupported file type for artifact: {path}")
+        if not isinstance(artifact_staging_path, Path):
+            raise TypeError("artifact_staging_path must be of type pathlib.Path")
 
-            dest_path = Path(self.directory) / f"{path.name}"
-            shutil.move(path, dest_path)
+        if not isinstance(artifact_final_path, Path): 
+            raise TypeError("artifact_final_path must be of type pathlib.Path")
+        
+        if not artifact_staging_path.is_relative_to(self.staging_directory):
+            raise ValueError(f"Artifact staging path {artifact_staging_path} is not within the staging directory {self.staging_directory}")
 
-            entries.append((artifact_hash, self.name, self.run_id, "created", str(dest_path)))
-            self.logger.info(f"Producer {self.name} registering created artifact {dest_path} with hash {artifact_hash} in run {self.run_id}")
+        if not artifact_final_path.is_relative_to(self.directory):
+            raise ValueError(f"Artifact final path {artifact_final_path} is not within the directory {self.directory}")
 
+        # hash the artifact
+        artifact_hash = self.hash_file(artifact_staging_path) if artifact_staging_path.is_file() else self.hash_directory(artifact_staging_path)
+
+        # move the artifact
+        artifact_final_path.parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(artifact_staging_path), str(artifact_final_path))
+
+        # register the artifact in the local database
         with self.conn_manager.write_cursor() as cursor:
             query: sql = f"""
                 INSERT OR IGNORE INTO {self.local_table_name} 
                 (artifact_path, artifact_hash, node_name, hash_algorithm) 
                 VALUES (?, ?, ?, ?);
             """
-            local_entries = [(final_path, artifact_hash, self.name, "sha256") for artifact_hash, _, _, _, final_path in entries]
-            cursor.executemany(query, local_entries)
+            local_entry = (str(artifact_final_path), artifact_hash, self.name, "sha256")
+            cursor.execute(query, local_entry)
         
+        # register the artifact in the global database
         with self.conn_manager.write_cursor() as cursor:
             query: sql = f"""
                 INSERT OR IGNORE INTO {self.global_usage_table_name} 
                 (artifact_hash, node_name, run_id, state, details) 
                 VALUES (?, ?, ?, ?, ?);
             """
-            cursor.executemany(query, entries)
+            global_entry = (artifact_hash, self.name, self.run_id, "created", str(artifact_final_path))
+            cursor.execute(query, global_entry)
         
-        for artifact_hash, _, _, _, final_path in entries:
-            for transport in self.transports:
-                self.register_artifact_send(transport_name=transport.name, filepath=final_path, artifact_hash=artifact_hash)
-                transport.send(final_path, artifact_hash)
+        return artifact_final_path, artifact_hash
 
     def hash_file(self, filepath: str) -> str:
         sha256 = hashlib.sha256()

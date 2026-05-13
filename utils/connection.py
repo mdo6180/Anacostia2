@@ -19,6 +19,7 @@ class ConnectionManager:
         self.connection.execute("PRAGMA synchronous=NORMAL;")
         self.connection.execute("PRAGMA busy_timeout=5000;")
 
+        self.db_path = db_path
         self.logger = logger
     
     def log(self, message: str, level="DEBUG") -> None:

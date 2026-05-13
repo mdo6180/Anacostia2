@@ -11,34 +11,58 @@ import traceback
 from utils.connection import ConnectionManager
 from consumer import Consumer
 from producer import Producer
+from transports.local import FileSystemTransport
 
 sql = str   # alias of the str type for syntax highlighting using the Python Inline Source Syntax Highlighting extension by Sam Willis in VSCode.
 
 
 
 class Node(threading.Thread, ABC):
-    def __init__(self, name: str, consumers: List[Consumer], producers: List[Producer], logger: Logger = None):
+    def __init__(
+        self, 
+        name: str, 
+        consumers: List[Consumer], 
+        producers: List[Producer] = None, 
+        transports: List[FileSystemTransport] = None, 
+        logger: Logger = None
+    ):
         self.consumers = consumers
-        self.producers = producers
+        self.producers: List[Producer] = producers if producers is not None else []
+        self.transports: List[FileSystemTransport] = transports if transports is not None else []
         self.run_id = 0
         self.logger = logger
         
         self._entrypoint = None
-        
-        self.global_usage_table_name = "artifact_usage_events"
 
+        # will be initialized in run() method when the thread starts, so that each node has its own DB connection.
+        self.conn_manager: ConnectionManager = None
+        
         super().__init__(name=name, daemon=True)
     
+        for consumer in self.consumers:
+            consumer.set_node_name(self.name)
+        
+        for producer in self.producers:
+            producer.set_node_name(self.name)
+        
+        for transport in self.transports:
+            transport.set_node_name(self.name)
+
+        self.global_usage_table_name = "artifact_usage_events"
+
+    def set_db_folder(self, db_folder: str):
+        self.db_folder = db_folder
+        
     def set_db_path(self, db_path: str):
         self.db_path = db_path
 
     def setup(self):
         pass
 
-    def start_consumers(self):
-        for consumer in self.consumers:
-            consumer.set_node_name(self.name)
+    def initialize_db_connection(self, filename: str):
+        self.conn_manager = ConnectionManager(db_path=filename, logger=self.logger)
 
+    def start_consumers(self):
         # in the future, add logic here to check if there are any primed artifacts that haven't been marked as being used in the DB 
         # and yield those first before starting to consume new artifacts from the stream
         for consumer in self.consumers:
@@ -56,6 +80,9 @@ class Node(threading.Thread, ABC):
         
         for producer in self.producers:
             producer.set_run_id(run_id)
+        
+        for transport in self.transports:
+            transport.set_run_id(run_id)
 
     def start_using_artifact(self, filepath: str, artifact_hash: str) -> None:
         with self.conn_manager.write_cursor() as cursor:
@@ -82,17 +109,6 @@ class Node(threading.Thread, ABC):
                 self.start_using_artifact(artifact_path, artifact_hash)
                 self.logger.info(f"Node {self.name} started using artifact {artifact_path} with hash {artifact_hash} in run {self.run_id}")
     
-    def commit_artifacts(self):
-        for consumer in self.consumers:
-            for artifact_hash in consumer.bundle_hashes:
-                artifact_path = consumer.stream.get_artifact_path(artifact_hash)
-                self.finished_using_artifact(artifact_path, artifact_hash)
-                self.logger.info(f"Node {self.name} committed artifact {artifact_path} with hash {artifact_hash} in run {self.run_id}")
-        
-        for producer in self.producers:
-            producer.register_created_artifacts()   # register all created artifacts in the DB
-            producer.paths_in_current_run.clear()   # clear the set for the next run
-
     @contextmanager
     def stage_run(self):
         try:
@@ -103,7 +119,25 @@ class Node(threading.Thread, ABC):
             
             yield
             
-            self.commit_artifacts()   # mark artifacts as committed in the DB
+            # committing artifacts at the end provides an advantage in that hashing takes place after work is done, 
+            # so we don't have to wait for hashing to complete before continuing the work.
+            # in the future, we can consider calling commit_artifacts() in another thread as soon as the producer creates the artifact, 
+            # so that we can do the hashing while the node starts working on the next run.
+            for consumer in self.consumers:
+                for artifact_hash in consumer.bundle_hashes:
+                    artifact_path = consumer.stream.get_artifact_path(artifact_hash)
+                    self.finished_using_artifact(artifact_path, artifact_hash)
+                    self.logger.info(f"Node {self.name} finished using artifact {artifact_path} with hash {artifact_hash} in run {self.run_id}")
+            
+            # clear staging directories of producers
+            for producer in self.producers:
+                producer.clear_staging_directory()
+            
+            # Note: we do not clear the staging directory for the transports because unlike producers, 
+            # transport staging directories are meant to be used as staging areas for packaging. 
+            # this means that when the user calls package(), all the artifacts in the staging directory are moved to the final package directory.
+            # thus, there is no need to clear the staging directory after every run because we assume the user will call Transport.package()
+
             self.logger.info(f"\nNode {self.name} finished run {self.run_id}")    # end_run DB call in future
             self.conn_manager.end_run(self.name, self.run_id)   # end_run DB call
             self.set_run_id(self.run_id + 1)  # prepare for next run
@@ -156,6 +190,9 @@ class Node(threading.Thread, ABC):
 
             for producer in self.producers:
                 producer.restart_producer()
+            
+            for transport in self.transports:
+                transport.restart_transport()
 
         else:
             # upon restart, if the latest run has not ended, resume from that run
@@ -171,6 +208,9 @@ class Node(threading.Thread, ABC):
             # we don't have any leftover temp files after restart 
             for producer in self.producers:
                 producer.restart_producer()
+
+            for transport in self.transports:
+                transport.restart_transport()
 
         if self._entrypoint is None:
             raise RuntimeError(f"No entrypoint registered for node {self.name}. Use @node.entrypoint")
