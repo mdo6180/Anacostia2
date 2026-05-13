@@ -86,7 +86,9 @@ class Consumer:
             """
             cursor.execute(query, (artifact_hash, self.name, "primed", filepath))
         
-    def record_provenance(self, artifact_hash: str) -> None:
+    def record_provenance(
+        self, predecessor_name: str, predecessor_type: str, successor_name: str, successor_type: str, artifact_name: str, artifact_hash: str, run_id: int = None, details: str = None
+    ) -> None:
         with self.conn_manager.read_cursor() as cursor:
             query: sql = f"""
                 INSERT OR IGNORE INTO provenance_graph (
@@ -99,10 +101,10 @@ class Consumer:
             """
             cursor.execute(query, 
                 (
-                    self.stream.name, "stream", 
-                    self.name, "consumer", 
-                    self.stream.get_artifact_path(artifact_hash), artifact_hash, 
-                    self.run_id, None
+                    predecessor_name, predecessor_type, 
+                    successor_name, successor_type, 
+                    artifact_name, artifact_hash, 
+                    run_id, details
                 )
             )
 
@@ -205,7 +207,45 @@ class Consumer:
         for artifact_hash in artifact_hashes:
             content = self.stream.load_artifact(artifact_hash)
             self.bundle_items.append(content)
-            
+    
+    def get_detected_artifacts(self, current_run_id: int) -> List[Tuple[Any, str]]:
+        if current_run_id < 0:
+            raise ValueError(f"current_run_id {current_run_id} must be greater than or equal to 0 to get detected artifacts between runs.")
+        
+        with self.conn_manager.read_cursor() as cursor:
+            if current_run_id == 0:
+                query: sql = f"""
+                    SELECT artifact_path, artifact_hash
+                    FROM {self.stream.local_table_name}
+                    WHERE timestamp <= (
+                        SELECT timestamp
+                        FROM run_events
+                        WHERE node_name = ? AND run_id = 0 AND event_type = 'start'
+                    );
+                """
+                cursor.execute(query, (self.node_name,))
+                detected_artifacts = cursor.fetchall()
+                return detected_artifacts
+
+            else:
+                query: sql = f"""
+                    SELECT artifact_path, artifact_hash
+                    FROM {self.stream.local_table_name}
+                    WHERE timestamp > (
+                        SELECT timestamp
+                        FROM run_events
+                        WHERE node_name = ? AND run_id = ? AND event_type = 'start'
+                    )
+                    AND timestamp <= (
+                        SELECT timestamp
+                        FROM run_events
+                        WHERE node_name = ? AND run_id = ? AND event_type = 'start'
+                    );
+                """
+                cursor.execute(query, (self.node_name, current_run_id - 1, self.node_name, current_run_id))
+                detected_artifacts = cursor.fetchall()
+                return detected_artifacts
+    
     def __iter__(self):
         while not self._stop.is_set():
             if self.restart == 1:
@@ -240,9 +280,6 @@ class Consumer:
             else:
                 self.logger.info(f"{self.name} yielding bundle_items: {self.bundle_items[:self.bundle_size]}, bundle_hashes: {self.bundle_hashes[:self.bundle_size]}")
                 bundle = self.bundle_items[:self.bundle_size]  # yield only a batch of items based on the bundle size
-
-                for artifact_hash in self.bundle_hashes[:self.bundle_size]:
-                    self.record_provenance(artifact_hash)   # record provenance for the artifacts in the bundle before yielding
 
                 yield bundle
 
