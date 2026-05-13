@@ -85,6 +85,26 @@ class Consumer:
                 VALUES (?, ?, ?, ?);
             """
             cursor.execute(query, (artifact_hash, self.name, "primed", filepath))
+        
+    def record_provenance(self, artifact_hash: str) -> None:
+        with self.conn_manager.read_cursor() as cursor:
+            query: sql = f"""
+                INSERT OR IGNORE INTO provenance_graph (
+                    predecessor_name, predecessor_type,
+                    successor_name, successor_type, 
+                    artifact_name, artifact_hash, 
+                    run_id, details
+                ) 
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+            """
+            cursor.execute(query, 
+                (
+                    self.stream.name, "stream", 
+                    self.name, "consumer", 
+                    self.stream.get_artifact_path(artifact_hash), artifact_hash, 
+                    self.run_id, None
+                )
+            )
 
     def ignore_artifact(self, artifact_hash: str) -> None:
         # delete this query in future if we don't need to store file paths for ignored artifacts
@@ -219,7 +239,12 @@ class Consumer:
                     self.bundle_hashes.append(file_hash)
             else:
                 self.logger.info(f"{self.name} yielding bundle_items: {self.bundle_items[:self.bundle_size]}, bundle_hashes: {self.bundle_hashes[:self.bundle_size]}")
-                yield self.bundle_items[:self.bundle_size]  # yield only a batch of items based on the bundle size
+                bundle = self.bundle_items[:self.bundle_size]  # yield only a batch of items based on the bundle size
+
+                for artifact_hash in self.bundle_hashes[:self.bundle_size]:
+                    self.record_provenance(artifact_hash)   # record provenance for the artifacts in the bundle before yielding
+
+                yield bundle
 
                 # remove the items that were just yielded from the bundle_items list, keep the remaining items for the next yield
                 self.bundle_items = self.bundle_items[self.bundle_size:]
