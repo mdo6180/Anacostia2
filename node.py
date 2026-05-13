@@ -119,25 +119,7 @@ class Node(threading.Thread, ABC):
 
             # record edges between the stream and the node for all artifacts detected between the start of the current run and the previous run
             for consumer in self.consumers:
-                for artifact_path, artifact_hash in consumer.get_detected_artifacts(current_run_id=self.run_id):
-                    consumer.record_provenance(
-                        predecessor_name=consumer.stream.name, predecessor_type="stream",
-                        successor_name=consumer.name, successor_type="consumer",
-                        artifact_name=artifact_path, 
-                        artifact_hash=artifact_hash,
-                        run_id=self.run_id,
-                        details=None
-                    )
-                
-                for artifact_hash in consumer.bundle_hashes[:consumer.bundle_size]:
-                    consumer.record_provenance(
-                        predecessor_name=consumer.name, predecessor_type="consumer",
-                        successor_name=self.name, successor_type="node",
-                        artifact_name=consumer.stream.get_artifact_path(artifact_hash), 
-                        artifact_hash=artifact_hash,
-                        run_id=self.run_id,
-                        details=None
-                    ) 
+                consumer.record_provenance(run_id=self.run_id)
             
             yield
             

@@ -86,8 +86,12 @@ class Consumer:
             """
             cursor.execute(query, (artifact_hash, self.name, "primed", filepath))
         
-    def record_provenance(
-        self, predecessor_name: str, predecessor_type: str, successor_name: str, successor_type: str, artifact_name: str, artifact_hash: str, run_id: int = None, details: str = None
+    def add_provenance_edge(
+        self, 
+        predecessor_name: str, predecessor_type: str, 
+        successor_name: str, successor_type: str, 
+        artifact_name: str, artifact_hash: str, 
+        run_id: int = None, details: str = None
     ) -> None:
         with self.conn_manager.read_cursor() as cursor:
             query: sql = f"""
@@ -107,6 +111,27 @@ class Consumer:
                     run_id, details
                 )
             )
+    
+    def record_provenance(self, run_id: int, details: str = None) -> None:
+        for artifact_path, artifact_hash in self.get_detected_artifacts(current_run_id=run_id):
+            self.add_provenance_edge(
+                predecessor_name=self.stream.name, predecessor_type="stream",
+                successor_name=self.name, successor_type="consumer",
+                artifact_name=artifact_path, 
+                artifact_hash=artifact_hash,
+                run_id=run_id,
+                details=details
+            )
+
+        for artifact_hash in self.bundle_hashes[:self.bundle_size]:
+            self.add_provenance_edge(
+                predecessor_name=self.name, predecessor_type="consumer",
+                successor_name=self.node_name, successor_type="node",
+                artifact_name=self.stream.get_artifact_path(artifact_hash), 
+                artifact_hash=artifact_hash,
+                run_id=run_id,
+                details=details
+            ) 
 
     def ignore_artifact(self, artifact_hash: str) -> None:
         # delete this query in future if we don't need to store file paths for ignored artifacts
