@@ -1,9 +1,3 @@
-/*
-instructions on how to run this script:
-# cd into anacostia2/
-$ sqlite3 testing_artifacts/.anacostia/anacostia.db < sql_scripts/producer_local.sql
-*/
-
 -- SELECT node_name, state, details, timestamp from artifact_usage_events WHERE node_name IN ('file_transport', 'combined_folder');
 
 SELECT
