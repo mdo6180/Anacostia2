@@ -12,14 +12,16 @@ sql = str   # alias of the str type for syntax highlighting using the Python Inl
 
 
 class FileSystemTransport:
-    def __init__(self, name: str, packages_directory: str, logger: Logger = None):
+    def __init__(self, name: str, packages_directory: str, hash_chunk_size: int = 1_048_576, logger: Logger = None):
         """
         name: name of the Transport
         packages_directory: directory where all of the Transport's packages will be stored.
+        hash_chunk_size: size of the chunks to read when hashing files.
         logger: logger for logging statements
         """
 
         self.name = name
+        self.hash_chunk_size = hash_chunk_size
         self.logger = logger
         self.run_id = 0
         self.local_table_name = f"{self.name}_local"
@@ -30,6 +32,10 @@ class FileSystemTransport:
             os.makedirs(self.dest_directory)
         
         self.metadata = []
+
+        self.producer_name: str = None
+        self.artifact_path: Path = None
+        self.artifact_hash: str = None
     
     def set_db_folder(self, db_folder: str):
         self.db_folder = db_folder
@@ -72,6 +78,32 @@ class FileSystemTransport:
             """
             cursor.execute(query)
 
+    def add_provenance_edge(
+        self, 
+        predecessor_name: str, predecessor_type: str, 
+        successor_name: str, successor_type: str, 
+        artifact_name: str, artifact_hash: str, 
+        run_id: int = None, details: str = None
+    ) -> None:
+        with self.conn_manager.read_cursor() as cursor:
+            query: sql = f"""
+                INSERT OR IGNORE INTO provenance_graph (
+                    predecessor_name, predecessor_type,
+                    successor_name, successor_type, 
+                    artifact_name, artifact_hash, 
+                    run_id, details
+                ) 
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+            """
+            cursor.execute(query, 
+                (
+                    predecessor_name, predecessor_type, 
+                    successor_name, successor_type, 
+                    artifact_name, artifact_hash, 
+                    run_id, details
+                )
+            )
+    
     def initialize_staging_directory(self):
         self.staging_directory = os.path.join(self.db_folder, self.name)
         if os.path.exists(self.staging_directory) is False:
@@ -81,7 +113,7 @@ class FileSystemTransport:
     def get_staging_directory(self) -> Path:
         return Path(self.staging_directory)
     
-    def stage_artifact(self, artifact_path: Path, artifact_staging_path: Path, artifact_hash: str) -> Path:
+    def stage_artifact(self, artifact_path: Path, artifact_staging_path: Path, artifact_hash: str, producer_name: str) -> Path:
         """
         Stage an artifact in the transport's staging directory.
 
@@ -89,6 +121,8 @@ class FileSystemTransport:
             artifact_path (Path): The path to the artifact.
             artifact_staging_path (Path): The path to copy the artifact to in the transport's staging directory. 
             Note: The final path must be within the directory specified in the directory argument in the class constructor.
+            artifact_hash (str): The hash of the artifact being staged.
+            producer_name (str): The name of the producer that produced the artifact.
 
         Returns:
             Tuple[Path, str]: The final path of where the artifact was moved to and its hash.
@@ -117,11 +151,27 @@ class FileSystemTransport:
             "filename": str(relative_path),
             "hash": artifact_hash
         })
+
+        self.producer_name = producer_name
+        self.artifact_path = artifact_path
+        self.artifact_hash = artifact_hash
+
+        self.add_provenance_edge(
+            predecessor_name=self.producer_name, predecessor_type="producer",
+            successor_name=self.name, successor_type="transport",
+            artifact_name=str(self.artifact_path),
+            artifact_hash=self.artifact_hash,
+            run_id=self.run_id,
+            details=None
+        )
     
     def package(self) -> Tuple[Path, str]:
         # create the metadata file
-        with open(self.get_staging_directory() / "metadata.json", "w") as f:
+        metadata_path = self.get_staging_directory() / "metadata.json"
+        with open(metadata_path, "w") as f:
             json.dump(self.metadata, f, indent=4)
+
+        metadata_hash = self.hash_file(metadata_path)
         
         # reset metadata
         self.metadata = []
@@ -139,6 +189,24 @@ class FileSystemTransport:
         # register package in global database
         self.register_artifact_packaged(package_path, package_hash)
 
+        self.add_provenance_edge(
+            predecessor_name=self.name, predecessor_type="transport",
+            successor_name=str(package_path), successor_type="package",
+            artifact_name=str(metadata_path),
+            artifact_hash=metadata_hash,
+            run_id=self.run_id,
+            details=None
+        )
+
+        self.add_provenance_edge(
+            predecessor_name=self.name, predecessor_type="transport",
+            successor_name=str(package_path), successor_type="package",
+            artifact_name=str(self.artifact_path),
+            artifact_hash=self.artifact_hash,
+            run_id=self.run_id,
+            details=None
+        )
+    
         return package_path, package_hash
     
     def register_artifact_send(self, package_path: Path, package_hash: str) -> None:
@@ -210,6 +278,12 @@ class FileSystemTransport:
 
         os.rmdir(staging_directory)
 
+    def hash_file(self, filepath: str) -> str:
+        sha256 = hashlib.sha256()
+        with open(filepath, 'rb') as f:
+            while chunk := f.read(self.hash_chunk_size):
+                sha256.update(chunk)
+        return sha256.hexdigest()
 
     def hash_directory(self, directory: str) -> str:
         """

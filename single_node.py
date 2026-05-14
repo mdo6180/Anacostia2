@@ -150,7 +150,8 @@ def node_func():
             combined_transport.stage_artifact(
                 artifact_path=combined_file_path, 
                 artifact_staging_path=combined_transport.get_staging_directory() / f"processed_combined_{node.run_id}.txt",
-                artifact_hash=combined_file_hash
+                artifact_hash=combined_file_hash,
+                producer_name=combined_producer.name
             )
 
             # package the artifact to create transport package
