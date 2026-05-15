@@ -95,32 +95,6 @@ class Producer:
     def restart_producer(self):
         self.clear_staging_directory()
         
-    def add_provenance_edge(
-        self, 
-        predecessor_name: str, predecessor_type: str, 
-        successor_name: str, successor_type: str, 
-        artifact_name: str, artifact_hash: str, 
-        run_id: int = None, details: str = None
-    ) -> None:
-        with self.conn_manager.read_cursor() as cursor:
-            query: sql = f"""
-                INSERT OR IGNORE INTO provenance_graph (
-                    predecessor_name, predecessor_type,
-                    successor_name, successor_type, 
-                    artifact_name, artifact_hash, 
-                    run_id, details
-                ) 
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?);
-            """
-            cursor.execute(query, 
-                (
-                    predecessor_name, predecessor_type, 
-                    successor_name, successor_type, 
-                    artifact_name, artifact_hash, 
-                    run_id, details
-                )
-            )
-    
     def commit_artifact(self, artifact_staging_path: Path, artifact_final_path: Path) -> Tuple[Path, str]:
         """
         Commit an artifact by moving it from the staging directory to the final directory,
@@ -174,7 +148,7 @@ class Producer:
             global_entry = (artifact_hash, self.name, self.run_id, "created", str(artifact_final_path))
             cursor.execute(query, global_entry)
         
-        self.add_provenance_edge(
+        self.conn_manager.add_provenance_edge(
             predecessor_name=self.node_name, predecessor_type="node",
             successor_name=self.name, successor_type="producer",
             artifact_name=str(artifact_final_path),

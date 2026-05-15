@@ -78,32 +78,6 @@ class FileSystemTransport:
             """
             cursor.execute(query)
 
-    def add_provenance_edge(
-        self, 
-        predecessor_name: str, predecessor_type: str, 
-        successor_name: str, successor_type: str, 
-        artifact_name: str, artifact_hash: str, 
-        run_id: int = None, details: str = None
-    ) -> None:
-        with self.conn_manager.read_cursor() as cursor:
-            query: sql = f"""
-                INSERT OR IGNORE INTO provenance_graph (
-                    predecessor_name, predecessor_type,
-                    successor_name, successor_type, 
-                    artifact_name, artifact_hash, 
-                    run_id, details
-                ) 
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?);
-            """
-            cursor.execute(query, 
-                (
-                    predecessor_name, predecessor_type, 
-                    successor_name, successor_type, 
-                    artifact_name, artifact_hash, 
-                    run_id, details
-                )
-            )
-    
     def initialize_staging_directory(self):
         self.staging_directory = os.path.join(self.db_folder, self.name)
         if os.path.exists(self.staging_directory) is False:
@@ -156,7 +130,7 @@ class FileSystemTransport:
         self.artifact_path = artifact_path
         self.artifact_hash = artifact_hash
 
-        self.add_provenance_edge(
+        self.conn_manager.add_provenance_edge(
             predecessor_name=self.producer_name, predecessor_type="producer",
             successor_name=self.name, successor_type="transport",
             artifact_name=str(self.artifact_path),
@@ -189,7 +163,7 @@ class FileSystemTransport:
         # register package in global database
         self.register_artifact_packaged(package_path, package_hash)
 
-        self.add_provenance_edge(
+        self.conn_manager.add_provenance_edge(
             predecessor_name=self.name, predecessor_type="transport",
             successor_name=str(package_path), successor_type="package",
             artifact_name=str(metadata_path),
@@ -198,7 +172,7 @@ class FileSystemTransport:
             details=None
         )
 
-        self.add_provenance_edge(
+        self.conn_manager.add_provenance_edge(
             predecessor_name=self.name, predecessor_type="transport",
             successor_name=str(package_path), successor_type="package",
             artifact_name=str(self.artifact_path),

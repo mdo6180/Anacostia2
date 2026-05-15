@@ -133,3 +133,29 @@ class ConnectionManager:
                 # no runs found, return -1
                 return -1
     
+    def add_provenance_edge(
+        self, 
+        predecessor_name: str, predecessor_type: str, 
+        successor_name: str, successor_type: str, 
+        artifact_name: str, artifact_hash: str, 
+        run_id: int = None, details: str = None
+    ) -> None:
+        with self.write_cursor() as cursor:
+            query: sql = f"""
+                INSERT OR IGNORE INTO provenance_graph (
+                    predecessor_name, predecessor_type,
+                    successor_name, successor_type, 
+                    artifact_name, artifact_hash, 
+                    run_id, details
+                ) 
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+            """
+            cursor.execute(query, 
+                (
+                    predecessor_name, predecessor_type, 
+                    successor_name, successor_type, 
+                    artifact_name, artifact_hash, 
+                    run_id, details
+                )
+            )
+    
