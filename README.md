@@ -20,6 +20,7 @@ An Anacostia pipeline is defined as a directed acyclic graph (DAG). There are fi
 - **Nodes**: a Node consumes bundles of artifacts via its Consumers, executes user-defined logic to process or transform them, and produces outputs that flow downstream to other components in the pipeline. A Node executes only when it receives a complete batch of artifacts from all of its Consumers.
 - **Producers**: a Producer is responsible for creating and emitting new artifacts as outputs of a Node’s run. It manages the staging, registration, and finalization of these artifacts before making them available to downstream components in the pipeline.
 - **Transports**: a Transport is responsible for packaging and transferring artifacts between environments or pipeline partitions. It stages artifacts, bundles associated data and metadata, and moves them to a destination where they can be ingested and processed by downstream components.
+- **Graphs**: a Graph orchestrates the pipeline within a local environment by initializing all components, setting up the shared SQLite database for logging and provenance, and executing the local portion of the DAG. Anacostia allows you to connect multiple graphs together across multiple environments.
 
 Basic code structure:
 1. **Configure the components of the pipeline.** In the following code snippet, we see two DirectoryStreams used to monitor two different folders for incoming files. Those two streams are then fed into two different Consumers and each Consumer object uses a different filter function to filter out unwanted artifacts. There are also three Producers being defined to register three different types of output artifacts. We then define one transport to move artifacts to another folder in the filesystem; and then lastly, we register all of these components with the Node object.
@@ -117,4 +118,16 @@ def entrypoint():
             # post-run, pre-exit logic
 
         # cleanup logic
+```
+
+3. Register nodes with a **Graph** object and start running the graph:
+```python
+graph = Graph(name="TestGraph", nodes=[node], db_folder="/folder/to/put/db", logger=logger)
+graph.start()
+
+try:
+    graph.join()
+except KeyboardInterrupt:
+    print(f"Node {node.name} received KeyboardInterrupt. Stopping...")
+    graph.stop()
 ```
