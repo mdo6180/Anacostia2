@@ -33,7 +33,6 @@ class FileSystemTransport:
         
         self.metadata = []
 
-        self.producer_name: str = None
         self.artifact_path: Path = None
         self.artifact_hash: str = None
     
@@ -126,12 +125,11 @@ class FileSystemTransport:
             "hash": artifact_hash
         })
 
-        self.producer_name = producer_name
         self.artifact_path = artifact_path
         self.artifact_hash = artifact_hash
 
         self.conn_manager.add_provenance_edge(
-            predecessor_name=self.producer_name, predecessor_type="producer",
+            predecessor_name=producer_name, predecessor_type="producer",
             successor_name=self.name, successor_type="transport",
             artifact_name=str(self.artifact_path),
             artifact_hash=self.artifact_hash,
