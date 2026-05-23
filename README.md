@@ -22,7 +22,7 @@ An Anacostia pipeline is defined as a directed acyclic graph (DAG). There are fi
 - **Transports**: a Transport is responsible for packaging and transferring artifacts between environments or pipeline partitions. It stages artifacts, bundles associated data and metadata, and moves them to a destination where they can be ingested and processed by downstream components.
 - **Graphs**: a Graph orchestrates the pipeline within a local environment by initializing all components, setting up the shared SQLite database for logging and provenance, and executing the local portion of the DAG. Anacostia allows you to connect multiple graphs together across multiple environments.
 
-Basic code structure:
+## Basic code structure:
 1. **Configure the components of the pipeline.** In the following code snippet, we see two DirectoryStreams used to monitor two different folders for incoming files. Those two streams are then fed into two different Consumers and each Consumer object uses a different filter function to filter out unwanted artifacts. There are also three Producers being defined to register three different types of output artifacts. We then define one transport to move artifacts to another folder in the filesystem; and then lastly, we register all of these components with the Node object.
 ```python
 def filter_odd(content: str) -> bool:
@@ -128,6 +128,5 @@ graph.start()
 try:
     graph.join()
 except KeyboardInterrupt:
-    print(f"Node {node.name} received KeyboardInterrupt. Stopping...")
     graph.stop()
 ```
