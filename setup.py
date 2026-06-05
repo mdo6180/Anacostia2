@@ -19,7 +19,7 @@ def package_files(directory):
                 paths.append(pathname)
     return paths
 
-# static_files = package_files("anacostia_pipeline/static")
+static_files = package_files("anacostia_pipeline/static")
 
 
 # removing dist/ and anacostia_pipeline.egg-info/ directories
@@ -36,7 +36,7 @@ setup(
     long_description=pathlib.Path("README.md").read_text(),
     long_description_content_type='text/markdown',
     packages=find_packages(),
-    # package_data={'anacostia_pipeline': [*static_files]},
+    package_data={'anacostia_pipeline': [*static_files]},
     include_package_data=True,
     exclude_package_data={
         '': ['__pycache__', '*.pyc', '*.pyo']
