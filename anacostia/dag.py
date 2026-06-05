@@ -2,8 +2,8 @@ from typing import List
 from logging import Logger
 from pathlib import Path
 
-from node import Node
-from utils.connection import ConnectionManager
+from anacostia.node import Node
+from anacostia.utils.connection import ConnectionManager
 
 sql = str   # alias of the str type for syntax highlighting using the Python Inline Source Syntax Highlighting extension by Sam Willis in VSCode.
 

@@ -4,8 +4,8 @@ import queue
 from typing import Callable, Any, Optional, List, Tuple
 from logging import Logger
 
-from utils.connection import ConnectionManager
-from streams.directory import DirectoryStream
+from anacostia.utils.connection import ConnectionManager
+from anacostia.streams.directory import DirectoryStream
 
 
 sql = str   # alias of the str type for syntax highlighting using the Python Inline Source Syntax Highlighting extension by Sam Willis in VSCode.

@@ -5,17 +5,17 @@ import shutil
 import time
 from pathlib import Path
 
-from streams.directory import DirectoryStream
-from consumer import Consumer
-from producer import Producer
-from transports.local import FileSystemTransport
-from node import Node
-from dag import Graph
-from utils.debug import stop_if
+from anacostia.streams.directory import DirectoryStream
+from anacostia.consumer import Consumer
+from anacostia.producer import Producer
+from anacostia.transports.local import FileSystemTransport
+from anacostia.node import Node
+from anacostia.dag import Graph
+from anacostia.utils.debug import stop_if
 
 sql = str   # alias of the str type for syntax highlighting using the Python Inline Source Syntax Highlighting extension by Sam Willis in VSCode.
 
-
+print("imports successful, starting test...")
 
 tests_path = Path("./testing_artifacts")
 db_folder_path = tests_path / ".anacostia"

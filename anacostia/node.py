@@ -8,10 +8,10 @@ from contextlib import contextmanager
 from typing import Callable, List
 import traceback
 
-from utils.connection import ConnectionManager
-from consumer import Consumer
-from producer import Producer
-from transports.local import FileSystemTransport
+from anacostia.utils.connection import ConnectionManager
+from anacostia.consumer import Consumer
+from anacostia.producer import Producer
+from anacostia.transports.local import FileSystemTransport
 
 sql = str   # alias of the str type for syntax highlighting using the Python Inline Source Syntax Highlighting extension by Sam Willis in VSCode.
 

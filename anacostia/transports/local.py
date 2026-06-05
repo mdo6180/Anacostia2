@@ -6,7 +6,7 @@ from typing import Tuple
 from pathlib import Path
 import hashlib
 
-from utils.connection import ConnectionManager
+from anacostia.utils.connection import ConnectionManager
 
 sql = str   # alias of the str type for syntax highlighting using the Python Inline Source Syntax Highlighting extension by Sam Willis in VSCode.
 
