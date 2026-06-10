@@ -4,7 +4,7 @@ import logging
 
 def log(message: str, level: str, logger: logging.Logger = None):
     """
-    Log a message at the specified level.
+    Log a message at the specified level. If logger is None, print the message to stdout. Otherwise, use the provided logger to log the message.
 
     level:
       - "debug"
