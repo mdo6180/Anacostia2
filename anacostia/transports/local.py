@@ -7,6 +7,7 @@ from pathlib import Path
 import hashlib
 
 from anacostia.utils.connection import ConnectionManager
+from anacostia.utils.logging import log
 
 sql = str   # alias of the str type for syntax highlighting using the Python Inline Source Syntax Highlighting extension by Sam Willis in VSCode.
 
@@ -80,7 +81,7 @@ class FileSystemTransport:
     def initialize_staging_directory(self):
         self.staging_directory = os.path.join(self.db_folder, self.name)
         if os.path.exists(self.staging_directory) is False:
-            self.logger.info(f"Temporary directory {self.staging_directory} does not exist. Creating it.")
+            log(f"Temporary directory {self.staging_directory} does not exist. Creating it.", level="info", logger=self.logger)
             os.makedirs(self.staging_directory)
 
     def get_staging_directory(self) -> Path:

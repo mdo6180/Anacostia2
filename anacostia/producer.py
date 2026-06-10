@@ -6,6 +6,7 @@ from pathlib import Path
 import shutil
 
 from anacostia.utils.connection import ConnectionManager
+from anacostia.utils.logging import log
 
 sql = str   # alias of the str type for syntax highlighting using the Python Inline Source Syntax Highlighting extension by Sam Willis in VSCode.
 
@@ -20,7 +21,7 @@ class Producer:
 
         self.directory = directory
         if not self.directory.exists():
-            self.logger.info(f"Directory {self.directory} does not exist. Creating it.")
+            log(f"Directory {self.directory} does not exist. Creating it.", level="info", logger=self.logger)
             self.directory.mkdir(parents=True, exist_ok=True)
 
         self.global_usage_table_name = "artifact_usage_events"
@@ -54,7 +55,7 @@ class Producer:
     def initialize_staging_directory(self):
         self.staging_directory = self.db_folder / self.name
         if not self.staging_directory.exists():
-            self.logger.info(f"Temporary directory {self.staging_directory} does not exist. Creating it.")
+            log(f"Temporary directory {self.staging_directory} does not exist. Creating it.", level="info", logger=self.logger)
             self.staging_directory.mkdir(parents=True, exist_ok=True)
 
     def get_staging_directory(self) -> Path:
@@ -86,10 +87,10 @@ class Producer:
         # clear any temp files in the staging directory from previous runs, so that we don't have any leftover temp files when we start a new run
         for path in self.staging_directory.iterdir():
             if path.is_file():
-                self.logger.warning(f"Producer {self.name} found leftover file {path} in staging directory from previous run. Removing it.")
+                log(f"Producer {self.name} found leftover file {path} in staging directory from previous run. Removing it.", level="warning", logger=self.logger)
                 os.remove(path)
             elif os.path.isdir(path):
-                self.logger.warning(f"Producer {self.name} found leftover directory {path} in staging directory from previous run. Removing it.")
+                log(f"Producer {self.name} found leftover directory {path} in staging directory from previous run. Removing it.", level="warning", logger=self.logger)
                 shutil.rmtree(path)
     
     def restart_producer(self):

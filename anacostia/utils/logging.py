@@ -1,5 +1,7 @@
 import logging
 
+
+
 def log(message: str, level: str, logger: logging.Logger = None):
     """
     Log a message at the specified level.

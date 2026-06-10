@@ -6,6 +6,7 @@ from logging import Logger
 
 from anacostia.utils.connection import ConnectionManager
 from anacostia.streams.directory import DirectoryStream
+from anacostia.utils.logging import log
 
 
 sql = str   # alias of the str type for syntax highlighting using the Python Inline Source Syntax Highlighting extension by Sam Willis in VSCode.
@@ -175,7 +176,7 @@ class Consumer:
             """
             cursor.execute(query, (self.node_name, self.run_id))
             using_artifacts = cursor.fetchall()
-            self.logger.info(f"querying using {self.node_name} run {self.run_id}: found {len(using_artifacts)} artifacts in 'using' state")
+            log(f"querying using {self.node_name} run {self.run_id}: found {len(using_artifacts)} artifacts in 'using' state", level="info", logger=self.logger)
         
         artifact_hashes = [row[0] for row in using_artifacts]   # extract artifact hashes from query result
         self.bundle_hashes = artifact_hashes  # store the hashes of the current using artifacts for the using_artifacts and commit_artifacts calls in the Node
@@ -264,7 +265,7 @@ class Consumer:
                 
                 using_bundle = self.get_using_artifacts()
                 if using_bundle:
-                    self.logger.info(f"{self.name} yielding {len(using_bundle)} artifacts from last partial bundle after restart")
+                    log(f"{self.name} yielding {len(using_bundle)} artifacts from last partial bundle after restart", level="info", logger=self.logger)
                     yield using_bundle
                     self.bundle_items = []
                     self.bundle_hashes = []
@@ -279,7 +280,7 @@ class Consumer:
                     self.bundle_items.append(item)
                     self.bundle_hashes.append(file_hash)
             else:
-                self.logger.info(f"{self.name} yielding bundle_items: {self.bundle_items[:self.bundle_size]}, bundle_hashes: {self.bundle_hashes[:self.bundle_size]}")
+                log(f"{self.name} yielding bundle_items: {self.bundle_items[:self.bundle_size]}, bundle_hashes: {self.bundle_hashes[:self.bundle_size]}", level="info", logger=self.logger)
                 bundle = self.bundle_items[:self.bundle_size]  # yield only a batch of items based on the bundle size
 
                 yield bundle

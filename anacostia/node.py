@@ -12,6 +12,7 @@ from anacostia.utils.connection import ConnectionManager
 from anacostia.consumer import Consumer
 from anacostia.producer import Producer
 from anacostia.transports.local import FileSystemTransport
+from anacostia.utils.logging import log
 
 sql = str   # alias of the str type for syntax highlighting using the Python Inline Source Syntax Highlighting extension by Sam Willis in VSCode.
 
@@ -107,12 +108,12 @@ class Node(threading.Thread, ABC):
             for artifact_hash in consumer.bundle_hashes:
                 artifact_path = consumer.stream.get_artifact_path(artifact_hash)
                 self.start_using_artifact(artifact_path, artifact_hash)
-                self.logger.info(f"Node {self.name} started using artifact {artifact_path} with hash {artifact_hash} in run {self.run_id}")
+                log(f"Node {self.name} started using artifact {artifact_path} with hash {artifact_hash} in run {self.run_id}", level="info", logger=self.logger)
     
     @contextmanager
     def stage_run(self):
         try:
-            self.logger.info(f"\nNode {self.name} starting run {self.run_id}")   # start_run DB call in future
+            log(f"Node {self.name} starting run {self.run_id}", level="info", logger=self.logger)
             self.conn_manager.start_run(self.name, self.run_id)   # start_run DB call
             self.set_run_id(self.run_id)
             self.using_artifacts()    # mark artifacts as being used in the DB
@@ -131,7 +132,7 @@ class Node(threading.Thread, ABC):
                 for artifact_hash in consumer.bundle_hashes:
                     artifact_path = consumer.stream.get_artifact_path(artifact_hash)
                     self.finished_using_artifact(artifact_path, artifact_hash)
-                    self.logger.info(f"Node {self.name} finished using artifact {artifact_path} with hash {artifact_hash} in run {self.run_id}")
+                    log(f"Node {self.name} finished using artifact {artifact_path} with hash {artifact_hash} in run {self.run_id}", level="info", logger=self.logger)
             
             # clear staging directories of producers
             for producer in self.producers:
@@ -142,12 +143,12 @@ class Node(threading.Thread, ABC):
             # this means that when the user calls package(), all the artifacts in the staging directory are moved to the final package directory.
             # thus, there is no need to clear the staging directory after every run because we assume the user will call Transport.package()
 
-            self.logger.info(f"\nNode {self.name} finished run {self.run_id}")    # end_run DB call in future
+            log(f"\nNode {self.name} finished run {self.run_id}", level="info", logger=self.logger)    # end_run DB call in future
             self.conn_manager.end_run(self.name, self.run_id)   # end_run DB call
             self.set_run_id(self.run_id + 1)  # prepare for next run
 
         except Exception as e:
-            self.logger.error(f"Error in node {self.name} during run {self.run_id}: {e}\n{traceback.format_exc()}")
+            log(f"Error in node {self.name} during run {self.run_id}: {e}\n{traceback.format_exc()}", level="error", logger=self.logger)
 
     def entrypoint(self, func: Callable[[], None]):
         # 🔒 Enforce exactly ONE entrypoint
@@ -201,7 +202,7 @@ class Node(threading.Thread, ABC):
         else:
             # upon restart, if the latest run has not ended, resume from that run
             self.set_run_id(latest_run_id)
-            self.logger.info(f"{self.name} restarting run {self.run_id}")
+            log(f"{self.name} restarting run {self.run_id}", level="info", logger=self.logger)
             self.conn_manager.resume_run(self.name, self.run_id)
 
             for consumer in self.consumers:
@@ -226,5 +227,5 @@ class Node(threading.Thread, ABC):
             self._entrypoint()
 
         except Exception as e:
-            self.logger.error(f"Error in node {self.name}: {e}\n{traceback.format_exc()}")
+            log(f"Error in node {self.name}: {e}\n{traceback.format_exc()}", level="error", logger=self.logger)
             # log the error in DB here, used to display run error on GUI

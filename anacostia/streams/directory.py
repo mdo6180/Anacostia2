@@ -6,6 +6,7 @@ from typing import Any, Generator
 from pathlib import Path
 
 from anacostia.utils.connection import ConnectionManager
+from anacostia.utils.logging import log
 
 sql = str   # alias of the str type for syntax highlighting using the Python Inline Source Syntax Highlighting extension by Sam Willis in VSCode.
 
@@ -15,7 +16,7 @@ class DirectoryStream:
     def __init__(self, name: str, directory: Path, poll_interval: float = 0.1, hash_chunk_size: int = 1_048_576, logger: Logger = None):
         self.logger = logger
         if os.path.exists(directory) is False:
-            self.logger.info(f"Directory {directory} does not exist. Creating it.")
+            log(f"Directory {directory} does not exist. Creating it.", level="info", logger=self.logger)
             os.makedirs(directory)
 
         self.name = name

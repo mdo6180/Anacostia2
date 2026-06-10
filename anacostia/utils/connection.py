@@ -2,6 +2,8 @@ import sqlite3
 from contextlib import contextmanager
 import logging
 
+from anacostia.utils.logging import log
+
 sql = str   # alias of the str type for syntax highlighting using the Python Inline Source Syntax Highlighting extension by Sam Willis in VSCode.
 
 
@@ -22,23 +24,6 @@ class ConnectionManager:
         self.db_path = db_path
         self.logger = logger
     
-    def log(self, message: str, level="DEBUG") -> None:
-        if self.logger is not None:
-            if level == "DEBUG":
-                self.logger.debug(message)
-            elif level == "INFO":
-                self.logger.info(message)
-            elif level == "WARNING":
-                self.logger.warning(message)
-            elif level == "ERROR":
-                self.logger.error(message)
-            elif level == "CRITICAL":
-                self.logger.critical(message)
-            else:
-                raise ValueError(f"Invalid log level: {level}")
-        else:
-            print(message)
-
     def close(self) -> None:
         self.connection.close()
     
@@ -82,7 +67,7 @@ class ConnectionManager:
         except sqlite3.IntegrityError as e:
             # Run already started, ignore
             if "UNIQUE constraint failed" in str(e):
-                self.log(f"Run {run_id} for node '{node_name}' already started. Ignoring duplicate start.", level="WARNING")
+                log(f"Run {run_id} for node '{node_name}' already started. Ignoring duplicate start.", level="warning", logger=self.logger)
                 return -1
 
     def end_run(self, node_name: str, run_id: int) -> int:
@@ -99,7 +84,7 @@ class ConnectionManager:
             except sqlite3.IntegrityError as e:
                 if "UNIQUE constraint failed" in str(e):
                     # Run already ended, ignore
-                    self.log(f"Run {run_id} for node '{node_name}' already ended. Ignoring duplicate end.", level="WARNING")
+                    log(f"Run {run_id} for node '{node_name}' already ended. Ignoring duplicate end.", level="warning", logger=self.logger)
                     return -1
     
     def run_ended(self, node_name: str, run_id: int) -> bool:

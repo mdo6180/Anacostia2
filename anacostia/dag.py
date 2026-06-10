@@ -4,6 +4,7 @@ from pathlib import Path
 
 from anacostia.node import Node
 from anacostia.utils.connection import ConnectionManager
+from anacostia.utils.logging import log
 
 sql = str   # alias of the str type for syntax highlighting using the Python Inline Source Syntax Highlighting extension by Sam Willis in VSCode.
 
@@ -21,7 +22,7 @@ class Graph:
         
         db_path = self.db_folder / 'anacostia.db'
         if db_path.exists() is True:
-            self.log(f"Database found at {db_path}. Connecting...", level="INFO")
+            log(f"Database found at {db_path}. Connecting...", level="info", logger=self.logger)
 
         self.conn_manager = ConnectionManager(db_path, logger=self.logger)
         with self.conn_manager.write_cursor() as cursor:
@@ -96,7 +97,7 @@ class Graph:
                 transport.setup()
 
     def start(self):
-        self.log(f"Starting graph '{self.name}' with {len(self.nodes)} nodes.", level="INFO")
+        log(f"Starting graph '{self.name}' with {len(self.nodes)} nodes.", level="info", logger=self.logger)
         for node in self.nodes:
             node.start()
     
@@ -105,23 +106,6 @@ class Graph:
             node.join()
     
     def stop(self):
-        self.log(f"Stopping graph '{self.name}' with {len(self.nodes)} nodes.", level="INFO")
+        log(f"Stopping graph '{self.name}' with {len(self.nodes)} nodes.", level="info", logger=self.logger)
         for node in self.nodes:
             node.stop_consumers()
-
-    def log(self, message: str, level="DEBUG") -> None:
-        if self.logger is not None:
-            if level == "DEBUG":
-                self.logger.debug(message)
-            elif level == "INFO":
-                self.logger.info(message)
-            elif level == "WARNING":
-                self.logger.warning(message)
-            elif level == "ERROR":
-                self.logger.error(message)
-            elif level == "CRITICAL":
-                self.logger.critical(message)
-            else:
-                raise ValueError(f"Invalid log level: {level}")
-        else:
-            print(message)
