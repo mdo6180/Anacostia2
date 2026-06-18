@@ -37,6 +37,7 @@ class Consumer:
 
         self.bundle_items: List[Any] = []  # store the items of the current bundle for the using_artifacts and commit_artifacts calls in the Node
         self.bundle_hashes: List[str] = []  # store the hashes of the current bundle for the using_artifacts and commit_artifacts calls in the Node
+        self.bundle_locations: List[str] = []  # store the locations of the current bundle for the using_artifacts and commit_artifacts calls in the Node
 
         self.items_queue = queue.Queue(maxsize=maxsize)
         self._stop = threading.Event()
@@ -77,7 +78,7 @@ class Consumer:
 
     def prime_artifact(self, artifact_hash: str) -> None:
         # delete this query in future if we don't need to store file paths for ignored artifacts
-        filepath = self.stream.get_artifact_path(artifact_hash)
+        filepath = self.stream.get_artifact_location(artifact_hash)
 
         with self.conn_manager.write_cursor() as cursor:
             query: sql = f"""
@@ -104,7 +105,7 @@ class Consumer:
             self.conn_manager.add_provenance_edge(
                 predecessor_name=self.name, predecessor_type="consumer",
                 successor_name=self.node_name, successor_type="node",
-                artifact_name=self.stream.get_artifact_path(artifact_hash), 
+                artifact_name=self.stream.get_artifact_location(artifact_hash), 
                 artifact_hash=artifact_hash,
                 run_id=run_id,
                 details=details
@@ -112,7 +113,7 @@ class Consumer:
 
     def ignore_artifact(self, artifact_hash: str) -> None:
         # delete this query in future if we don't need to store file paths for ignored artifacts
-        filepath = self.stream.get_artifact_path(artifact_hash)
+        filepath = self.stream.get_artifact_location(artifact_hash)
 
         with self.conn_manager.write_cursor() as cursor:
             query: sql = f"""
@@ -269,6 +270,7 @@ class Consumer:
                     yield using_bundle
                     self.bundle_items = []
                     self.bundle_hashes = []
+                    self.bundle_locations = []
 
             self.restart = 0   # reset restart mode after restart is done
 
@@ -279,6 +281,7 @@ class Consumer:
                 if self.is_artifact_used(file_hash) is False:   
                     self.bundle_items.append(item)
                     self.bundle_hashes.append(file_hash)
+                    self.bundle_locations.append(self.stream.get_artifact_location(file_hash))
             else:
                 log(f"{self.name} yielding bundle_items: {self.bundle_items[:self.bundle_size]}, bundle_hashes: {self.bundle_hashes[:self.bundle_size]}", level="info", logger=self.logger)
                 bundle = self.bundle_items[:self.bundle_size]  # yield only a batch of items based on the bundle size
@@ -288,3 +291,4 @@ class Consumer:
                 # remove the items that were just yielded from the bundle_items list, keep the remaining items for the next yield
                 self.bundle_items = self.bundle_items[self.bundle_size:]
                 self.bundle_hashes = self.bundle_hashes[self.bundle_size:]
+                self.bundle_locations = self.bundle_locations[self.bundle_size:]

@@ -106,7 +106,7 @@ class Node(threading.Thread, ABC):
     def using_artifacts(self):
         for consumer in self.consumers:
             for artifact_hash in consumer.bundle_hashes:
-                artifact_path = consumer.stream.get_artifact_path(artifact_hash)
+                artifact_path = consumer.stream.get_artifact_location(artifact_hash)
                 self.start_using_artifact(artifact_path, artifact_hash)
                 log(f"Node {self.name} started using artifact {artifact_path} with hash {artifact_hash} in run {self.run_id}", level="info", logger=self.logger)
     
@@ -130,7 +130,7 @@ class Node(threading.Thread, ABC):
             # so that we can do the hashing while the node starts working on the next run.
             for consumer in self.consumers:
                 for artifact_hash in consumer.bundle_hashes:
-                    artifact_path = consumer.stream.get_artifact_path(artifact_hash)
+                    artifact_path = consumer.stream.get_artifact_location(artifact_hash)
                     self.finished_using_artifact(artifact_path, artifact_hash)
                     log(f"Node {self.name} finished using artifact {artifact_path} with hash {artifact_hash} in run {self.run_id}", level="info", logger=self.logger)
             

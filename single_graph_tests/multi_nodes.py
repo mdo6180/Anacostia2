@@ -5,13 +5,13 @@ import shutil
 import time
 from pathlib import Path
 
-from streams.directory import DirectoryStream
-from producer import Producer
-from consumer import Consumer
-from transports.local import FileSystemTransport
-from node import Node
-from dag import Graph
-from utils.debug import stop_if
+from anacostia.streams.directory import DirectoryStream
+from anacostia.producer import Producer
+from anacostia.consumer import Consumer
+from anacostia.transports.local import FileSystemTransport
+from anacostia.node import Node
+from anacostia.dag import Graph
+from anacostia.utils.debug import stop_if
 
 sql = str   # alias of the str type for syntax highlighting using the Python Inline Source Syntax Highlighting extension by Sam Willis in VSCode.
 
@@ -152,7 +152,7 @@ class CombinedStream(DirectoryStream):
         super().__init__(name, directory, poll_interval, hash_chunk_size, logger)
 
     def load_artifact(self, artifact_hash):
-        folder_path = self.get_artifact_path(artifact_hash)
+        folder_path = self.get_artifact_location(artifact_hash)
         folder_path = Path(folder_path)
         for filename in folder_path.iterdir():
             if filename.is_file():

@@ -2,7 +2,7 @@ import hashlib
 from logging import Logger
 import os
 import time
-from typing import Any, Generator
+from typing import Any, Generator, Tuple
 from pathlib import Path
 
 from anacostia.utils.connection import ConnectionManager
@@ -84,7 +84,7 @@ class DirectoryStream:
             cursor.execute(query, (filepath, artifact_hash, self.name, "sha256"))
 
     def register_artifact_global(self, artifact_hash: str) -> None:
-        artifact_path = self.get_artifact_path(artifact_hash)
+        artifact_path = self.get_artifact_location(artifact_hash)
         with self.conn_manager.write_cursor() as cursor:
             query: sql = f"""
                 INSERT OR IGNORE INTO {self.global_usage_table_name} 
@@ -94,6 +94,7 @@ class DirectoryStream:
             cursor.execute(query, (artifact_hash, self.name, "detected", artifact_path))
             # self.logger.info(f"Registered artifact {filepath} with hash {artifact_hash} in stream {self.name} at {timestamp}")
 
+    # perhaps replace this method with __contains__ to allow for "in" operator usage
     def is_artifact_registered(self, filepath: str) -> bool:
         with self.conn_manager.read_cursor() as cursor:
             query: sql = f"""
@@ -102,7 +103,7 @@ class DirectoryStream:
             cursor.execute(query, (filepath,))
             return cursor.fetchone() is not None
     
-    def get_artifact_path(self, artifact_hash: str) -> str:
+    def get_artifact_location(self, artifact_hash: str) -> str:
         with self.conn_manager.read_cursor() as cursor:
             query: sql = f"""
                 SELECT artifact_path FROM {self.local_table_name} WHERE artifact_hash = ? LIMIT 1;
@@ -163,10 +164,24 @@ class DirectoryStream:
         """
         Load and return the content of the artifact given its hash. User implemented method.
         """
-        artifact_path = self.get_artifact_path(artifact_hash)
+        artifact_path = self.get_artifact_location(artifact_hash)
         with open(artifact_path, "r") as file:
             content = file.read()
             return content
+
+    def __getitem__(self, hash: str) -> Tuple[str, Any]:
+        """
+        Get an artifact from the stream based on its hash.
+        Returns a tuple of the artifact location and the artifact content.
+        Artifact location can be a file path, a URL, or any other identifier that can be used to retrieve the artifact content.
+        Artifact content can be the content of a file, the response from an API call, the values in a database row represented as JSON,
+        or any other data that can be represented in Python.
+
+        hash: the hash of the artifact to retrieve
+        """
+        artifact_path = self.get_artifact_location(hash)
+        content = self.load_artifact(hash)
+        return artifact_path, content
     
     def __iter__(self) -> Generator[Any, Any, str]:
         """
