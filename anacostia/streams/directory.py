@@ -36,9 +36,6 @@ class DirectoryStream:
         # add a way to get indexes from seen artifacts to help with resuming streams after restart
         # associate the file paths with file hashes in the DB for this stream
     
-    def set_node_name(self, node_name: str):
-        self.name = node_name
-        
     def setup(self):
         """
         Create the local table for this stream to track seen artifacts and their hashes.
@@ -95,7 +92,8 @@ class DirectoryStream:
             # self.logger.info(f"Registered artifact {filepath} with hash {artifact_hash} in stream {self.name} at {timestamp}")
 
     # perhaps replace this method with __contains__ to allow for "in" operator usage
-    def is_artifact_registered(self, filepath: str) -> bool:
+    def is_artifact_registered(self, filepath: Path) -> bool:
+        filepath = str(filepath)
         with self.conn_manager.read_cursor() as cursor:
             query: sql = f"""
                 SELECT 1 FROM {self.local_table_name} WHERE artifact_path = ? LIMIT 1;
@@ -114,12 +112,12 @@ class DirectoryStream:
                 raise ValueError(f"Artifact with hash {artifact_hash} not found in local stream table.")
             return result[0]
 
-    def hash_artifact(self, filepath: str) -> str:
+    def hash_artifact(self, filepath: Path) -> str:
         """
         Hash the artifact using the specified hash algorithm and return the hash value. User implemented method.
         """
         sha256 = hashlib.sha256()
-        with open(filepath, 'rb') as f:
+        with open(str(filepath), 'rb') as f:
             while chunk := f.read(self.hash_chunk_size):
                 sha256.update(chunk)
         return sha256.hexdigest()
@@ -193,15 +191,15 @@ class DirectoryStream:
             # sort files by last modification time
             for path in sorted(self.directory.iterdir(), key=lambda p: p.stat().st_mtime):
 
-                path_str = str(path)
-
                 # skip artifacts already registered
-                if self.is_artifact_registered(path_str):
+                if self.is_artifact_registered(path):
                     continue
+
+                path_str = str(path)
 
                 # hash and register artifact
                 if path.is_file():
-                    file_hash = self.hash_artifact(path_str)
+                    file_hash = self.hash_artifact(path)
                     self.register_artifact(path_str, file_hash)
                 
                 elif path.is_dir():

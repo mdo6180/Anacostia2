@@ -113,7 +113,7 @@ class Node(threading.Thread, ABC):
     @contextmanager
     def stage_run(self):
         try:
-            log(f"Node {self.name} starting run {self.run_id}", level="info", logger=self.logger)
+            log(f"\nNode {self.name} starting run {self.run_id}", level="info", logger=self.logger)
             self.conn_manager.start_run(self.name, self.run_id)   # start_run DB call
             self.set_run_id(self.run_id)
             self.using_artifacts()    # mark artifacts as being used in the DB
