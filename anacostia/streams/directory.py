@@ -140,7 +140,7 @@ class DirectoryStream:
         if not root.is_dir():
             raise ValueError(f"{directory} is not a directory")
 
-        hasher = hashlib.sha256()
+        sha256 = hashlib.sha256()
 
         # Walk files in deterministic order
         for path in sorted(root.rglob("*")):
@@ -148,17 +148,17 @@ class DirectoryStream:
                 rel_path = path.relative_to(root)
 
                 # Hash relative path first (prevents rename collisions)
-                hasher.update(str(rel_path).encode("utf-8"))
-                hasher.update(b"\0")
+                sha256.update(str(rel_path).encode("utf-8"))
+                sha256.update(b"\0")
 
                 # Hash file contents
                 with open(path, "rb") as f:
                     while chunk := f.read(self.hash_chunk_size):
-                        hasher.update(chunk)
+                        sha256.update(chunk)
 
-                hasher.update(b"\0")
+                sha256.update(b"\0")
 
-        return hasher.hexdigest()
+        return sha256.hexdigest()
 
     def load_artifact(self, artifact_hash: str) -> str:
         """
@@ -169,7 +169,7 @@ class DirectoryStream:
             content = file.read()
             return content
 
-    def __getitem__(self, hash: str) -> Tuple[str, Any]:
+    def __getitem__(self, artifact_hash: str) -> Tuple[str, str]:
         """
         Get an artifact from the stream based on its hash.
         Returns a tuple of the artifact location and the artifact content.
@@ -177,10 +177,10 @@ class DirectoryStream:
         Artifact content can be the content of a file, the response from an API call, the values in a database row represented as JSON,
         or any other data that can be represented in Python.
 
-        hash: the hash of the artifact to retrieve
+        artifact_hash: the hash of the artifact to retrieve
         """
-        artifact_path = self.get_artifact_location(hash)
-        content = self.load_artifact(hash)
+        artifact_path = self.get_artifact_location(artifact_hash)
+        content = self.load_artifact(artifact_hash)
         return artifact_path, content
     
     def __iter__(self) -> Generator[Any, Any, str]:
