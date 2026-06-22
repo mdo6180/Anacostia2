@@ -3,7 +3,7 @@ import logging
 from typing import Any
 
 from anacostia.utils.connection import ConnectionManager
-from anacostia.utils.logging import log
+from anacostia.utils.types import JsonDict
 
 sql = str   # alias of the str type for syntax highlighting using the Python Inline Source Syntax Highlighting extension by Sam Willis in VSCode.
 
@@ -43,53 +43,53 @@ class Stream:
         with self.conn_manager.write_cursor() as cursor:
             query: sql = f"""
                 CREATE TABLE IF NOT EXISTS {self.local_table_name} (
-                    artifact_location TEXT NOT NULL,
-                    artifact_hash TEXT NOT NULL,
+                    artifact_hash TEXT PRIMARY KEY,
                     timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-                    UNIQUE(artifact_location, artifact_hash),
+                    artifact_location TEXT NOT NULL,
+                    metadata TEXT,
                     UNIQUE(artifact_hash)
                 );
             """
             cursor.execute(query)
 
-    def register_artifact(self, artifact_location: str, artifact_hash: str, **kwargs) -> None:
+    def register_artifact(self,  artifact_hash: str, artifact_location: JsonDict, metadata: JsonDict = None) -> None:
         """
         Register an artifact in the stream's local database table and the global database table.
-        :param artifact_location: The location of the artifact (e.g., file path, URL).
+
         :param artifact_hash: The hash of the artifact.
-        :param kwargs: Additional keyword arguments to be stored in the stream's local database (e.g., tags, metadata).
+        :param artifact_location: The location of the artifact (e.g., file path, URL) formatted as a JSON dictionary.
+        :param metadata: Additional metadata to be stored in the stream's local database.
         """
-        self.register_artifact_local(artifact_location, artifact_hash, **kwargs)
+        self.register_artifact_local(artifact_hash, artifact_location, metadata=metadata)
         self.register_artifact_global(artifact_hash)
 
-    def register_artifact_local(self, artifact_location: str, artifact_hash: str, **kwargs) -> None:
+    def register_artifact_local(self, artifact_hash: str, artifact_location: JsonDict, metadata: JsonDict = None) -> None:
         """
         Register an artifact in the stream's local database table and the global database table. 
 
-        :param artifact_location: The location of the artifact (e.g., file path, URL).
+        :param artifact_location: The location of the artifact (e.g., file path, URL) formatted as a JSON dictionary.
         :param artifact_hash: The hash of the artifact.
-        :param kwargs: Additional keyword arguments to be stored in the stream's local database (e.g., tags, metadata).
+        :param metadata: Additional metadata about the artifact to be stored in the stream's local database formatted as a JSON string.
 
         Example usage:
         ```
         stream = DirectoryStream(name="example_stream", directory=Path("/path/to/directory"), logger=logger)
-        stream.register_artifact_local(artifact_location, artifact_hash, tag="example_tag", metadata="example_metadata")
+        stream.register_artifact_local(
+            artifact_hash, 
+            artifact_location=json.dumps({"filepath": "/path/to/file.txt"}),
+            metadata=json.dumps({"example_metadata": example_metadata})
+        )
         ```
 
         example_tag will be stored in the local table under a column named "tag" and example_metadata will be stored in the local table under a column named "metadata".
         """
 
-        columns = ['artifact_location', 'artifact_hash'] + list(kwargs.keys())
-        values = (artifact_location, artifact_hash) + tuple(kwargs.values())
-        placeholders = ', '.join(['?'] * len(values))
-
         query: sql = f"""
-            INSERT OR IGNORE INTO {self.local_table_name} ({', '.join(columns)})
-            VALUES ({placeholders});
+            INSERT OR IGNORE INTO {self.local_table_name} ('artifact_hash', 'artifact_location', 'metadata')
+            VALUES (?, ?, ?);
         """
-
         with self.conn_manager.write_cursor() as cursor:
-            cursor.execute(query, values)
+            cursor.execute(query, (artifact_hash, artifact_location, metadata))
 
     def register_artifact_global(self, artifact_hash: str) -> None:
         artifact_path = self.get_artifact_location(artifact_hash)
@@ -102,30 +102,32 @@ class Stream:
             cursor.execute(query, (artifact_hash, self.name, "detected", artifact_path))
             # self.logger.info(f"Registered artifact {filepath} with hash {artifact_hash} in stream {self.name} at {timestamp}")
 
-    def get_artifact_location(self, artifact_hash: str) -> Any:
+    def get_artifact_location(self, artifact_hash: str) -> JsonDict:
         """
-        This method should be implemented by subclasses to define how to retrieve the location of an artifact given its hash.
+        This method should be implemented by subclasses to define how to retrieve the location of an artifact from the local database table given its hash.
 
         :param artifact_hash: The hash of the artifact.
 
-        :return artifact location: The location of the artifact (e.g., file path, URL).
+        :return artifact location: The location of the artifact (e.g., file path, URL) as a JSON dictionary.
         """
-        raise NotImplementedError("Subclasses must implement the get_artifact_location method.")
+        # We will implement this method in the base class to retrieve the artifact location from the local database table given its hash.
+        pass
 
-    def load_artifact(self, artifact_location: Any) -> bytes:
+    def __contains__(self, artifact_location: JsonDict) -> bool:
         """
-        Load and return the content of the artifact as bytes given its location. User implemented method.
+        Check if an artifact is registered in the stream's local database table based on its location.
 
-        :param artifact_location: The location of the artifact (e.g., file path, URL).
+        :param artifact_location: The location of the artifact (e.g., file path, URL) formatted as a JSON dictionary.
 
-        :return artifact content: The content of the artifact as bytes.
+        :return: True if the artifact is registered, False otherwise.
         """
-        raise NotImplementedError("Subclasses must implement the load_artifact method.")
+        # We will implement this method in the base class to check if an artifact is registered in the local database table based on its location.
+        pass
 
-    @staticmethod
     def hash_artifact(artifact: bytes) -> str:
         """
-        Hash the artifact using the specified hash algorithm and return the hash value. User implemented method.
+        Hash the artifact using the specified hash algorithm and return the hash value.
+        For larger artifacts, override this method with a more efficient hashing strategy to avoid loading the entire artifact into memory.
 
         :param artifact: The artifact content as bytes to be hashed.
 
@@ -142,6 +144,16 @@ class Stream:
         """
         return hashlib.sha256(artifact).hexdigest()
     
+    def load_artifact(self, artifact_location: JsonDict) -> bytes:
+        """
+        Load and return the content of the artifact as bytes given its location. User implemented method.
+
+        :param artifact_location: The location of the artifact (e.g., file path, URL) as a JSON dictionary.
+
+        :return artifact content: The content of the artifact as bytes.
+        """
+        raise NotImplementedError("Subclasses must implement the load_artifact method.")
+
     def __iter__(self) -> Any:
         """
         This method should be implemented by subclasses to define how the stream polls the source for new artifacts.
