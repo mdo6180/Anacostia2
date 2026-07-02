@@ -53,6 +53,54 @@ class ConnectionManager:
         finally:
             cur.close()
     
+    def create_global_tables(self) -> None:
+        with self.write_cursor() as cursor:
+            query: sql = f"""
+                CREATE TABLE IF NOT EXISTS nodes (
+                    node_name TEXT UNIQUE,
+                    node_type TEXT,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                );
+            """
+            cursor.execute(query)
+
+            query: sql = f"""
+                CREATE TABLE IF NOT EXISTS artifact_usage_events (
+                    artifact_hash TEXT,
+                    node_name TEXT,
+                    run_id INTEGER DEFAULT NULL,
+                    state TEXT CHECK (state IN ('created', 'committed', 'detected', 'primed', 'using', 'used', 'ignored', 'sent', 'received', 'packaged')),
+                    details TEXT DEFAULT NULL CHECK (details IS NULL OR json_valid(details)),
+                    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+                );
+            """
+            cursor.execute(query)
+
+            query: sql = f"""
+                CREATE TABLE IF NOT EXISTS provenance_graph (
+                    predecessor_name TEXT DEFAULT NULL,
+                    predecessor_type TEXT DEFAULT NULL,
+                    successor_name TEXT DEFAULT NULL,
+                    successor_type TEXT DEFAULT NULL,
+                    artifact_location TEXT DEFAULT NULL CHECK (artifact_location IS NULL OR json_valid(artifact_location)),
+                    artifact_hash TEXT DEFAULT NULL,
+                    run_id INTEGER,
+                    details TEXT DEFAULT NULL CHECK (details IS NULL OR json_valid(details))
+                );
+                """
+            cursor.execute(query)
+
+            query: sql = f"""
+                CREATE TABLE IF NOT EXISTS run_events (
+                    node_name TEXT,
+                    run_id INTEGER,
+                    timestamp DATETIME,
+                    event_type TEXT NOT NULL CHECK (event_type IN ('start', 'end', 'error', 'restart')),
+                    PRIMARY KEY (node_name, run_id, event_type)
+                );
+            """
+            cursor.execute(query)
+        
     def start_run(self, node_name: str, run_id: int) -> int:
         try:
             with self.write_cursor() as cursor:
