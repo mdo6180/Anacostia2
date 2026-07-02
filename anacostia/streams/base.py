@@ -92,7 +92,7 @@ class Stream:
             VALUES (?, ?, ?);
         """
         with self.conn_manager.write_cursor() as cursor:
-            cursor.execute(query, (artifact_hash, artifact_location, metadata))
+            cursor.execute(query, (artifact_hash, json.dumps(artifact_location), metadata))
 
     def register_artifact_global(self, artifact_hash: str) -> None:
         artifact_path = self.get_artifact_location(artifact_hash)
@@ -123,7 +123,7 @@ class Stream:
                 raise ValueError(f"Artifact with hash {artifact_hash} not found in local stream table.")
             return json.loads(result[0])
 
-    def __contains__(self, artifact_location: JsonDict) -> bool:
+    def is_artifact_registered(self, artifact_location: JsonDict) -> bool:
         """
         Check if an artifact is registered in the stream's local database table based on its location.
 
@@ -138,7 +138,7 @@ class Stream:
             cursor.execute(query, (json.dumps(artifact_location),))
             return cursor.fetchone() is not None
 
-    def hash_artifact(artifact: bytes) -> str:
+    def hash_artifact(self, artifact: bytes) -> str:
         """
         Hash the artifact using the specified hash algorithm and return the hash value.
         For larger artifacts, override this method with a more efficient hashing strategy to avoid loading the entire artifact into memory.
