@@ -95,14 +95,13 @@ class Stream:
             cursor.execute(query, (artifact_hash, json.dumps(artifact_location), metadata))
 
     def register_artifact_global(self, artifact_hash: str) -> None:
-        artifact_path = self.get_artifact_location(artifact_hash)
         with self.conn_manager.write_cursor() as cursor:
             query: sql = f"""
                 INSERT OR IGNORE INTO {self.global_usage_table_name} 
                 (artifact_hash, node_name, state, details) 
                 VALUES (?, ?, ?, ?);
             """
-            cursor.execute(query, (artifact_hash, self.name, "detected", artifact_path))
+            cursor.execute(query, (artifact_hash, self.name, "detected", None))
             # self.logger.info(f"Registered artifact {filepath} with hash {artifact_hash} in stream {self.name} at {timestamp}")
 
     def get_artifact_location(self, artifact_hash: str) -> JsonDict:
