@@ -3,9 +3,10 @@ import threading
 import queue
 from typing import Callable, Any, Optional, List, Tuple
 from logging import Logger
+import json
 
+from anacostia.streams.base import Stream
 from anacostia.utils.connection import ConnectionManager
-from anacostia.streams.directory import DirectoryStream
 from anacostia.utils.logging import log
 
 
@@ -17,7 +18,7 @@ class Consumer:
     def __init__(
         self,
         name: str,
-        stream: DirectoryStream,
+        stream: Stream,
         bundle_size: int = 1,
         maxsize: int = 0,
         filter_func: Optional[Callable[[Any], bool]] = None,
@@ -31,7 +32,7 @@ class Consumer:
             raise ValueError("bundle_size must be >= 1")
 
         self.name = name
-        self.stream = stream
+        self.stream: Stream = stream
         self.bundle_size = bundle_size
         self.filter_func = filter_func
 
@@ -94,10 +95,9 @@ class Consumer:
             self.conn_manager.add_provenance_edge(
                 predecessor_name=self.stream.name, predecessor_type="stream",
                 successor_name=self.name, successor_type="consumer",
-                artifact_name=artifact_location, 
+                artifact_location=artifact_location,
                 artifact_hash=artifact_hash,
-                run_id=run_id,
-                details=details
+                run_id=run_id
             )
 
         # record edges between the consumer and the node for the artifacts in the current bundle
@@ -105,15 +105,14 @@ class Consumer:
             self.conn_manager.add_provenance_edge(
                 predecessor_name=self.name, predecessor_type="consumer",
                 successor_name=self.node_name, successor_type="node",
-                artifact_name=self.stream.get_artifact_location(artifact_hash), 
+                artifact_location=json.dumps(self.stream.get_artifact_location(artifact_hash)),
                 artifact_hash=artifact_hash,
-                run_id=run_id,
-                details=details
+                run_id=run_id
             ) 
 
     def ignore_artifact(self, artifact_hash: str) -> None:
         # delete this query in future if we don't need to store file paths for ignored artifacts
-        filepath = self.stream.get_artifact_location(artifact_hash)
+        artifact_location = self.stream.get_artifact_location(artifact_hash)
 
         with self.conn_manager.write_cursor() as cursor:
             query: sql = f"""
@@ -121,7 +120,7 @@ class Consumer:
                 (artifact_hash, node_name, state, details) 
                 VALUES (?, ?, ?, ?);
             """
-            cursor.execute(query, (artifact_hash, self.name, "ignored", filepath))
+            cursor.execute(query, (artifact_hash, self.name, "ignored", artifact_location))
     
     def is_artifact_used(self, artifact_hash: str) -> bool:
         with self.conn_manager.read_cursor() as cursor:

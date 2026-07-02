@@ -122,25 +122,28 @@ class ConnectionManager:
         self, 
         predecessor_name: str, predecessor_type: str, 
         successor_name: str, successor_type: str, 
-        artifact_name: str, artifact_hash: str, 
-        run_id: int = None, details: str = None
+        artifact_location: str,
+        artifact_hash: str, 
+        run_id: int = None
     ) -> None:
         with self.write_cursor() as cursor:
             query: sql = f"""
                 INSERT OR IGNORE INTO provenance_graph (
                     predecessor_name, predecessor_type,
                     successor_name, successor_type, 
-                    artifact_name, artifact_hash, 
-                    run_id, details
+                    artifact_location,
+                    artifact_hash, 
+                    run_id
                 ) 
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+                VALUES (?, ?, ?, ?, ?, ?, ?);
             """
             cursor.execute(query, 
                 (
                     predecessor_name, predecessor_type, 
                     successor_name, successor_type, 
-                    artifact_name, artifact_hash, 
-                    run_id, details
+                    artifact_location,
+                    artifact_hash, 
+                    run_id
                 )
             )
     

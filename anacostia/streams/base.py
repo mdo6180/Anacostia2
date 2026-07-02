@@ -92,7 +92,7 @@ class Stream:
             VALUES (?, ?, ?);
         """
         with self.conn_manager.write_cursor() as cursor:
-            cursor.execute(query, (artifact_hash, json.dumps(artifact_location), metadata))
+            cursor.execute(query, (artifact_hash, json.dumps(artifact_location), json.dumps(metadata) if metadata is not None else None))
 
     def register_artifact_global(self, artifact_hash: str) -> None:
         with self.conn_manager.write_cursor() as cursor:

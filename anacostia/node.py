@@ -122,8 +122,7 @@ class Node(threading.Thread, ABC):
 
             # record edges between the stream and the node for all artifacts detected between the start of the current run and the previous run
             for consumer in self.consumers:
-                #consumer.record_provenance(run_id=self.run_id)
-                pass
+                consumer.record_provenance(run_id=self.run_id)
             
             yield
             

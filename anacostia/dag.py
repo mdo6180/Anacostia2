@@ -53,10 +53,10 @@ class Graph:
                     predecessor_type TEXT DEFAULT NULL,
                     successor_name TEXT DEFAULT NULL,
                     successor_type TEXT DEFAULT NULL,
-                    artifact_name TEXT DEFAULT NULL,
+                    artifact_location TEXT DEFAULT NULL CHECK (artifact_location IS NULL OR json_valid(artifact_location)),
                     artifact_hash TEXT DEFAULT NULL,
                     run_id INTEGER,
-                    details TEXT DEFAULT NULL
+                    details TEXT DEFAULT NULL CHECK (details IS NULL OR json_valid(details))
                 );
                 """
             cursor.execute(query)
