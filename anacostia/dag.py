@@ -41,7 +41,7 @@ class Graph:
                     node_name TEXT,
                     run_id INTEGER DEFAULT NULL,
                     state TEXT CHECK (state IN ('created', 'committed', 'detected', 'primed', 'using', 'used', 'ignored', 'sent', 'received', 'packaged')),
-                    details TEXT DEFAULT NULL,
+                    details TEXT DEFAULT NULL CHECK (details IS NULL OR json_valid(details)),
                     timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
                 );
             """

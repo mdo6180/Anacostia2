@@ -1,0 +1,55 @@
+from pathlib import Path
+import argparse
+import shutil
+import logging
+
+from anacostia.streams.filesystem import DirectoryStream
+from anacostia.consumer import Consumer
+from anacostia.node import Node
+from anacostia.dag import Graph
+from anacostia.utils.serialization import bytes_to_str
+
+# 1. Set up streams, consumers, and nodes
+tests_path = Path("./testing_artifacts")
+db_folder_path = tests_path / ".anacostia"
+input_path1 = tests_path / "incoming1"
+
+parser = argparse.ArgumentParser(description="Run the pipeline after restart test")
+parser.add_argument("-r", "--restart", action="store_true", help="Flag to indicate if this is a restart")
+args = parser.parse_args()
+
+if args.restart == False:
+    if tests_path.exists() is True:
+        shutil.rmtree(tests_path)
+    tests_path.mkdir(parents=True, exist_ok=True)
+
+log_path = tests_path / "anacostia.log"
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S',
+    filename=str(log_path),
+    filemode='a'
+)
+logger = logging.getLogger(__name__)
+
+stream = DirectoryStream(name="odd_folder", directory=input_path1, logger=logger)
+stream_consumer_odd = Consumer(name="stream_consumer_odd", stream=stream, logger=logger)
+node = Node(name="TestNode", consumers=[stream_consumer_odd], logger=logger)
+
+# 2. Define the node's processing function
+@node.entrypoint
+def node_func():
+    for bundle in stream_consumer_odd:
+        with node.stage_run():
+            content = bytes_to_str(bundle[0])   # the bundle is a list that only contains one item (since bundle size is 1), the content of the artifact
+            logger.info(f"processing artifact with content '{content}' in run {node.run_id}")
+
+# 3. Create and start the graph
+graph = Graph(name="TestGraph", nodes=[node], db_folder=db_folder_path, logger=logger)
+
+graph.start()
+try:
+    graph.join()
+except KeyboardInterrupt:
+    graph.stop()

@@ -90,11 +90,11 @@ class Consumer:
         
     def record_provenance(self, run_id: int, details: str = None) -> None:
         # record edges between the stream and the consumer for all artifacts detected between the start of the current run and the previous run
-        for artifact_path, artifact_hash in self.get_detected_artifacts(current_run_id=run_id):
+        for artifact_location, artifact_hash in self.get_detected_artifacts(current_run_id=run_id):
             self.conn_manager.add_provenance_edge(
                 predecessor_name=self.stream.name, predecessor_type="stream",
                 successor_name=self.name, successor_type="consumer",
-                artifact_name=artifact_path, 
+                artifact_name=artifact_location, 
                 artifact_hash=artifact_hash,
                 run_id=run_id,
                 details=details
@@ -218,7 +218,7 @@ class Consumer:
         with self.conn_manager.read_cursor() as cursor:
             if current_run_id == 0:
                 query: sql = f"""
-                    SELECT artifact_path, artifact_hash
+                    SELECT artifact_location, artifact_hash
                     FROM {self.stream.local_table_name}
                     WHERE timestamp <= (
                         SELECT timestamp
@@ -232,7 +232,7 @@ class Consumer:
 
             else:
                 query: sql = f"""
-                    SELECT artifact_path, artifact_hash
+                    SELECT artifact_location, artifact_hash
                     FROM {self.stream.local_table_name}
                     WHERE timestamp > (
                         SELECT timestamp

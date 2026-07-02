@@ -1,6 +1,7 @@
 from abc import ABC
 from functools import wraps
 import inspect
+import json
 from logging import Logger
 import os
 import threading
@@ -13,6 +14,7 @@ from anacostia.consumer import Consumer
 from anacostia.producer import Producer
 from anacostia.transports.local import FileSystemTransport
 from anacostia.utils.logging import log
+from anacostia.utils.types import JsonDict
 
 sql = str   # alias of the str type for syntax highlighting using the Python Inline Source Syntax Highlighting extension by Sam Willis in VSCode.
 
@@ -85,30 +87,30 @@ class Node(threading.Thread, ABC):
         for transport in self.transports:
             transport.set_run_id(run_id)
 
-    def start_using_artifact(self, filepath: str, artifact_hash: str) -> None:
+    def start_using_artifact(self, artifact_hash: str) -> None:
         with self.conn_manager.write_cursor() as cursor:
             query: sql = f"""
                 INSERT OR IGNORE INTO {self.global_usage_table_name} 
                 (artifact_hash, node_name, run_id, state, details) 
                 VALUES (?, ?, ?, ?, ?);
             """
-            cursor.execute(query, (artifact_hash, self.name, self.run_id, "using", filepath))
+            cursor.execute(query, (artifact_hash, self.name, self.run_id, "using", None))
     
-    def finished_using_artifact(self, filepath: str, artifact_hash: str) -> None:
+    def finished_using_artifact(self, artifact_hash: str) -> None:
         with self.conn_manager.write_cursor() as cursor:
             query: sql = f"""
                 INSERT OR IGNORE INTO {self.global_usage_table_name} 
                 (artifact_hash, node_name, run_id, state, details) 
                 VALUES (?, ?, ?, ?, ?);
             """
-            cursor.execute(query, (artifact_hash, self.name, self.run_id, "used", filepath))
+            cursor.execute(query, (artifact_hash, self.name, self.run_id, "used", None))
     
     def using_artifacts(self):
         for consumer in self.consumers:
             for artifact_hash in consumer.bundle_hashes:
-                artifact_path = consumer.stream.get_artifact_location(artifact_hash)
-                self.start_using_artifact(artifact_path, artifact_hash)
-                log(f"Node {self.name} started using artifact {artifact_path} with hash {artifact_hash} in run {self.run_id}", level="info", logger=self.logger)
+                artifact_location = consumer.stream.get_artifact_location(artifact_hash)
+                self.start_using_artifact(artifact_hash)
+                log(f"Node {self.name} started using artifact {artifact_location} with hash {artifact_hash} in run {self.run_id}", level="info", logger=self.logger)
     
     @contextmanager
     def stage_run(self):
@@ -120,7 +122,8 @@ class Node(threading.Thread, ABC):
 
             # record edges between the stream and the node for all artifacts detected between the start of the current run and the previous run
             for consumer in self.consumers:
-                consumer.record_provenance(run_id=self.run_id)
+                #consumer.record_provenance(run_id=self.run_id)
+                pass
             
             yield
             
@@ -130,9 +133,9 @@ class Node(threading.Thread, ABC):
             # so that we can do the hashing while the node starts working on the next run.
             for consumer in self.consumers:
                 for artifact_hash in consumer.bundle_hashes:
-                    artifact_path = consumer.stream.get_artifact_location(artifact_hash)
-                    self.finished_using_artifact(artifact_path, artifact_hash)
-                    log(f"Node {self.name} finished using artifact {artifact_path} with hash {artifact_hash} in run {self.run_id}", level="info", logger=self.logger)
+                    artifact_location = consumer.stream.get_artifact_location(artifact_hash)
+                    self.finished_using_artifact(artifact_hash)
+                    log(f"Node {self.name} finished using artifact {artifact_location} with hash {artifact_hash} in run {self.run_id}", level="info", logger=self.logger)
             
             # clear staging directories of producers
             for producer in self.producers:
