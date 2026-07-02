@@ -1,6 +1,7 @@
 import hashlib
 import logging
 from typing import Any
+import json
 
 from anacostia.utils.connection import ConnectionManager
 from anacostia.utils.types import JsonDict
@@ -10,17 +11,19 @@ sql = str   # alias of the str type for syntax highlighting using the Python Inl
 
 
 class Stream:
-    def __init__(self, name: str, source: Any, logger: logging.Logger):
+    def __init__(self, name: str, source: Any, poll_interval: float = 0.1, logger: logging.Logger = None):
         """
         Base class for streams. Subclasses should implement the __iter__ method to define how the stream polls the source for new artifacts.
-        
+
         :param name: Name of the stream.
         :param source: The source from which the stream will poll for new artifacts.
+        :param poll_interval: The interval (in seconds) at which the stream polls the source for new artifacts.
         :param logger: Logger instance for logging.
         """
         self.name = name
         self.conn_manager: ConnectionManager = None
         self.source = source
+        self.poll_interval = poll_interval
         self.logger = logger
 
         self.local_table_name = f"{self.name}_local"
@@ -45,8 +48,8 @@ class Stream:
                 CREATE TABLE IF NOT EXISTS {self.local_table_name} (
                     artifact_hash TEXT PRIMARY KEY,
                     timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-                    artifact_location TEXT NOT NULL,
-                    metadata TEXT,
+                    artifact_location TEXT NOT NULL CHECK (json_valid(artifact_location)),
+                    metadata TEXT CHECK (metadata IS NULL OR json_valid(metadata)),
                     UNIQUE(artifact_hash)
                 );
             """
@@ -110,8 +113,15 @@ class Stream:
 
         :return artifact location: The location of the artifact (e.g., file path, URL) as a JSON dictionary.
         """
-        # We will implement this method in the base class to retrieve the artifact location from the local database table given its hash.
-        pass
+        with self.conn_manager.read_cursor() as cursor:
+            query: sql = f"""
+                SELECT artifact_location FROM {self.local_table_name} WHERE artifact_hash = ? LIMIT 1;
+            """
+            cursor.execute(query, (artifact_hash,))
+            result = cursor.fetchone()
+            if result is None:
+                raise ValueError(f"Artifact with hash {artifact_hash} not found in local stream table.")
+            return json.loads(result[0])
 
     def __contains__(self, artifact_location: JsonDict) -> bool:
         """
@@ -121,8 +131,12 @@ class Stream:
 
         :return: True if the artifact is registered, False otherwise.
         """
-        # We will implement this method in the base class to check if an artifact is registered in the local database table based on its location.
-        pass
+        with self.conn_manager.read_cursor() as cursor:
+            query: sql = f"""
+                SELECT 1 FROM {self.local_table_name} WHERE artifact_location = ? LIMIT 1;
+            """
+            cursor.execute(query, (json.dumps(artifact_location),))
+            return cursor.fetchone() is not None
 
     def hash_artifact(artifact: bytes) -> str:
         """
@@ -151,6 +165,15 @@ class Stream:
         :param artifact_location: The location of the artifact (e.g., file path, URL) as a JSON dictionary.
 
         :return artifact content: The content of the artifact as bytes.
+
+        Example usage:
+        ```python
+        def load_artifact(self, artifact_location: JsonDict) -> bytes:
+            # Example implementation for loading an artifact from a file path
+            # Suppose artifact_location = {"filepath": "/path/to/file.txt"}
+            with open(artifact_location["filepath"], "rb") as f:
+                return f.read()
+        ```
         """
         raise NotImplementedError("Subclasses must implement the load_artifact method.")
 
