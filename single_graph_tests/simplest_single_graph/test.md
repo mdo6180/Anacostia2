@@ -2,6 +2,9 @@
 - Show the simplest pipeline possible.
 - Show the node can receive artifact bundles from one consumer. 
 - Show the stream can detect new artifacts arriving in the directory it is monitoring. 
+- **simplest.py**: the simplest pipeline possible. No loggers, no stoppage.
+- **simplest_logger.py**: the simplest pipeline possible but with a logger added for ease of experimentation.
+- **simplest_restart.py**: the simplest pipeline possible but with a logger added and a `stop_if` added for testing the simplest possible Ctrl+C case.
 
 ### Pipeline Configuration:
 Resources: a folder on the local filesystem `./testing_artifacts/incoming1`. 
