@@ -7,7 +7,8 @@ from anacostia.streams.filesystem import DirectoryStream
 from anacostia.consumer import Consumer
 from anacostia.node import Node
 from anacostia.dag import Graph
-from anacostia.utils.serialization import bytes_to_str
+
+
 
 # 1. Set up streams, consumers, and nodes
 tests_path = Path("./testing_artifacts")

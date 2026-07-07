@@ -39,20 +39,6 @@ class DirectoryStream(Stream):
         self.poll_interval = poll_interval
         self.hash_chunk_size = hash_chunk_size
 
-    def load_artifact(self, artifact_location: JsonDict) -> bytes:
-        # Suppose artifact_location = {"filepath": "/path/to/file.txt"}
-        artifact_path = Path(artifact_location["filepath"])
-
-        if artifact_path.is_file():
-            with open(artifact_path, "rb") as f:
-                return f.read()
-
-        elif artifact_path.is_dir():
-            raise IsADirectoryError(f"Expected a file but found a directory: {artifact_path}")
-
-        else:
-            raise FileNotFoundError(f"File not found: {artifact_path}")
-
     def hash_file(self, artifact_location: JsonDict) -> str:
         """
         Hash the artifact using the specified hash algorithm and return the hash value. User implemented method.

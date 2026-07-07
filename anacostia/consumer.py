@@ -182,8 +182,8 @@ class Consumer:
 
         using_bundle = []
         for artifact_hash in artifact_hashes:
-            content = self.stream.load_artifact(artifact_hash)
-            using_bundle.append(content)
+            artifact_location = self.stream.get_artifact_location(artifact_hash)
+            using_bundle.append(artifact_location)
             
         return using_bundle
     
@@ -206,8 +206,8 @@ class Consumer:
         self.bundle_hashes = artifact_hashes  # store the hashes of the current unused artifacts for the using_artifacts and commit_artifacts calls in the Node
 
         for artifact_hash in artifact_hashes:
-            content = self.stream.load_artifact(artifact_hash)
-            self.bundle_locations.append(content)
+            artifact_location = self.stream.get_artifact_location(artifact_hash)
+            self.bundle_locations.append(artifact_location)
     
     def get_detected_artifacts(self, current_run_id: int) -> List[Tuple[Any, str]]:
         if current_run_id < 0:
