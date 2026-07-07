@@ -8,6 +8,7 @@ import json
 from anacostia.streams.base import Stream
 from anacostia.utils.connection import ConnectionManager
 from anacostia.utils.logging import log
+from anacostia.utils.types import JsonDict, Artifact
 
 
 sql = str   # alias of the str type for syntax highlighting using the Python Inline Source Syntax Highlighting extension by Sam Willis in VSCode.
@@ -135,22 +136,22 @@ class Consumer:
         def run():
             self.conn_manager = ConnectionManager(db_path=self.db_path, logger=self.logger)
 
-            for item, file_hash in self.stream:
+            for artifact in self.stream:
                 if self._stop.is_set():
                     break
 
                 # Apply filtering function if provided
                 if self.filter_func is not None:
-                    if not self.filter_func(item):
+                    if not self.filter_func(artifact):
                         # self.logger.info(f"{self.name} ignore_artifact: {item}")       # ignore_artifact DB call in future
-                        self.ignore_artifact(file_hash)    # mark artifact as ignored in the DB
+                        self.ignore_artifact(artifact.hash)    # mark artifact as ignored in the DB
                         continue
 
                     else:
                         # self.logger.info(f"{self.name} prime_artifact: {item}")        # prime_artifact DB call in future
-                        self.prime_artifact(file_hash)     # mark artifact as primed in the DB
+                        self.prime_artifact(artifact.hash)     # mark artifact as primed in the DB
 
-                self.items_queue.put((item, file_hash), block=True)        # backpressure here, blocks if queue is full
+                self.items_queue.put(artifact, block=True)        # backpressure here, blocks if queue is full
                 # self.logger.info(f"item: '{item}', file_hash: '{file_hash}' put in queue by {self.name}")
 
             # Optional: decide whether to flush partial batch on stop.
@@ -163,7 +164,7 @@ class Consumer:
     def stop(self):
         self._stop.set()
 
-    def get_using_artifacts(self) -> List[Tuple[Any, str]]:
+    def get_using_artifacts(self) -> List[Artifact]:
         using_artifacts = []
         with self.conn_manager.read_cursor() as cursor:
             query: sql = f"""
@@ -187,7 +188,7 @@ class Consumer:
             
         return using_bundle
     
-    def get_unused_artifacts(self) -> List[Tuple[Any, str]]:
+    def get_unused_artifacts(self) -> List[Artifact]:
         unused_artifacts = []
         with self.conn_manager.read_cursor() as cursor:
             query: sql = f"""
@@ -272,12 +273,12 @@ class Consumer:
             self.restart = 0   # reset restart mode after restart is done
 
             if len(self.bundle_hashes) < self.bundle_size:
-                item, file_hash = self.items_queue.get(block=True)
+                artifact = self.items_queue.get(block=True)
 
                 # avoid adding duplicate artifacts to the bundle in case the same artifact is put in the queue multiple times due to restarts
-                if self.is_artifact_used(file_hash) is False:   
-                    self.bundle_locations.append(item)
-                    self.bundle_hashes.append(file_hash)
+                if self.is_artifact_used(artifact.hash) is False:   
+                    self.bundle_locations.append(artifact.location)
+                    self.bundle_hashes.append(artifact.hash)
             else:
                 log(f"{self.name} yielding bundle_locations: {self.bundle_locations[:self.bundle_size]}, bundle_hashes: {self.bundle_hashes[:self.bundle_size]}", level="info", logger=self.logger)
                 bundle = self.bundle_locations[:self.bundle_size]  # yield only a batch of items based on the bundle size

@@ -67,7 +67,7 @@ class DirectoryStream(Stream):
                         file_hash = self.hash_file(artifact_location)
 
                     self.register_artifact(file_hash, artifact_location)
-                    yield artifact_location, file_hash
+                    yield Artifact(location=artifact_location, hash=file_hash)
                     
             # IMPORTANT: prevent polling from blocking main thread
             time.sleep(self.poll_interval)
