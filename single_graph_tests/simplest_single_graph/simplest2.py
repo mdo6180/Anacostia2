@@ -42,8 +42,12 @@ node = Node(name="TestNode", consumers=[stream_consumer_odd], logger=logger)
 def node_func():
     for bundle in stream_consumer_odd:
         with node.stage_run():
-            content = bytes_to_str(bundle[0])   # the bundle is a list that only contains one item (since bundle size is 1), the content of the artifact
-            logger.info(f"processing artifact with content '{content}' in run {node.run_id}")
+            # bundle = [{'filepath': 'testing_artifacts/incoming1/test_file0.txt'}]
+            artifact_location = bundle[0]["filepath"]
+
+            with open(artifact_location, "r") as f:
+                content = f.read()
+                logger.info(f"processing artifact with content '{content}' in run {node.run_id} with location {artifact_location}")
 
 # 3. Create and start the graph
 graph = Graph(name="TestGraph", nodes=[node], db_folder=db_folder_path, logger=logger)

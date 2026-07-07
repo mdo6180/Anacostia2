@@ -7,7 +7,7 @@ import hashlib
 
 from anacostia.streams.base import Stream
 from anacostia.utils.logging import log
-from anacostia.utils.types import JsonDict
+from anacostia.utils.types import JsonDict, Artifact
 
 
 
@@ -66,7 +66,7 @@ class DirectoryStream(Stream):
     def __iter__(self) -> Generator[Any, Any, str]:
         """
         Poll the directory for new artifacts, register the artifacts into the DB, and yield their content and hashes.
-        Yields single items: (content, file_hash). User implemented method.
+        Yields single items: (artifact_location, file_hash). User implemented method.
         """
 
         while True:
@@ -77,12 +77,11 @@ class DirectoryStream(Stream):
                 if not self.is_artifact_registered(artifact_location):
 
                     # load, hash, and register artifact
-                    artifact_content = self.load_artifact(artifact_location)
                     if path.is_file():
                         file_hash = self.hash_file(artifact_location)
 
                     self.register_artifact(file_hash, artifact_location)
-                    yield artifact_content, file_hash
+                    yield artifact_location, file_hash
                     
             # IMPORTANT: prevent polling from blocking main thread
             time.sleep(self.poll_interval)

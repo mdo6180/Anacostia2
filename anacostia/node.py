@@ -107,8 +107,7 @@ class Node(threading.Thread, ABC):
     
     def using_artifacts(self):
         for consumer in self.consumers:
-            for artifact_hash in consumer.bundle_hashes:
-                artifact_location = consumer.stream.get_artifact_location(artifact_hash)
+            for artifact_location, artifact_hash in zip(consumer.bundle_locations, consumer.bundle_hashes):
                 self.start_using_artifact(artifact_hash)
                 log(f"Node {self.name} started using artifact {artifact_location} with hash {artifact_hash} in run {self.run_id}", level="info", logger=self.logger)
     
@@ -131,8 +130,7 @@ class Node(threading.Thread, ABC):
             # in the future, we can consider calling commit_artifacts() in another thread as soon as the producer creates the artifact, 
             # so that we can do the hashing while the node starts working on the next run.
             for consumer in self.consumers:
-                for artifact_hash in consumer.bundle_hashes:
-                    artifact_location = consumer.stream.get_artifact_location(artifact_hash)
+                for artifact_location, artifact_hash in zip(consumer.bundle_locations, consumer.bundle_hashes):
                     self.finished_using_artifact(artifact_hash)
                     log(f"Node {self.name} finished using artifact {artifact_location} with hash {artifact_hash} in run {self.run_id}", level="info", logger=self.logger)
             

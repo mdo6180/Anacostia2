@@ -36,9 +36,8 @@ class Consumer:
         self.bundle_size = bundle_size
         self.filter_func = filter_func
 
-        self.bundle_items: List[Any] = []  # store the items of the current bundle for the using_artifacts and commit_artifacts calls in the Node
+        self.bundle_locations: List[Any] = []  # store the items of the current bundle for the using_artifacts and commit_artifacts calls in the Node
         self.bundle_hashes: List[str] = []  # store the hashes of the current bundle for the using_artifacts and commit_artifacts calls in the Node
-        self.bundle_locations: List[str] = []  # store the locations of the current bundle for the using_artifacts and commit_artifacts calls in the Node
 
         self.items_queue = queue.Queue(maxsize=maxsize)
         self._stop = threading.Event()
@@ -208,7 +207,7 @@ class Consumer:
 
         for artifact_hash in artifact_hashes:
             content = self.stream.load_artifact(artifact_hash)
-            self.bundle_items.append(content)
+            self.bundle_locations.append(content)
     
     def get_detected_artifacts(self, current_run_id: int) -> List[Tuple[Any, str]]:
         if current_run_id < 0:
@@ -267,9 +266,8 @@ class Consumer:
                 if using_bundle:
                     log(f"{self.name} yielding {len(using_bundle)} artifacts from last partial bundle after restart", level="info", logger=self.logger)
                     yield using_bundle
-                    self.bundle_items = []
-                    self.bundle_hashes = []
                     self.bundle_locations = []
+                    self.bundle_hashes = []
 
             self.restart = 0   # reset restart mode after restart is done
 
@@ -278,16 +276,14 @@ class Consumer:
 
                 # avoid adding duplicate artifacts to the bundle in case the same artifact is put in the queue multiple times due to restarts
                 if self.is_artifact_used(file_hash) is False:   
-                    self.bundle_items.append(item)
+                    self.bundle_locations.append(item)
                     self.bundle_hashes.append(file_hash)
-                    self.bundle_locations.append(self.stream.get_artifact_location(file_hash))
             else:
-                log(f"{self.name} yielding bundle_items: {self.bundle_items[:self.bundle_size]}, bundle_hashes: {self.bundle_hashes[:self.bundle_size]}", level="info", logger=self.logger)
-                bundle = self.bundle_items[:self.bundle_size]  # yield only a batch of items based on the bundle size
+                log(f"{self.name} yielding bundle_locations: {self.bundle_locations[:self.bundle_size]}, bundle_hashes: {self.bundle_hashes[:self.bundle_size]}", level="info", logger=self.logger)
+                bundle = self.bundle_locations[:self.bundle_size]  # yield only a batch of items based on the bundle size
 
                 yield bundle
 
-                # remove the items that were just yielded from the bundle_items list, keep the remaining items for the next yield
-                self.bundle_items = self.bundle_items[self.bundle_size:]
-                self.bundle_hashes = self.bundle_hashes[self.bundle_size:]
+                # remove the items that were just yielded from the bundle_locations list, keep the remaining items for the next yield
                 self.bundle_locations = self.bundle_locations[self.bundle_size:]
+                self.bundle_hashes = self.bundle_hashes[self.bundle_size:]
