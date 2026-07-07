@@ -1,4 +1,6 @@
 from typing import TypeAlias
+from dataclasses import dataclass
+
 
 JsonValue: TypeAlias = (
     str
@@ -11,3 +13,9 @@ JsonValue: TypeAlias = (
 )
 
 JsonDict: TypeAlias = dict[str, JsonValue]
+
+
+@dataclass(frozen=True)
+class Artifact:
+    location: JsonDict
+    hash: str

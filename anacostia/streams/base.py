@@ -1,4 +1,3 @@
-import hashlib
 import logging
 from typing import Any
 import json
@@ -50,7 +49,7 @@ class Stream:
                     timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
                     artifact_location TEXT NOT NULL CHECK (json_valid(artifact_location)),
                     metadata TEXT CHECK (metadata IS NULL OR json_valid(metadata)),
-                    UNIQUE(artifact_hash)
+                    UNIQUE(artifact_location)
                 );
             """
             cursor.execute(query)
@@ -68,19 +67,19 @@ class Stream:
 
     def register_artifact_local(self, artifact_hash: str, artifact_location: JsonDict, metadata: JsonDict = None) -> None:
         """
-        Register an artifact in the stream's local database table and the global database table. 
+        Register an artifact in the stream's local database table. 
 
         :param artifact_location: The location of the artifact (e.g., file path, URL) formatted as a JSON dictionary.
         :param artifact_hash: The hash of the artifact.
-        :param metadata: Additional metadata about the artifact to be stored in the stream's local database formatted as a JSON string.
+        :param metadata: Additional metadata about the artifact to be stored in the stream's local database formatted as a JSON dictionary.
 
         Example usage:
         ```
         stream = DirectoryStream(name="example_stream", directory=Path("/path/to/directory"), logger=logger)
         stream.register_artifact_local(
             artifact_hash, 
-            artifact_location=json.dumps({"filepath": "/path/to/file.txt"}),
-            metadata=json.dumps({"example_metadata": example_metadata})
+            artifact_location={"filepath": "/path/to/file.txt"},
+            metadata={"example_metadata": example_metadata}
         )
         ```
 
@@ -92,7 +91,14 @@ class Stream:
             VALUES (?, ?, ?);
         """
         with self.conn_manager.write_cursor() as cursor:
-            cursor.execute(query, (artifact_hash, json.dumps(artifact_location), json.dumps(metadata) if metadata is not None else None))
+            cursor.execute(
+                query, 
+                (
+                    artifact_hash, 
+                    json.dumps(artifact_location, sort_keys=True), 
+                    json.dumps(metadata) if metadata is not None else None,
+                )
+            )
 
     def register_artifact_global(self, artifact_hash: str) -> None:
         with self.conn_manager.write_cursor() as cursor:
@@ -106,7 +112,8 @@ class Stream:
 
     def get_artifact_location(self, artifact_hash: str) -> JsonDict:
         """
-        This method should be implemented by subclasses to define how to retrieve the location of an artifact from the local database table given its hash.
+        Retrieve the location of an artifact from the stream's local database table based on its hash.
+        Artifact location is stored as a JSON dictionary in the local table.
 
         :param artifact_hash: The hash of the artifact.
 
@@ -134,47 +141,8 @@ class Stream:
             query: sql = f"""
                 SELECT 1 FROM {self.local_table_name} WHERE artifact_location = ? LIMIT 1;
             """
-            cursor.execute(query, (json.dumps(artifact_location),))
+            cursor.execute(query, (json.dumps(artifact_location, sort_keys=True),))
             return cursor.fetchone() is not None
-
-    def hash_artifact(self, artifact: bytes) -> str:
-        """
-        Hash the artifact using the specified hash algorithm and return the hash value.
-        For larger artifacts, override this method with a more efficient hashing strategy to avoid loading the entire artifact into memory.
-
-        :param artifact: The artifact content as bytes to be hashed.
-
-        :return artifact hash: The SHA-256 hash value of the artifact as a string.
-        
-        Example usage:
-        ```
-        artifact_content = b"example artifact content"
-        artifact_hash = Stream.hash_artifact(artifact_content)
-
-        artifact_content = stream.load_artifact(artifact_location)
-        artifact_hash = Stream.hash_artifact(artifact_content)
-        ```
-        """
-        return hashlib.sha256(artifact).hexdigest()
-    
-    def load_artifact(self, artifact_location: JsonDict) -> bytes:
-        """
-        Load and return the content of the artifact as bytes given its location. User implemented method.
-
-        :param artifact_location: The location of the artifact (e.g., file path, URL) as a JSON dictionary.
-
-        :return artifact content: The content of the artifact as bytes.
-
-        Example usage:
-        ```python
-        def load_artifact(self, artifact_location: JsonDict) -> bytes:
-            # Example implementation for loading an artifact from a file path
-            # Suppose artifact_location = {"filepath": "/path/to/file.txt"}
-            with open(artifact_location["filepath"], "rb") as f:
-                return f.read()
-        ```
-        """
-        raise NotImplementedError("Subclasses must implement the load_artifact method.")
 
     def __iter__(self) -> Any:
         """

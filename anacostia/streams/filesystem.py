@@ -3,6 +3,7 @@ import os
 from pathlib import Path
 from typing import Any, Generator
 import time
+import hashlib
 
 from anacostia.streams.base import Stream
 from anacostia.utils.logging import log
@@ -11,13 +12,14 @@ from anacostia.utils.types import JsonDict
 
 
 class DirectoryStream(Stream):
-    def __init__(self, name: str, directory: Path, poll_interval: float = 0.1, logger: Logger = None):
+    def __init__(self, name: str, directory: Path, poll_interval: float = 0.1, hash_chunk_size: int = 1_048_576, logger: Logger = None):
         """
         Initialize a DirectoryStream instance.
 
         :param name: Name of the stream.
         :param directory: The directory to monitor.
         :param poll_interval: The interval (in seconds) at which the stream polls the directory for new artifacts.
+        :param hash_chunk_size: The size of chunks to read when hashing files.
         :param logger: Logger instance for logging.
 
         Note: there is no hash_chunk_size parameter in this class because 
@@ -35,6 +37,7 @@ class DirectoryStream(Stream):
         self.name = name
         self.directory: Path = directory
         self.poll_interval = poll_interval
+        self.hash_chunk_size = hash_chunk_size
 
     def load_artifact(self, artifact_location: JsonDict) -> bytes:
         # Suppose artifact_location = {"filepath": "/path/to/file.txt"}
@@ -49,6 +52,16 @@ class DirectoryStream(Stream):
 
         else:
             raise FileNotFoundError(f"File not found: {artifact_path}")
+
+    def hash_file(self, artifact_location: JsonDict) -> str:
+        """
+        Hash the artifact using the specified hash algorithm and return the hash value. User implemented method.
+        """
+        sha256 = hashlib.sha256()
+        with open(artifact_location["filepath"], 'rb') as f:
+            while chunk := f.read(self.hash_chunk_size):
+                sha256.update(chunk)
+        return sha256.hexdigest()
 
     def __iter__(self) -> Generator[Any, Any, str]:
         """
@@ -65,7 +78,9 @@ class DirectoryStream(Stream):
 
                     # load, hash, and register artifact
                     artifact_content = self.load_artifact(artifact_location)
-                    file_hash = self.hash_artifact(artifact_content)
+                    if path.is_file():
+                        file_hash = self.hash_file(artifact_location)
+
                     self.register_artifact(file_hash, artifact_location)
                     yield artifact_content, file_hash
                     
