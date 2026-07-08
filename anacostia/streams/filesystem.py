@@ -1,7 +1,7 @@
 from logging import Logger
 import os
 from pathlib import Path
-from typing import Any, Generator
+from collections.abc import Iterator
 import time
 import hashlib
 
@@ -49,7 +49,7 @@ class DirectoryStream(Stream):
                 sha256.update(chunk)
         return sha256.hexdigest()
 
-    def __iter__(self) -> Generator[Any, Any, str]:
+    def __iter__(self) -> Iterator[Artifact]:
         """
         Poll the directory for new artifacts, register the artifacts into the DB, and yield their content and hashes.
         Yields single items: (artifact_location, file_hash). User implemented method.

@@ -1,9 +1,10 @@
 import logging
 from typing import Any
+from collections.abc import Iterator
 import json
 
 from anacostia.utils.connection import ConnectionManager
-from anacostia.utils.types import JsonDict
+from anacostia.utils.types import Artifact, JsonDict
 
 sql = str   # alias of the str type for syntax highlighting using the Python Inline Source Syntax Highlighting extension by Sam Willis in VSCode.
 
@@ -144,7 +145,7 @@ class Stream:
             cursor.execute(query, (json.dumps(artifact_location, sort_keys=True),))
             return cursor.fetchone() is not None
 
-    def __iter__(self) -> Any:
+    def __iter__(self) -> Iterator[Artifact]:
         """
         This method should be implemented by subclasses to define how the stream polls the source for new artifacts.
         """
