@@ -37,8 +37,9 @@ class Consumer:
         self.bundle_size = bundle_size
         self.filter_func = filter_func
 
-        self.bundle_locations: List[Any] = []  # store the items of the current bundle for the using_artifacts and commit_artifacts calls in the Node
-        self.bundle_hashes: List[str] = []  # store the hashes of the current bundle for the using_artifacts and commit_artifacts calls in the Node
+        #self.bundle_locations: List[Any] = []  # store the items of the current bundle for the using_artifacts and commit_artifacts calls in the Node
+        #self.bundle_hashes: List[str] = []  # store the hashes of the current bundle for the using_artifacts and commit_artifacts calls in the Node
+        self.bundle_artifacts: List[Artifact] = []  # store the Artifact objects of the current bundle for the using_artifacts and commit_artifacts calls in the Node
 
         self.items_queue = queue.Queue(maxsize=maxsize)
         self._stop = threading.Event()
@@ -101,6 +102,15 @@ class Consumer:
             )
 
         # record edges between the consumer and the node for the artifacts in the current bundle
+        for artifact in self.bundle_artifacts[:self.bundle_size]:
+            self.conn_manager.add_provenance_edge(
+                predecessor_name=self.name, predecessor_type="consumer",
+                successor_name=self.node_name, successor_type="node",
+                artifact_location=json.dumps(artifact.location),
+                artifact_hash=artifact.hash,
+                run_id=run_id
+            )
+        """
         for artifact_hash in self.bundle_hashes[:self.bundle_size]:
             self.conn_manager.add_provenance_edge(
                 predecessor_name=self.name, predecessor_type="consumer",
@@ -109,6 +119,7 @@ class Consumer:
                 artifact_hash=artifact_hash,
                 run_id=run_id
             ) 
+        """
 
     def ignore_artifact(self, artifact_hash: str) -> None:
         # delete this query in future if we don't need to store file paths for ignored artifacts
@@ -179,14 +190,19 @@ class Consumer:
             log(f"querying using {self.node_name} run {self.run_id}: found {len(using_artifacts)} artifacts in 'using' state", level="info", logger=self.logger)
         
         artifact_hashes = [row[0] for row in using_artifacts]   # extract artifact hashes from query result
-        self.bundle_hashes = artifact_hashes  # store the hashes of the current using artifacts for the using_artifacts and commit_artifacts calls in the Node
+        #self.bundle_hashes = artifact_hashes  # store the hashes of the current using artifacts for the using_artifacts and commit_artifacts calls in the Node
+        self.bundle_artifacts = [Artifact(location=self.stream.get_artifact_location(artifact_hash), hash=artifact_hash) for artifact_hash in artifact_hashes]
 
+        """
         using_bundle = []
         for artifact_hash in artifact_hashes:
             artifact_location = self.stream.get_artifact_location(artifact_hash)
-            using_bundle.append(artifact_location)
+            #using_bundle.append(artifact_location)
+            using_bundle.append(Artifact(location=artifact_location, hash=artifact_hash))
             
         return using_bundle
+        """
+        return self.bundle_artifacts
     
     def get_unused_artifacts(self) -> List[Artifact]:
         unused_artifacts = []
@@ -204,11 +220,12 @@ class Consumer:
             # self.logger.info(f"querying primed {self.node_name} run {self.run_id}: found {len(unused_artifacts)} artifacts in 'primed' state")
         
         artifact_hashes = [row[0] for row in unused_artifacts]   # extract artifact hashes from query result
-        self.bundle_hashes = artifact_hashes  # store the hashes of the current unused artifacts for the using_artifacts and commit_artifacts calls in the Node
+        #self.bundle_hashes = artifact_hashes  # store the hashes of the current unused artifacts for the using_artifacts and commit_artifacts calls in the Node
 
         for artifact_hash in artifact_hashes:
             artifact_location = self.stream.get_artifact_location(artifact_hash)
-            self.bundle_locations.append(artifact_location)
+            #self.bundle_locations.append(artifact_location)
+            self.bundle_artifacts.append(Artifact(location=artifact_location, hash=artifact_hash))
     
     def get_detected_artifacts(self, current_run_id: int) -> List[Tuple[Any, str]]:
         if current_run_id < 0:
@@ -267,24 +284,29 @@ class Consumer:
                 if using_bundle:
                     log(f"{self.name} yielding {len(using_bundle)} artifacts from last partial bundle after restart", level="info", logger=self.logger)
                     yield using_bundle
-                    self.bundle_locations = []
-                    self.bundle_hashes = []
+                    #self.bundle_locations = []
+                    #self.bundle_hashes = []
+                    self.bundle_artifacts = []
 
             self.restart = 0   # reset restart mode after restart is done
 
-            if len(self.bundle_hashes) < self.bundle_size:
+            #if len(self.bundle_hashes) < self.bundle_size:
+            if len(self.bundle_artifacts) < self.bundle_size:
                 artifact = self.items_queue.get(block=True)
 
                 # avoid adding duplicate artifacts to the bundle in case the same artifact is put in the queue multiple times due to restarts
                 if self.is_artifact_used(artifact.hash) is False:   
-                    self.bundle_locations.append(artifact.location)
-                    self.bundle_hashes.append(artifact.hash)
+                    #self.bundle_locations.append(artifact.location)
+                    #self.bundle_hashes.append(artifact.hash)
+                    self.bundle_artifacts.append(artifact)
             else:
-                log(f"{self.name} yielding bundle_locations: {self.bundle_locations[:self.bundle_size]}, bundle_hashes: {self.bundle_hashes[:self.bundle_size]}", level="info", logger=self.logger)
-                bundle = self.bundle_locations[:self.bundle_size]  # yield only a batch of items based on the bundle size
+                #log(f"{self.name} yielding bundle_locations: {self.bundle_locations[:self.bundle_size]}, bundle_hashes: {self.bundle_hashes[:self.bundle_size]}", level="info", logger=self.logger)
+                #bundle = self.bundle_locations[:self.bundle_size]  # yield only a batch of items based on the bundle size
+                bundle = self.bundle_artifacts[:self.bundle_size]  # yield only a batch of items based on the bundle size
 
                 yield bundle
 
                 # remove the items that were just yielded from the bundle_locations list, keep the remaining items for the next yield
-                self.bundle_locations = self.bundle_locations[self.bundle_size:]
-                self.bundle_hashes = self.bundle_hashes[self.bundle_size:]
+                #self.bundle_locations = self.bundle_locations[self.bundle_size:]
+                #self.bundle_hashes = self.bundle_hashes[self.bundle_size:]
+                self.bundle_artifacts = self.bundle_artifacts[self.bundle_size:]

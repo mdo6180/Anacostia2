@@ -45,12 +45,14 @@ node = Node(name="TestNode", consumers=[stream_consumer_odd], logger=logger)
 def node_func():
     for bundle in stream_consumer_odd:
         with node.stage_run():
-            # bundle = [{'filepath': 'testing_artifacts/incoming1/test_file0.txt'}]
-            artifact_location = bundle[0]["filepath"]
+            # bundle = [Artifact(location={'filepath': 'testing_artifacts/incoming1/test_file0.txt'}, hash='d41d8cd98f00b204e9800998ecf8427e')]
+            artifact = bundle[0]
+            file_path = artifact.location["filepath"]
+            file_hash = artifact.hash
 
-            with open(artifact_location, "r") as f:
+            with open(file_path, "r") as f:
                 content = f.read()
-                logger.info(f"processing artifact with content '{content}' in run {node.run_id} with location {artifact_location}")
+                logger.info(f"processing artifact with content '{content}' in run {node.run_id} with location {artifact.location} and hash {file_hash}")
 
                 if args.restart == False:
                     stop_if(current_run=node.run_id, current_iter=0, target_run=5, target_iter=0, mode="sigint", logger=logger) 
