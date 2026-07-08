@@ -109,7 +109,7 @@ class DirectoryStream(Stream):
                         continue
 
                     self.register_artifact(file_hash, artifact_location)        # register the artifact in the stream's local database table
-                    yield Artifact(location=artifact_location, hash=file_hash)  # yield the artifact as a tuple of (artifact_location, file_hash) to the consumer
+                    yield Artifact(location=artifact_location, hash=file_hash)  # yield an Artifact object to the consumer
                     
             # IMPORTANT: prevent polling from blocking main thread
             time.sleep(self.poll_interval)

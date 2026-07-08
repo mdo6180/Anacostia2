@@ -42,6 +42,38 @@ class Stream:
         Make sure table names are unique to avoid conflicts with other streams and producers. 
         We recommend using the convention of prefixing table names with the stream or producer name, 
         e.g. {stream_name}_artifacts for a stream's local table to track artifacts.
+
+        This is an example of how to add additional columns to the local table in an overridden setup() method.
+        This example uses the data from the artifact_location field to fill in the topic, partition, and offset columns in the local table to track Kafka artifacts.
+        You can also do the same thing using the metadata field to store additional information about the artifact, such as tags, labels, or other metadata.
+        From here, you can also write additional methods that query the local table to retrieve artifacts based on their topic, partition, offset, or other metadata.
+        ```
+        CREATE TABLE IF NOT EXISTS {self.local_table_name} (
+            artifact_hash TEXT PRIMARY KEY,
+            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+            artifact_location TEXT NOT NULL,
+            metadata TEXT,
+            topic TEXT GENERATED ALWAYS AS (
+                json_extract(
+                    artifact_location,
+                    '$.topic'
+                )
+            ) STORED,
+            partition INTEGER GENERATED ALWAYS AS (
+                json_extract(
+                    artifact_location,
+                    '$.partition'
+                )
+            ) STORED,
+            offset INTEGER GENERATED ALWAYS AS (
+                json_extract(
+                    artifact_location,
+                    '$.offset'
+                )
+            ) STORED,
+            UNIQUE(artifact_location)
+        );
+        ```
         """
         with self.conn_manager.write_cursor() as cursor:
             query: sql = f"""
@@ -76,7 +108,6 @@ class Stream:
 
         Example usage:
         ```
-        stream = DirectoryStream(name="example_stream", directory=Path("/path/to/directory"), logger=logger)
         stream.register_artifact_local(
             artifact_hash, 
             artifact_location={"filepath": "/path/to/file.txt"},
@@ -137,7 +168,7 @@ class Stream:
 
         :param artifact_hash: The hash of the artifact.
 
-        :return artifact metadata: The metadata of the artifact as a JSON dictionary.
+        :return artifact metadata: The metadata of the artifact as a JSON dictionary. If no metadata is associated with the artifact, returns None.
         """
         with self.conn_manager.read_cursor() as cursor:
             query: sql = f"""
@@ -155,7 +186,7 @@ class Stream:
 
         :param artifact_location: The location of the artifact (e.g., file path, URL) formatted as a JSON dictionary.
 
-        :return: True if the artifact is registered, False otherwise.
+        :return: True if the artifact is registered in the stream's local database table, False otherwise.
         """
         with self.conn_manager.read_cursor() as cursor:
             query: sql = f"""
@@ -167,5 +198,7 @@ class Stream:
     def __iter__(self) -> Iterator[Artifact]:
         """
         This method should be implemented by subclasses to define how the stream polls the source for new artifacts.
+
+        :return: An iterator that yields Artifact objects as they are detected in the stream.
         """
         raise NotImplementedError("Subclasses must implement the __iter__ method.")
