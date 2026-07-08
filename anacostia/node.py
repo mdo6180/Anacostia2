@@ -14,7 +14,6 @@ from anacostia.consumer import Consumer
 from anacostia.producer import Producer
 from anacostia.transports.local import FileSystemTransport
 from anacostia.utils.logging import log
-from anacostia.utils.types import JsonDict
 
 sql = str   # alias of the str type for syntax highlighting using the Python Inline Source Syntax Highlighting extension by Sam Willis in VSCode.
 
@@ -107,7 +106,6 @@ class Node(threading.Thread, ABC):
     
     def using_artifacts(self):
         for consumer in self.consumers:
-            #for artifact_location, artifact_hash in zip(consumer.bundle_locations, consumer.bundle_hashes):
             for artifact in consumer.bundle_artifacts:
                 self.start_using_artifact(artifact.hash)
                 log(f"Node {self.name} started using artifact {artifact.location} with hash {artifact.hash} in run {self.run_id}", level="info", logger=self.logger)
@@ -131,7 +129,6 @@ class Node(threading.Thread, ABC):
             # in the future, we can consider calling commit_artifacts() in another thread as soon as the producer creates the artifact, 
             # so that we can do the hashing while the node starts working on the next run.
             for consumer in self.consumers:
-                #for artifact_location, artifact_hash in zip(consumer.bundle_locations, consumer.bundle_hashes):
                 for artifact in consumer.bundle_artifacts:
                     self.finished_using_artifact(artifact.hash)
                     log(f"Node {self.name} finished using artifact {artifact.location} with hash {artifact.hash} in run {self.run_id}", level="info", logger=self.logger)
