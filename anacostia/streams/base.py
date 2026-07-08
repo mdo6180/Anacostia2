@@ -130,6 +130,25 @@ class Stream:
                 raise ValueError(f"Artifact with hash {artifact_hash} not found in local stream table.")
             return json.loads(result[0])
 
+    def get_artifact_metadata(self, artifact_hash: str) -> JsonDict:
+        """
+        Retrieve the metadata of an artifact from the stream's local database table based on its hash.
+        Artifact metadata is stored as a JSON dictionary in the local table.
+
+        :param artifact_hash: The hash of the artifact.
+
+        :return artifact metadata: The metadata of the artifact as a JSON dictionary.
+        """
+        with self.conn_manager.read_cursor() as cursor:
+            query: sql = f"""
+                SELECT metadata FROM {self.local_table_name} WHERE artifact_hash = ? LIMIT 1;
+            """
+            cursor.execute(query, (artifact_hash,))
+            result = cursor.fetchone()
+            if result is None:
+                raise ValueError(f"Artifact with hash {artifact_hash} not found in local stream table.")
+            return json.loads(result[0]) if result[0] is not None else None
+
     def is_artifact_registered(self, artifact_location: JsonDict) -> bool:
         """
         Check if an artifact is registered in the stream's local database table based on its location.
