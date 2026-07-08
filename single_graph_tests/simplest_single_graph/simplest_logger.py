@@ -44,7 +44,7 @@ def node_func():
     for bundle in stream_consumer_odd:
         with node.stage_run():
             # bundle = [{'filepath': 'testing_artifacts/incoming1/test_file0.txt'}]
-            artifact_location = bundle[0]["filepath"]
+            artifact_location = bundle[0]["path"]
 
             with open(artifact_location, "r") as f:
                 content = f.read()

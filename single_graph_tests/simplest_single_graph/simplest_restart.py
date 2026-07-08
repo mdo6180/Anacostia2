@@ -47,7 +47,7 @@ def node_func():
         with node.stage_run():
             # bundle = [Artifact(location={'filepath': 'testing_artifacts/incoming1/test_file0.txt'}, hash='d41d8cd98f00b204e9800998ecf8427e')]
             artifact = bundle[0]
-            file_path = artifact.location["filepath"]
+            file_path = artifact.location["path"]
             file_hash = artifact.hash
 
             with open(file_path, "r") as f:
