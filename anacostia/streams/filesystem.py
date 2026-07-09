@@ -118,7 +118,7 @@ class DirectoryStream(Stream):
                 elif path.is_dir():
                     artifact_hash = self.hash_directory(artifact_location)
                 else:
-                    self.logger.warning(f"Skipping {path} as it is neither a file nor a directory.")
+                    log(f"Skipping {path} as it is neither a file nor a directory.", level="warning", logger=self.logger)
                     continue
 
                 artifact = Artifact(location=artifact_location, hash=artifact_hash)
