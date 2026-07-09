@@ -129,13 +129,13 @@ class FileSystemTransport:
         self.artifact_path = artifact_path
         self.artifact_hash = artifact_hash
 
+        artifact_location = {"path": str(artifact_path)}
         self.conn_manager.add_provenance_edge(
             predecessor_name=producer_name, predecessor_type="producer",
             successor_name=self.name, successor_type="transport",
-            artifact_name=str(self.artifact_path),
+            artifact_location=artifact_location,
             artifact_hash=self.artifact_hash,
             run_id=self.run_id,
-            details=None
         )
     
     def package(self) -> Tuple[Path, str]:
@@ -162,22 +162,22 @@ class FileSystemTransport:
         # register package in global database
         self.register_artifact_packaged(package_path, package_hash)
 
+        artifact_location = {"path": str(metadata_path)}
         self.conn_manager.add_provenance_edge(
             predecessor_name=self.name, predecessor_type="transport",
             successor_name=str(package_path), successor_type="package",
-            artifact_name=str(metadata_path),
+            artifact_location=artifact_location,
             artifact_hash=metadata_hash,
             run_id=self.run_id,
-            details=None
         )
 
+        artifact_location = {"path": str(self.artifact_path)}
         self.conn_manager.add_provenance_edge(
             predecessor_name=self.name, predecessor_type="transport",
             successor_name=str(package_path), successor_type="package",
-            artifact_name=str(self.artifact_path),
+            artifact_location=artifact_location,
             artifact_hash=self.artifact_hash,
             run_id=self.run_id,
-            details=None
         )
     
         return package_path, package_hash

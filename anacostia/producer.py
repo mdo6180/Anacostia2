@@ -148,14 +148,14 @@ class Producer:
             """
             global_entry = (artifact_hash, self.name, self.run_id, "created", str(artifact_final_path))
             cursor.execute(query, global_entry)
-        
+
+        artifact_location = {"path": str(artifact_final_path)}
         self.conn_manager.add_provenance_edge(
             predecessor_name=self.node_name, predecessor_type="node",
             successor_name=self.name, successor_type="producer",
-            artifact_name=str(artifact_final_path),
+            artifact_location=artifact_location,
             artifact_hash=artifact_hash,
             run_id=self.run_id,
-            details=None
         )
         
         return artifact_final_path, artifact_hash

@@ -5,13 +5,14 @@ import shutil
 import time
 from pathlib import Path
 
-from anacostia.streams.directory import DirectoryStream
+from anacostia.streams.filesystem import DirectoryStream
 from anacostia.consumer import Consumer
 from anacostia.producer import Producer
 from anacostia.transports.local import FileSystemTransport
 from anacostia.node import Node
 from anacostia.dag import Graph
 from anacostia.utils.debug import stop_if
+from anacostia.utils.types import Artifact
 
 sql = str   # alias of the str type for syntax highlighting using the Python Inline Source Syntax Highlighting extension by Sam Willis in VSCode.
 
@@ -48,11 +49,15 @@ logger = logging.getLogger(__name__)
 
 
 # Test 3: Two DirectoryStreams with bundle_size=2 and filtering functions
-def filter_odd(content: str) -> bool:
-    return int(content[-1]) % 2 != 0    # Keep only artifacts with last character as odd number
+def filter_odd(artifact: Artifact) -> bool:
+    with open(artifact.location["path"], "r") as f:
+        content = f.read()
+        return int(content[-1]) % 2 != 0    # Keep only artifacts with last character as odd number
 
-def filter_even(content: str) -> bool:
-    return int(content[-1]) % 2 == 0    # Keep only artifacts with last character as even number
+def filter_even(artifact: Artifact) -> bool:
+    with open(artifact.location["path"], "r") as f:
+        content = f.read()
+        return int(content[-1]) % 2 == 0    # Keep only artifacts with last character as even number
 
 stream_consumer_odd = Consumer(
     name="stream_consumer_odd", 
@@ -104,17 +109,20 @@ def node_func():
             os.makedirs(subdir, exist_ok=True)
             combined_staging_path = subdir / f"processed_combined_{node.run_id}.txt"
 
-            for i, (item1, item2) in enumerate(zip(bundle1, bundle2)):
-
+            for i, (artifact1, artifact2) in enumerate(zip(bundle1, bundle2)):
                 # All code here will execute on each item in the bundle
 
-                with open(odd_path, "a") as file:
-                    file.write(f"Processed {item1} from odd stream\n")
+                with open(artifact1.location["path"], "r") as f:
+                    content = f.read()
+                    with open(odd_path, "a") as file:
+                        file.write(f"Processed {artifact1.location['path']} from odd stream with content '{content}'\n")
                 
                 #time.sleep(1)   # checkpoint 1
                 
-                with open(even_path, "a") as file:
-                    file.write(f"Processed {item2} from even stream\n")
+                with open(artifact2.location["path"], "r") as f:
+                    content = f.read()
+                    with open(even_path, "a") as file:
+                        file.write(f"Processed {artifact2.location['path']} from even stream with content '{content}'\n")
                 
                 time.sleep(1)   # checkpoint 2
                 
@@ -124,10 +132,13 @@ def node_func():
                     stop_if(current_run=node.run_id, current_iter=i, target_run=1, target_iter=0, mode="sigint", logger=logger) 
                 
                 with open(combined_staging_path, "a") as file:
-                    file.write(f"Processed {item1} and {item2} from combined streams\n")
+                    with open(artifact1.location["path"], "r") as f1, open(artifact2.location["path"], "r") as f2:
+                        content1 = f1.read()
+                        content2 = f2.read()
+                        file.write(
+                            f"Processed {artifact1.location['path']} with content '{content1}' and {artifact2.location['path']} with content '{content2}' from combined streams\n"
+                        )
                 
-                #time.sleep(1)   # checkpoint 3
-            
             # All code here will execute before the run ends but after you are done using the bundle
 
             odd_producer.commit_artifact(

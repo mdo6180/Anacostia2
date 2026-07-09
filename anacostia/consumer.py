@@ -78,7 +78,7 @@ class Consumer:
 
     def prime_artifact(self, artifact_hash: str) -> None:
         # delete this query in future if we don't need to store file paths for ignored artifacts
-        filepath = self.stream.get_artifact_location(artifact_hash)
+        artifact_location = self.stream.get_artifact_location(artifact_hash)
 
         with self.conn_manager.write_cursor() as cursor:
             query: sql = f"""
@@ -86,16 +86,16 @@ class Consumer:
                 (artifact_hash, node_name, state, details) 
                 VALUES (?, ?, ?, ?);
             """
-            cursor.execute(query, (artifact_hash, self.name, "primed", filepath))
+            cursor.execute(query, (artifact_hash, self.name, "primed", json.dumps(artifact_location)))
         
     def record_provenance(self, run_id: int, details: str = None) -> None:
         # record edges between the stream and the consumer for all artifacts detected between the start of the current run and the previous run
-        for artifact_location, artifact_hash in self.get_detected_artifacts(current_run_id=run_id):
+        for artifact in self.get_detected_artifacts(current_run_id=run_id):
             self.conn_manager.add_provenance_edge(
                 predecessor_name=self.stream.name, predecessor_type="stream",
                 successor_name=self.name, successor_type="consumer",
-                artifact_location=artifact_location,
-                artifact_hash=artifact_hash,
+                artifact_location=artifact.location,
+                artifact_hash=artifact.hash,
                 run_id=run_id
             )
 
@@ -104,7 +104,7 @@ class Consumer:
             self.conn_manager.add_provenance_edge(
                 predecessor_name=self.name, predecessor_type="consumer",
                 successor_name=self.node_name, successor_type="node",
-                artifact_location=json.dumps(artifact.location),
+                artifact_location=artifact.location,
                 artifact_hash=artifact.hash,
                 run_id=run_id
             )
@@ -119,7 +119,7 @@ class Consumer:
                 (artifact_hash, node_name, state, details) 
                 VALUES (?, ?, ?, ?);
             """
-            cursor.execute(query, (artifact_hash, self.name, "ignored", artifact_location))
+            cursor.execute(query, (artifact_hash, self.name, "ignored", json.dumps(artifact_location)))
     
     def is_artifact_used(self, artifact_hash: str) -> bool:
         with self.conn_manager.read_cursor() as cursor:
@@ -220,6 +220,10 @@ class Consumer:
                 """
                 cursor.execute(query, (self.node_name,))
                 detected_artifacts = cursor.fetchall()
+                detected_artifacts = [
+                    Artifact(location=json.loads(artifact_location), hash=artifact_hash) 
+                    for artifact_location, artifact_hash in detected_artifacts
+                ]
                 return detected_artifacts
 
             else:
@@ -239,6 +243,10 @@ class Consumer:
                 """
                 cursor.execute(query, (self.node_name, current_run_id - 1, self.node_name, current_run_id))
                 detected_artifacts = cursor.fetchall()
+                detected_artifacts = [
+                    Artifact(location=json.loads(artifact_location), hash=artifact_hash) 
+                    for artifact_location, artifact_hash in detected_artifacts
+                ]
                 return detected_artifacts
     
     def __iter__(self):

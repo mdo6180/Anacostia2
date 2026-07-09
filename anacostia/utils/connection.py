@@ -1,8 +1,10 @@
+import json
 import sqlite3
 from contextlib import contextmanager
 import logging
 
 from anacostia.utils.logging import log
+from anacostia.utils.types import JsonDict, Artifact
 
 sql = str   # alias of the str type for syntax highlighting using the Python Inline Source Syntax Highlighting extension by Sam Willis in VSCode.
 
@@ -170,7 +172,7 @@ class ConnectionManager:
         self, 
         predecessor_name: str, predecessor_type: str, 
         successor_name: str, successor_type: str, 
-        artifact_location: str,
+        artifact_location: JsonDict,
         artifact_hash: str, 
         run_id: int = None
     ) -> None:
@@ -189,7 +191,7 @@ class ConnectionManager:
                 (
                     predecessor_name, predecessor_type, 
                     successor_name, successor_type, 
-                    artifact_location,
+                    json.dumps(artifact_location),
                     artifact_hash, 
                     run_id
                 )
