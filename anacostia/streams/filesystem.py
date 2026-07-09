@@ -88,28 +88,41 @@ class DirectoryStream(Stream):
 
     def __iter__(self) -> Iterator[Artifact]:
         """
-        Poll the directory for new artifacts, register the artifacts into the DB, and yield their content and hashes.
-        Yields single items: (artifact_location, file_hash). User implemented method.
+        Poll the directory for new artifacts, register them in the database,
+        and yield newly discovered artifacts in chronological order.
         """
 
         while True:
-            # sort files by last modification time
-            for path in sorted(self.directory.iterdir(), key=lambda p: p.stat().st_mtime):
+
+            # Current files in the directory.
+            current_paths = {
+                path.resolve() for path in self.directory.iterdir()
+            }
+
+            # Previously registered files.
+            registered_paths = {
+                Path(location["path"]).resolve() 
+                for location in self.get_all_artifact_locations()
+            }
+
+            # New files only.
+            new_paths = current_paths - registered_paths
+
+            # Process in chronological order.
+            for path in sorted(new_paths, key=lambda p: p.stat().st_mtime):
 
                 artifact_location = {"path": str(path)}
-                if not self.is_artifact_registered(artifact_location):
 
-                    # hash artifact
-                    if path.is_file():
-                        file_hash = self.hash_file(artifact_location)
-                    elif path.is_dir():
-                        file_hash = self.hash_directory(artifact_location)
-                    else:
-                        self.logger.warning(f"Skipping {path} as it is neither a file nor a directory.")
-                        continue
+                if path.is_file():
+                    artifact_hash = self.hash_file(artifact_location)
+                elif path.is_dir():
+                    artifact_hash = self.hash_directory(artifact_location)
+                else:
+                    self.logger.warning(f"Skipping {path} as it is neither a file nor a directory.")
+                    continue
 
-                    self.register_artifact(file_hash, artifact_location)        # register the artifact in the stream's local database table
-                    yield Artifact(location=artifact_location, hash=file_hash)  # yield an Artifact object to the consumer
-                    
-            # IMPORTANT: prevent polling from blocking main thread
+                self.register_artifact(artifact_hash, artifact_location)        # register the artifact in the stream's local database table
+                yield Artifact(location=artifact_location, hash=artifact_hash)  # yield an Artifact object to the consumer
+
+            # IMPORTANT: prevent polling from blocking the main thread.
             time.sleep(self.poll_interval)

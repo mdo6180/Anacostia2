@@ -1,5 +1,5 @@
 import logging
-from typing import Any
+from typing import Any, List
 from collections.abc import Iterator
 import json
 
@@ -160,6 +160,21 @@ class Stream:
             if result is None:
                 raise ValueError(f"Artifact with hash {artifact_hash} not found in local stream table.")
             return json.loads(result[0])
+
+    def get_all_artifact_locations(self) -> List[JsonDict]:
+        """
+        Retrieve the locations of all artifacts from the stream's local database table.
+        Artifact locations are stored as JSON dictionaries in the local table.
+
+        :return artifact locations: A list of artifact locations (e.g., file paths, URLs) as JSON dictionaries.
+        """
+        with self.conn_manager.read_cursor() as cursor:
+            query: sql = f"""
+                SELECT artifact_location FROM {self.local_table_name};
+            """
+            cursor.execute(query)
+            results = cursor.fetchall()
+            return [json.loads(result[0]) for result in results]
 
     def get_artifact_metadata(self, artifact_hash: str) -> JsonDict:
         """
