@@ -6,15 +6,16 @@
 ```python
 def __iter__(self) -> Iterator[Artifact]:
     while True:
-        # discover new artifacts
+        # discover new artifacts (see example in anacostia/streams/filesystem.py)
+        current_artifacts_locations = { locations of artifacts in resource }
+        registered_artifacts_locations = {locations for location in self.get_all_artifact_locations()}
+        new_artifact_locations = current_artifacts_locations - registered_artifacts_locations
 
         # sort new artifacts by the order in which they appeared in the resource (oldest to newest)
+        # note that the key is to be determined by you
+        for artifact_location in sorted(new_artifact_locations, key=lambda p: p.stat().st_mtime)
 
-        # create the artifact location as a JSON-parsable dictionary
-        artifact_location = {...}
-
-        # check if the artifact is registered
-        if not self.is_artifact_registered(artifact_location):
+            artifact_content = load_artifact_content(artifact_location)
 
             # hash the artifact using SHA256 (you will have to implement your own hashing function using hashlib.sha256() and then returning the hex digest)
             # note: if the artifact is large, you might want to load it in chunks
