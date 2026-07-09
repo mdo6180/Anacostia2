@@ -12,8 +12,7 @@ def __iter__(self) -> Iterator[Artifact]:
         new_artifact_locations = current_artifacts_locations - registered_artifacts_locations
 
         # sort new artifacts by the order in which they appeared in the resource (oldest to newest)
-        # note that the key is to be determined by you
-        for artifact_location in sorted(new_artifact_locations, key=lambda p: p.stat().st_mtime)
+        for artifact_location in sorted(new_artifact_locations)
 
             artifact_content = load_artifact_content(artifact_location)
 
