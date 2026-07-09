@@ -12,9 +12,7 @@ def __iter__(self) -> Iterator[Artifact]:
         new_artifact_locations = current_artifacts_locations - registered_artifacts_locations
 
         # sort new artifacts by the order in which they appeared in the resource (oldest to newest)
-        for artifact_location in sorted(new_artifact_locations)
-
-            artifact_content = load_artifact_content(artifact_location)
+        for artifact_location in sorted(new_artifact_locations):
 
             # hash the artifact using SHA256 (you will have to implement your own hashing function using hashlib.sha256() and then returning the hex digest)
             # note: if the artifact is large, you might want to load it in chunks
@@ -22,11 +20,9 @@ def __iter__(self) -> Iterator[Artifact]:
             sha256.update(artifact_content)
             artifact_hash = sha256.hexdigest()
 
-            # register the artifact into the local database
-            self.register_artifact(artifact_hash, artifact_location) 
-
-            # yield an Artifact object to the consumer
-            yield Artifact(location=artifact_location, hash=file_hash)
+            artifact = Artifact(location=artifact_location, hash=artifact_hash)
+            self.register_artifact(artifact)    # register the artifact into the local database
+            yield artifact                      # yield an Artifact object to the consumer
                 
         # IMPORTANT: prevent polling from blocking main thread
         time.sleep(self.poll_interval)

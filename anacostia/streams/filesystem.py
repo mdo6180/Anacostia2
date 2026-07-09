@@ -121,8 +121,9 @@ class DirectoryStream(Stream):
                     self.logger.warning(f"Skipping {path} as it is neither a file nor a directory.")
                     continue
 
-                self.register_artifact(artifact_hash, artifact_location)        # register the artifact in the stream's local database table
-                yield Artifact(location=artifact_location, hash=artifact_hash)  # yield an Artifact object to the consumer
+                artifact = Artifact(location=artifact_location, hash=artifact_hash)
+                self.register_artifact(artifact)        # register the artifact in the stream's local database table
+                yield artifact  # yield an Artifact object to the consumer
 
             # IMPORTANT: prevent polling from blocking the main thread.
             time.sleep(self.poll_interval)

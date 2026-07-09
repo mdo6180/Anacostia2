@@ -87,16 +87,16 @@ class Stream:
             """
             cursor.execute(query)
 
-    def register_artifact(self,  artifact_hash: str, artifact_location: JsonDict, metadata: JsonDict = None) -> None:
+    def register_artifact(self, artifact: Artifact, metadata: JsonDict = None) -> None:
         """
         Register an artifact in the stream's local database table and the global database table.
 
-        :param artifact_hash: The hash of the artifact.
-        :param artifact_location: The location of the artifact (e.g., file path, URL) formatted as a JSON dictionary.
+        :param artifact: The artifact object containing the hash and location.
+        :param metadata: Additional metadata to be stored in the stream's local database.
         :param metadata: Additional metadata to be stored in the stream's local database.
         """
-        self.register_artifact_local(artifact_hash, artifact_location, metadata=metadata)
-        self.register_artifact_global(artifact_hash)
+        self.register_artifact_local(artifact.hash, artifact.location, metadata=metadata)
+        self.register_artifact_global(artifact.hash)
 
     def register_artifact_local(self, artifact_hash: str, artifact_location: JsonDict, metadata: JsonDict = None) -> None:
         """
