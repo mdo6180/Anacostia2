@@ -1,3 +1,4 @@
+import json
 from logging import Logger
 import os
 import hashlib
@@ -34,14 +35,11 @@ class Producer:
         with self.conn_manager.write_cursor() as cursor:
             query: sql = f"""
                 CREATE TABLE IF NOT EXISTS {self.local_table_name} (
-                    artifact_index INTEGER PRIMARY KEY AUTOINCREMENT,
-                    artifact_path TEXT NOT NULL,
-                    artifact_hash TEXT NOT NULL,
-                    node_name TEXT NOT NULL,
+                    artifact_hash TEXT PRIMARY KEY,
+                    artifact_location TEXT NOT NULL CHECK (json_valid(artifact_location)),
+                    metadata TEXT CHECK (metadata IS NULL OR json_valid(metadata)),
                     timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-                    hash_algorithm TEXT,
-                    UNIQUE(artifact_path, artifact_hash),
-                    UNIQUE(artifact_hash)
+                    UNIQUE(artifact_location)
                 );
             """
             cursor.execute(query)
@@ -63,19 +61,6 @@ class Producer:
     
     def get_final_directory(self) -> Path:
         return self.directory
-    
-    def get_artifact_hash(self, artifact_path: str) -> str:
-        with self.conn_manager.read_cursor() as cursor:
-            query: sql = f"""
-                SELECT artifact_hash FROM {self.local_table_name} 
-                WHERE artifact_path = ?;
-            """
-            cursor.execute(query, (artifact_path,))
-            result = cursor.fetchone()
-            if result is not None:
-                return result[0]
-            else:
-                raise ValueError(f"Artifact path {artifact_path} not found in local table {self.local_table_name}.")
     
     def set_run_id(self, run_id: int):
         self.run_id = run_id
@@ -133,10 +118,10 @@ class Producer:
         with self.conn_manager.write_cursor() as cursor:
             query: sql = f"""
                 INSERT OR IGNORE INTO {self.local_table_name} 
-                (artifact_path, artifact_hash, node_name, hash_algorithm) 
-                VALUES (?, ?, ?, ?);
+                (artifact_hash, artifact_location, metadata) 
+                VALUES (?, ?, ?);
             """
-            local_entry = (str(artifact_final_path), artifact_hash, self.name, "sha256")
+            local_entry = (artifact_hash, json.dumps({"path": str(artifact_final_path)}), None)
             cursor.execute(query, local_entry)
         
         # register the artifact in the global database
@@ -146,7 +131,7 @@ class Producer:
                 (artifact_hash, node_name, run_id, state, details) 
                 VALUES (?, ?, ?, ?, ?);
             """
-            global_entry = (artifact_hash, self.name, self.run_id, "created", str(artifact_final_path))
+            global_entry = (artifact_hash, self.name, self.run_id, "created", json.dumps({"path": str(artifact_final_path)}))
             cursor.execute(query, global_entry)
 
         artifact_location = {"path": str(artifact_final_path)}
