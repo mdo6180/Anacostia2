@@ -142,7 +142,7 @@ class FileSystemTransport:
             run_id=self.run_id,
         )
     
-    def package(self) -> Tuple[Path, str]:
+    def package(self) -> Artifact:
         # create the metadata file
         metadata_path = self.get_staging_directory() / "metadata.json"
         with open(metadata_path, "w") as f:
@@ -184,7 +184,7 @@ class FileSystemTransport:
             run_id=self.run_id,
         )
     
-        return package_path, package_hash
+        return Artifact(location={"path": str(package_path)}, hash=package_hash)
     
     def register_artifact_send(self, package_path: Path, package_hash: str) -> None:
         with self.conn_manager.write_cursor() as cursor:
@@ -218,7 +218,10 @@ class FileSystemTransport:
                 self.logger.warning(f"Transport {self.name} found leftover directory {path} in staging directory from previous run. Removing it.")
                 shutil.rmtree(path)
     
-    def send(self, package_path: Path, package_hash: str, dest_directory: Path) -> None:
+    def send(self, package_artifact: Artifact, dest_directory: Path) -> None:
+        package_path = Path(package_artifact.location["path"])
+        package_hash = package_artifact.hash
+
         if not isinstance(package_path, Path):
             raise TypeError("package_path must be of type pathlib.Path")
 

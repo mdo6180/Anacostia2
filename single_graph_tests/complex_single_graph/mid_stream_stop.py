@@ -165,13 +165,12 @@ def node_func():
             )
 
             # package the artifact to create transport package
-            package_path, package_hash = combined_transport.package()
+            package_artifact = combined_transport.package()
 
             # optional: use the transport to send the artifact to another pipeline
             # you can also skip this step if you are manually transporting artifact over air gap.
             combined_transport.send(
-                package_path=package_path,
-                package_hash=package_hash,
+                package_artifact=package_artifact,
                 dest_directory=pipeline2_receiver
             )
         
