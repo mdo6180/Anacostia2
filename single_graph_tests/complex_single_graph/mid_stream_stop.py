@@ -152,16 +152,15 @@ def node_func():
             )
 
             # commit artifacts you want to keep track of. uncommited artifacts will be deleted when run ends. 
-            combined_file_path, combined_file_hash = combined_producer.commit_artifact(
+            committed_artifact = combined_producer.commit_artifact(
                 artifact_staging_path=combined_staging_path, 
                 artifact_final_path=combined_producer.get_final_directory() / f"processed_combined_{node.run_id}.txt"
             )
 
             # stage artifact for prepare for transport packaging
             combined_transport.stage_artifact(
-                artifact_path=combined_file_path, 
+                artifact=committed_artifact,
                 artifact_staging_path=combined_transport.get_staging_directory() / f"processed_combined_{node.run_id}.txt",
-                artifact_hash=combined_file_hash,
                 producer_name=combined_producer.name
             )
 

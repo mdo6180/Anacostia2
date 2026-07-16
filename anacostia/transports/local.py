@@ -8,6 +8,7 @@ import hashlib
 
 from anacostia.utils.connection import ConnectionManager
 from anacostia.utils.logging import log
+from anacostia.utils.types import Artifact
 
 sql = str   # alias of the str type for syntax highlighting using the Python Inline Source Syntax Highlighting extension by Sam Willis in VSCode.
 
@@ -87,12 +88,12 @@ class FileSystemTransport:
     def get_staging_directory(self) -> Path:
         return Path(self.staging_directory)
     
-    def stage_artifact(self, artifact_path: Path, artifact_staging_path: Path, artifact_hash: str, producer_name: str) -> Path:
+    def stage_artifact(self, artifact: Artifact, artifact_staging_path: Path, producer_name: str) -> Path:
         """
         Stage an artifact in the transport's staging directory.
 
         Args:
-            artifact_path (Path): The path to the artifact.
+            artifact (Artifact): The artifact object to be staged.
             artifact_staging_path (Path): The path to copy the artifact to in the transport's staging directory. 
             Note: The final path must be within the directory specified in the directory argument in the class constructor.
             artifact_hash (str): The hash of the artifact being staged.
@@ -102,9 +103,10 @@ class FileSystemTransport:
             Tuple[Path, str]: The final path of where the artifact was moved to and its hash.
         """
 
-        if not isinstance(artifact_path, Path):
-            raise TypeError("artifact_path must be of type pathlib.Path")
+        if not isinstance(artifact, Artifact):
+            raise TypeError("artifact must be of type Artifact")
         
+        artifact_path = Path(artifact.location["path"])
         if not artifact_path.exists():
             raise ValueError(f"Artifact path {artifact_path} does not exist")
 
@@ -123,12 +125,14 @@ class FileSystemTransport:
         relative_path = artifact_staging_path.relative_to(self.staging_directory)
         self.metadata.append({
             "filename": str(relative_path),
-            "hash": artifact_hash
+            "hash": artifact.hash
         })
 
         self.artifact_path = artifact_path
-        self.artifact_hash = artifact_hash
+        self.artifact_hash = artifact.hash
 
+        # Note: since the artifact is coming from a producer, we can assume that the artifact has already been registered in the local database by the producer.
+        # We can also assume the format of the location is artifact.location={"path": str(artifact_path)}.
         artifact_location = {"path": str(artifact_path)}
         self.conn_manager.add_provenance_edge(
             predecessor_name=producer_name, predecessor_type="producer",

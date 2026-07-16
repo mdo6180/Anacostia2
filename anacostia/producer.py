@@ -8,6 +8,7 @@ import shutil
 
 from anacostia.utils.connection import ConnectionManager
 from anacostia.utils.logging import log
+from anacostia.utils.types import Artifact, JsonDict
 
 sql = str   # alias of the str type for syntax highlighting using the Python Inline Source Syntax Highlighting extension by Sam Willis in VSCode.
 
@@ -81,7 +82,7 @@ class Producer:
     def restart_producer(self):
         self.clear_staging_directory()
         
-    def commit_artifact(self, artifact_staging_path: Path, artifact_final_path: Path) -> Tuple[Path, str]:
+    def commit_artifact(self, artifact_staging_path: Path, artifact_final_path: Path) -> Artifact:
         """
         Commit an artifact by moving it from the staging directory to the final directory,
         hashing it, and registering it in the local and global databases.
@@ -92,7 +93,7 @@ class Producer:
             Note: The final path must be within the directory specified in the directory argument in the class constructor.
 
         Returns:
-            Tuple[Path, str]: The final path of where the artifact was moved to and its hash.
+            Artifact: The committed artifact object where Artifact(location={"path": str(artifact_final_path)}, hash=artifact_hash).
         """
 
         if not isinstance(artifact_staging_path, Path):
@@ -142,8 +143,7 @@ class Producer:
             artifact_hash=artifact_hash,
             run_id=self.run_id,
         )
-        
-        return artifact_final_path, artifact_hash
+        return Artifact(location=artifact_location, hash=artifact_hash)
 
     def hash_file(self, filepath: str) -> str:
         sha256 = hashlib.sha256()
