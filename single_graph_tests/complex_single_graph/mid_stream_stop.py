@@ -4,6 +4,7 @@ import argparse
 import shutil
 import time
 from pathlib import Path
+import debugpy
 
 from anacostia.streams.filesystem import DirectoryStream
 from anacostia.consumer import Consumer
@@ -14,7 +15,6 @@ from anacostia.dag import Graph
 from anacostia.utils.debug import stop_if
 from anacostia.utils.types import Artifact
 
-sql = str   # alias of the str type for syntax highlighting using the Python Inline Source Syntax Highlighting extension by Sam Willis in VSCode.
 
 print("imports successful, starting test...")
 
@@ -30,12 +30,28 @@ pipeline2_receiver = tests_path / "transport_receiver"
 
 parser = argparse.ArgumentParser(description="Run the pipeline after restart test")
 parser.add_argument("-r", "--restart", action="store_true", help="Flag to indicate if this is a restart")
+parser.add_argument("-d", "--debug", action="store_true", help="Flag to indicate if debugging is enabled")
 args = parser.parse_args()
 
 if args.restart == False:
     if tests_path.exists() is True:
         shutil.rmtree(tests_path)
     tests_path.mkdir(parents=True, exist_ok=True)
+
+if args.debug:
+    # To debug this script:
+    # run the script: python mid_stream_stop.py -r -d
+    # open the debug tab in vscode
+    # select "Python Debugger: Remote Attach" from the dropdown, then click on the play button.
+    # Add a breakpoint by clicking on the left side of the line number you want to break on.
+    # The script will pause at the breakpoint and you can inspect the values of variables in the debug console.
+
+    # 5678 is the default attach port in the VS Code debug configurations. Unless a host and port are specified, host defaults to localhost.
+    debugpy.listen(5678)
+    print("Waiting for debugger attach")
+    debugpy.wait_for_client()
+    print("Debugger attached, starting test...")
+
 
 log_path = tests_path / "anacostia.log"
 logging.basicConfig(
