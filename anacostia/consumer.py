@@ -197,23 +197,34 @@ class Consumer:
         unused_artifacts = []
         with self.conn_manager.read_cursor() as cursor:
             query: sql = f"""
-                SELECT artifact_hash FROM {self.global_usage_table_name}
-                WHERE node_name = ? AND state = 'primed' AND artifact_hash NOT IN (
-                    SELECT artifact_hash FROM {self.global_usage_table_name}
-                    WHERE node_name = ? AND state = 'using'
-                )
-                ORDER BY timestamp ASC;
-            """
+                SELECT
+                    l.artifact_hash,
+                    l.artifact_location
+                FROM {self.global_usage_table_name} AS a
+                JOIN {self.stream.local_table_name} AS l
+                    ON a.artifact_hash = l.artifact_hash
+                WHERE
+                    a.node_name = ?
+                    AND a.state = 'primed'
+                    AND a.artifact_hash NOT IN (
+                        SELECT artifact_hash
+                        FROM {self.global_usage_table_name}
+                        WHERE node_name = ? AND state = 'using'
+                    )
+                ORDER BY a.timestamp ASC;
+                """
             cursor.execute(query, (self.name, self.node_name,))
             unused_artifacts = cursor.fetchall()
             # self.logger.info(f"querying primed {self.node_name} run {self.run_id}: found {len(unused_artifacts)} artifacts in 'primed' state")
         
-        artifact_hashes = [row[0] for row in unused_artifacts]   # extract artifact hashes from query result
-
-        for artifact_hash in artifact_hashes:
-            artifact_location = self.stream.get_artifact_location(artifact_hash)
-            self.bundle_artifacts.append(Artifact(location=artifact_location, hash=artifact_hash))
-    
+        self.bundle_artifacts.extend([
+            Artifact(
+                location=json.loads(artifact_location),
+                hash=artifact_hash,
+            )
+            for artifact_hash, artifact_location in unused_artifacts
+        ])
+        
     def get_detected_artifacts(self, current_run_id: int) -> List[Tuple[Any, str]]:
         if current_run_id < 0:
             raise ValueError(f"current_run_id {current_run_id} must be greater than or equal to 0 to get detected artifacts between runs.")
