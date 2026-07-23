@@ -4,7 +4,6 @@ import argparse
 import shutil
 import time
 from pathlib import Path
-import debugpy
 
 from anacostia.streams.filesystem import DirectoryStream
 from anacostia.consumer import Consumer
@@ -12,7 +11,7 @@ from anacostia.producer import Producer
 from anacostia.transports.local import FileSystemTransport
 from anacostia.node import Node
 from anacostia.dag import Graph
-from anacostia.utils.debug import stop_if
+from anacostia.utils.debug import stop_if, attach_debugger
 from anacostia.utils.types import Artifact
 
 
@@ -39,18 +38,13 @@ if args.restart == False:
     tests_path.mkdir(parents=True, exist_ok=True)
 
 if args.debug:
-    # To debug this script:
+    # To debug this test:
+    # Add a breakpoint by clicking on the left side of the line number you want to break on.
     # run the script: python mid_stream_stop.py -r -d
     # open the debug tab in vscode
-    # select "Python Debugger: Remote Attach" from the dropdown, then click on the play button.
-    # Add a breakpoint by clicking on the left side of the line number you want to break on.
+    # select the "Python Debugger: Remote Attach" configuration, then click on the play button.
     # The script will pause at the breakpoint and you can inspect the values of variables in the debug console.
-
-    # 5678 is the default attach port in the VS Code debug configurations. Unless a host and port are specified, host defaults to localhost.
-    debugpy.listen(5678)
-    print("Waiting for debugger attach")
-    debugpy.wait_for_client()
-    print("Debugger attached, starting test...")
+    attach_debugger()
 
 
 log_path = tests_path / "anacostia.log"

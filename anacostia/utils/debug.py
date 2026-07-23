@@ -2,6 +2,8 @@ import os
 import signal
 import sys
 from logging import Logger
+import debugpy
+
 
 
 def stop_if(
@@ -44,3 +46,11 @@ def stop_if(
 
     else:
         raise ValueError(f"Unknown mode: {mode}")
+
+
+def attach_debugger():
+    # 5678 is the default attach port in the VS Code debug configurations. Unless a host and port are specified, host defaults to localhost.
+    debugpy.listen(5678)
+    print("Waiting for debugger attach")
+    debugpy.wait_for_client()
+    print("Debugger attached, starting test...")

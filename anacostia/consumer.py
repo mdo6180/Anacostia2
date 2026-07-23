@@ -167,19 +167,30 @@ class Consumer:
         using_artifacts = []
         with self.conn_manager.read_cursor() as cursor:
             query: sql = f"""
-                SELECT artifact_hash FROM {self.global_usage_table_name}
-                WHERE node_name = ? AND run_id = ? AND state = 'using' AND artifact_hash IN (
-                    SELECT artifact_hash FROM {self.stream.local_table_name}
-                )
-                ORDER BY timestamp ASC;
+                SELECT
+                    a.artifact_hash,
+                    l.artifact_location
+                FROM {self.global_usage_table_name} AS a
+                JOIN {self.stream.local_table_name} AS l
+                    ON a.artifact_hash = l.artifact_hash
+                WHERE
+                    a.node_name = ?
+                    AND a.run_id = ?
+                    AND a.state = 'using'
+                ORDER BY
+                    a.timestamp ASC;
             """
             cursor.execute(query, (self.node_name, self.run_id))
             using_artifacts = cursor.fetchall()
             log(f"querying using {self.node_name} run {self.run_id}: found {len(using_artifacts)} artifacts in 'using' state", level="info", logger=self.logger)
         
-        artifact_hashes = [row[0] for row in using_artifacts]   # extract artifact hashes from query result
-        self.bundle_artifacts = [Artifact(location=self.stream.get_artifact_location(artifact_hash), hash=artifact_hash) for artifact_hash in artifact_hashes]
-
+        self.bundle_artifacts = [
+            Artifact(
+                location=json.loads(artifact_location),
+                hash=artifact_hash,
+            )
+            for artifact_hash, artifact_location in using_artifacts
+        ]
         return self.bundle_artifacts
     
     def get_unused_artifacts(self) -> List[Artifact]:
