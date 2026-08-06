@@ -6,10 +6,12 @@ import shutil
 from pathlib import Path
 from contextlib import contextmanager
 from uuid import uuid4
+from dataclasses import asdict, dataclass
+import json
 
 from anacostia.utils.debug import attach_debugger
 
-from package import create_deterministic_tar, gzip_file, partition_file, package_directory_into_chunks
+from package import create_deterministic_tar, gzip_file, partition_file, sha256_file
 
 
 print("imports successful, starting test...")
@@ -64,6 +66,24 @@ logging.basicConfig(
     filemode='a'
 )
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class ChunkInfo:
+    index: int
+    filename: str
+    offset: int
+    size: int
+    sha256: str
+
+
+@dataclass(frozen=True)
+class ChunkManifest:
+    archive_size: int
+    archive_sha256: str
+    chunk_size: int
+    chunk_count: int
+    chunks: list[ChunkInfo]
 
 
 class FileSystemTransport:
@@ -122,13 +142,33 @@ class FileSystemTransport:
             # compress the .tar file into a .tar.gz file
             gzip_path = tar_path.with_suffix(tar_path.suffix + ".gz")
             gzip_path = gzip_file(tar_path, gzip_path, compression_level=compression_level)
+            gzip_sha256 = sha256_file(gzip_path)
             print(f"gzip file size: {gzip_path.stat().st_size} bytes")
 
             os.remove(tar_path)  # Remove the .tar file after creating the .tar.gz file
 
             partitioned_dir = gzip_path.parent / "partitions"
-            partition_file(gzip_path, partitioned_dir, chunk_size=partition_size)
+            chunks = partition_file(gzip_path, partitioned_dir, chunk_size=partition_size)
             print(f"divided gzip file into {len(list(partitioned_dir.iterdir()))} partitions with sizes (bytes): {[f.stat().st_size for f in partitioned_dir.iterdir()]}")
+
+            manifest = ChunkManifest(
+                archive_size=gzip_path.stat().st_size,
+                archive_sha256=gzip_sha256,
+                chunk_size=partition_size,
+                chunk_count=len(chunks),
+                chunks=chunks,
+            )
+            manifest_path = gzip_path.parent / "manifest.json"
+            with manifest_path.open("x", encoding="utf-8") as manifest_file:
+                json.dump(
+                    {
+                        **asdict(manifest),
+                        "chunks": [asdict(chunk) for chunk in chunks],
+                    },
+                    manifest_file,
+                    indent=2,
+                )
+                manifest_file.write("\n")
 
             os.remove(gzip_path)  # Remove the .tar.gz file after partitioning
 
