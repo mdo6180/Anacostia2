@@ -1,0 +1,146 @@
+import argparse
+import logging
+import os
+from logging import Logger
+import shutil
+from pathlib import Path
+from contextlib import contextmanager
+from uuid import uuid4
+
+from anacostia.utils.debug import attach_debugger
+
+from package import create_deterministic_tar, gzip_file, partition_file, package_directory_into_chunks
+
+
+print("imports successful, starting test...")
+
+tests_path = Path("./testing_artifacts")
+db_folder_path = tests_path / ".anacostia"
+input_path1 = tests_path / "incoming1"
+input_path2 = tests_path / "incoming2"
+output_path1 = tests_path / "processed1"
+output_path2 = tests_path / "processed2"
+output_combined_path = tests_path / "processed_combined"
+transport_package_dir = tests_path / "transport_dir"
+pipeline2_receiver = tests_path / "transport_receiver"
+
+parser = argparse.ArgumentParser(description="Run the pipeline after restart test")
+parser.add_argument("-r", "--restart", action="store_true", help="Flag to indicate if this is a restart")
+parser.add_argument("-d", "--debug", action="store_true", help="Flag to indicate if debugging is enabled")
+args = parser.parse_args()
+
+if args.debug:
+    # To debug this test:
+    # Add a breakpoint by clicking on the left side of the line number you want to break on.
+    # run the script: python mid_stream_stop.py -r -d
+    # open the debug tab in vscode
+    # select the "Python Debugger: Remote Attach" configuration, then click on the play button.
+    # The script will pause at the breakpoint and you can inspect the values of variables in the debug console.
+    attach_debugger()
+
+def create_text_file(path: str, size_mb: int = 10):
+    target_size = size_mb * 1024 * 1024  # bytes
+    line = "The quick brown fox jumps over the lazy dog.\n"
+
+    with open(path, "w", encoding="utf-8") as f:
+        while f.tell() < target_size:
+            f.write(line)
+
+        # Trim to exactly the target size
+        f.truncate(target_size)
+
+if args.restart == False:
+    if tests_path.exists() is True:
+        shutil.rmtree(tests_path)
+    tests_path.mkdir(parents=True, exist_ok=True)
+    create_text_file(str(tests_path / "10mb.txt"), size_mb=10)
+
+log_path = tests_path / "anacostia.log"
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S',
+    filename=str(log_path),
+    filemode='a'
+)
+logger = logging.getLogger(__name__)
+
+
+class FileSystemTransport:
+    def __init__(
+        self, name: str, 
+        packages_directory: str, 
+        hash_chunk_size: int = 1_048_576, 
+        logger: Logger = None
+    ):
+        """
+        name: name of the Transport
+        packages_directory: directory where all of the Transport's packages will be stored.
+        hash_chunk_size: size of the chunks to read when hashing files.
+        partition_size: size of the partitions when partitioning files.
+        logger: logger for logging statements
+        """
+
+        self.name = name
+        self.hash_chunk_size = hash_chunk_size
+        self.logger = logger
+        self.run_id = 0
+        self.local_table_name = f"{self.name}_local"
+        self.global_usage_table_name = "artifact_usage_events"
+
+        self.dest_directory = Path(packages_directory)
+        if not self.dest_directory.exists():
+            os.makedirs(self.dest_directory)
+
+    @contextmanager
+    def create_transfer_package(self, compression_level: int = 6, partition_size: int = 1_048_576):
+        """
+        Context manager to create a package for the given artifact.
+        Yields the path to the /data folder where all the files for the transfer package should be placed.
+        Copy the artifact file into this folder, and when the context is exited, the package will be finalized (e.g., zipped, hashed, and partitioned).
+        """
+
+        # Logic to create a folder for the transfer package inside the destination directory,
+        # create the /data folder, and yield the path to it.
+        package_path = self.dest_directory / f"transfer_{uuid4().hex}"
+        data_folder_path = package_path / "data"
+        data_folder_path.mkdir(parents=True, exist_ok=True)
+
+        try:
+            yield data_folder_path
+
+            print(f"Contents of the /data folder before packaging: {[f.name for f in data_folder_path.iterdir()]}")
+            print(f"Size of the /data folder before packaging: {sum(f.stat().st_size for f in data_folder_path.iterdir())} bytes")
+
+            # convert the /data folder to a .tar file after the context is exited (i.e., after the user has copied the artifact file into it)
+            tar_path = data_folder_path.parent / f"{data_folder_path.name}.tar"
+            tar_path = create_deterministic_tar(data_folder_path, tar_path)
+            print(f"tar file size: {tar_path.stat().st_size} bytes")
+
+            shutil.rmtree(data_folder_path)  # Remove the /data folder after creating the .tar file
+
+            # compress the .tar file into a .tar.gz file
+            gzip_path = tar_path.with_suffix(tar_path.suffix + ".gz")
+            gzip_path = gzip_file(tar_path, gzip_path, compression_level=compression_level)
+            print(f"gzip file size: {gzip_path.stat().st_size} bytes")
+
+            os.remove(tar_path)  # Remove the .tar file after creating the .tar.gz file
+
+            partitioned_dir = gzip_path.parent / "partitions"
+            partition_file(gzip_path, partitioned_dir, chunk_size=partition_size)
+            print(f"divided gzip file into {len(list(partitioned_dir.iterdir()))} partitions with sizes (bytes): {[f.stat().st_size for f in partitioned_dir.iterdir()]}")
+
+            os.remove(gzip_path)  # Remove the .tar.gz file after partitioning
+
+        finally:
+            # Clean up if necessary
+            pass
+    
+
+if __name__ == "__main__":
+    artifact_path = tests_path / "10mb.txt"
+
+    # Example usage of the FileSystemTransport
+    transport = FileSystemTransport(name="example_transport", packages_directory=str(transport_package_dir), logger=logger)
+    with transport.create_transfer_package(partition_size=10000) as data_folder_path:   # 10 KB partitions
+        shutil.copy(artifact_path, data_folder_path / artifact_path.name)
