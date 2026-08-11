@@ -51,16 +51,7 @@ class Producer:
     def set_node_name(self, node_name: str):
         self.node_name = node_name
         
-    def initialize_staging_directory(self):
-        self.staging_directory = self.db_folder / self.name
-        if not self.staging_directory.exists():
-            log(f"Temporary directory {self.staging_directory} does not exist. Creating it.", level="info", logger=self.logger)
-            self.staging_directory.mkdir(parents=True, exist_ok=True)
-
-    def get_staging_directory(self) -> Path:
-        return self.staging_directory
-    
-    def get_final_directory(self) -> Path:
+    def get_commit_directory(self) -> Path:
         return self.directory
     
     def set_run_id(self, run_id: int):

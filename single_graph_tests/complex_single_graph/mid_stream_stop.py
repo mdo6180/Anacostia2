@@ -153,18 +153,18 @@ def node_func():
 
             odd_producer.commit_artifact(
                 artifact_staging_path=odd_path, 
-                artifact_final_path=odd_producer.get_final_directory() / f"processed_odd_{stage.run_id}.txt"
+                artifact_final_path=odd_producer.get_commit_directory() / f"processed_odd_{stage.run_id}.txt"
             )
 
             even_producer.commit_artifact(
                 artifact_staging_path=even_path, 
-                artifact_final_path=even_producer.get_final_directory() / f"processed_even_{stage.run_id}.txt"
+                artifact_final_path=even_producer.get_commit_directory() / f"processed_even_{stage.run_id}.txt"
             )
 
             # commit artifacts you want to keep track of. uncommited artifacts will be deleted when run ends. 
             committed_artifact = combined_producer.commit_artifact(
                 artifact_staging_path=combined_staging_path, 
-                artifact_final_path=combined_producer.get_final_directory() / f"processed_combined_{stage.run_id}.txt"
+                artifact_final_path=combined_producer.get_commit_directory() / f"processed_combined_{stage.run_id}.txt"
             )
 
             # stage artifact for prepare for transport packaging
