@@ -32,6 +32,7 @@ class Graph:
             node.set_db_path(db_path)
             node.initialize_db_connection(db_path)
             node.set_db_folder(self.db_folder)
+            node.set_staging_directory(self.db_folder / 'staging')
             node.setup()
 
             for consumer in node.consumers:
@@ -41,7 +42,6 @@ class Graph:
                 
             for producer in node.producers:
                 producer.set_db_folder(self.db_folder)
-                producer.initialize_staging_directory()
                 producer.initialize_db_connection(db_path)
                 producer.setup()
 

@@ -69,19 +69,6 @@ class Producer:
     def initialize_db_connection(self, filename: str):
         self.conn_manager = ConnectionManager(db_path=filename, logger=self.logger)
     
-    def clear_staging_directory(self):
-        # clear any temp files in the staging directory from previous runs, so that we don't have any leftover temp files when we start a new run
-        for path in self.staging_directory.iterdir():
-            if path.is_file():
-                log(f"Producer {self.name} found leftover file {path} in staging directory from previous run. Removing it.", level="warning", logger=self.logger)
-                os.remove(path)
-            elif os.path.isdir(path):
-                log(f"Producer {self.name} found leftover directory {path} in staging directory from previous run. Removing it.", level="warning", logger=self.logger)
-                shutil.rmtree(path)
-    
-    def restart_producer(self):
-        self.clear_staging_directory()
-        
     def commit_artifact(self, artifact_staging_path: Path, artifact_final_path: Path) -> Artifact:
         """
         Commit an artifact by moving it from the staging directory to the final directory,
@@ -102,9 +89,6 @@ class Producer:
         if not isinstance(artifact_final_path, Path): 
             raise TypeError("artifact_final_path must be of type pathlib.Path")
         
-        if not artifact_staging_path.is_relative_to(self.staging_directory):
-            raise ValueError(f"Artifact staging path {artifact_staging_path} is not within the staging directory {self.staging_directory}")
-
         if not artifact_final_path.is_relative_to(self.directory):
             raise ValueError(f"Artifact final path {artifact_final_path} is not within the directory {self.directory}")
 

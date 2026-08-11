@@ -108,14 +108,14 @@ def node_func():
         
         # All code here will execute prior to the run starting
         
-        with node.stage_run():
+        with node.stage_run() as staging_directory:
 
             # All code here will execute during the run
 
-            odd_path = odd_producer.get_staging_directory() / f"processed_odd_{node.run_id}.txt"
-            even_path = even_producer.get_staging_directory() / f"processed_even_{node.run_id}.txt"
+            odd_path = staging_directory / f"processed_odd_{node.run_id}.txt"
+            even_path = staging_directory / f"processed_even_{node.run_id}.txt"
             
-            subdir = combined_producer.get_staging_directory() / f"combined_dir_{node.run_id}"
+            subdir = staging_directory / f"combined_dir_{node.run_id}"
             os.makedirs(subdir, exist_ok=True)
             combined_staging_path = subdir / f"processed_combined_{node.run_id}.txt"
 

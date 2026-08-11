@@ -4,10 +4,12 @@ import inspect
 import json
 from logging import Logger
 import os
+from pathlib import Path
 import threading
 from contextlib import contextmanager
 from typing import Callable, List
 import traceback
+import shutil
 
 from anacostia.utils.connection import ConnectionManager
 from anacostia.consumer import Consumer
@@ -26,6 +28,7 @@ class Node(threading.Thread, ABC):
         consumers: List[Consumer], 
         producers: List[Producer] = None, 
         transports: List[FileSystemTransport] = None, 
+        staging_directory: Path = None,
         logger: Logger = None
     ):
         self.consumers = consumers
@@ -33,6 +36,11 @@ class Node(threading.Thread, ABC):
         self.transports: List[FileSystemTransport] = transports if transports is not None else []
         self.run_id = 0
         self.logger = logger
+
+        self.staging_directory: Path = staging_directory
+        if self.staging_directory is not None:
+            if not self.staging_directory.exists():
+                os.makedirs(self.staging_directory)
         
         self._entrypoint = None
 
@@ -54,7 +62,23 @@ class Node(threading.Thread, ABC):
 
     def set_db_folder(self, db_folder: str):
         self.db_folder = db_folder
+
+    def set_staging_directory(self, staging_directory: Path):
+        if self.staging_directory is None:
+            self.staging_directory = staging_directory
+            if not self.staging_directory.exists():
+                os.makedirs(self.staging_directory)
         
+    def clear_staging_directory(self):
+        # clear any temp files in the staging directory from previous runs, so that we don't have any leftover temp files when we start a new run
+        for path in self.staging_directory.iterdir():
+            if path.is_file():
+                log(f"Producer {self.name} found leftover file {path} in staging directory from previous run. Removing it.", level="warning", logger=self.logger)
+                os.remove(path)
+            elif os.path.isdir(path):
+                log(f"Producer {self.name} found leftover directory {path} in staging directory from previous run. Removing it.", level="warning", logger=self.logger)
+                shutil.rmtree(path)
+    
     def set_db_path(self, db_path: str):
         self.db_path = db_path
 
@@ -120,7 +144,7 @@ class Node(threading.Thread, ABC):
             for consumer in self.consumers:
                 consumer.record_provenance(run_id=self.run_id)
             
-            yield
+            yield self.staging_directory
             
             # committing artifacts at the end provides an advantage in that hashing takes place after work is done, 
             # so we don't have to wait for hashing to complete before continuing the work.
@@ -130,11 +154,9 @@ class Node(threading.Thread, ABC):
                 for artifact in consumer.bundle_artifacts:
                     self.finished_using_artifact(artifact.hash)
                     log(f"Node {self.name} finished using artifact {artifact.location} with hash {artifact.hash} in run {self.run_id}", level="info", logger=self.logger)
-            
-            # clear staging directories of producers
-            for producer in self.producers:
-                producer.clear_staging_directory()
-            
+
+            # clear the staging directory after the run is finished, so that we don't have any leftover temp files when we start a new run
+            self.clear_staging_directory()
             # Note: we do not clear the staging directory for the transports because unlike producers, 
             # transport staging directories are meant to be used as staging areas for packaging. 
             # this means that when the user calls package(), all the artifacts in the staging directory are moved to the final package directory.
@@ -186,12 +208,11 @@ class Node(threading.Thread, ABC):
             # upon restart, if the latest run has ended, start a new run
             self.set_run_id(latest_run_id + 1)
 
+            self.clear_staging_directory()
+
             for consumer in self.consumers:
                 # restart mode 1 means the latest run ended 
                 consumer.set_restart_mode(mode=1)   
-
-            for producer in self.producers:
-                producer.restart_producer()
             
             for transport in self.transports:
                 transport.restart_transport()
@@ -208,8 +229,7 @@ class Node(threading.Thread, ABC):
             
             # clear any temp files in the staging directory that were not moved to the final location due to the failure. 
             # we don't have any leftover temp files after restart 
-            for producer in self.producers:
-                producer.restart_producer()
+            self.clear_staging_directory()
 
             for transport in self.transports:
                 transport.restart_transport()
