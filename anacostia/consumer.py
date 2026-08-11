@@ -280,6 +280,8 @@ class Consumer:
                 # retrieve artifacts that were primed but not marked as using, and yield those as well 
                 # this can happen if the pipeline was stopped after priming artifacts but before starting to use them 
                 # e.g., if the stop_if was triggered between runs before the using_artifacts call in the Node
+                # Note: this seems like a rare case, but we should handle it anyway to ensure that we don't miss any artifacts that were primed 
+                # but not marked as using.
                 self.get_unused_artifacts()
 
             elif self.restart == 2:

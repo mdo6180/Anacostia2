@@ -104,19 +104,17 @@ class Node(threading.Thread, ABC):
             """
             cursor.execute(query, (artifact_hash, self.name, self.run_id, "used", None))
     
-    def using_artifacts(self):
-        for consumer in self.consumers:
-            for artifact in consumer.bundle_artifacts:
-                self.start_using_artifact(artifact.hash)
-                log(f"Node {self.name} started using artifact {artifact.location} with hash {artifact.hash} in run {self.run_id}", level="info", logger=self.logger)
-    
     @contextmanager
     def stage_run(self):
         try:
             log(f"\nNode {self.name} starting run {self.run_id}", level="info", logger=self.logger)
             self.conn_manager.start_run(self.name, self.run_id)   # start_run DB call
             self.set_run_id(self.run_id)
-            self.using_artifacts()    # mark artifacts as being used in the DB
+
+            for consumer in self.consumers:
+                for artifact in consumer.bundle_artifacts:
+                    self.start_using_artifact(artifact.hash)
+                    log(f"Node {self.name} started using artifact {artifact.location} with hash {artifact.hash} in run {self.run_id}", level="info", logger=self.logger)
 
             # record edges between the stream and the node for all artifacts detected between the start of the current run and the previous run
             for consumer in self.consumers:
