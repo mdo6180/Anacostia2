@@ -9,7 +9,7 @@ from anacostia.streams.filesystem import DirectoryStream
 from anacostia.consumer import Consumer
 from anacostia.producer import Producer
 from anacostia.transports.local import FileSystemTransport
-from anacostia.node import Node
+from anacostia.node import Stage
 from anacostia.dag import Graph
 from anacostia.utils.debug import stop_if, attach_debugger
 from anacostia.utils.types import Artifact
@@ -85,7 +85,7 @@ combined_producer = Producer(name="combined_producer", directory=output_combined
 
 combined_transport = FileSystemTransport(name="combined_transport", packages_directory=transport_package_dir, logger=logger)
 
-node = Node(
+stage = Stage(
     name="TestNode", 
     consumers=[stream_consumer_odd, stream_consumer_even], 
     producers=[odd_producer, even_producer, combined_producer], 
@@ -93,14 +93,14 @@ node = Node(
     logger=logger
 )
 
-@node.entrypoint
+@stage.entrypoint
 def node_func():
-    if node.run_id == 0:
+    if stage.run_id == 0:
         # if it's the first run (i.e. if it's the first time this pipeline has ever been ran), execute the normal entrypoint logic
-        logger.info(f"Node {node.name} starting entrypoint function for run {node.run_id}")
+        logger.info(f"Node {stage.name} starting entrypoint function for run {stage.run_id}")
     else:
         # if it's a restart, execute custom logic before resuming the entrypoint function
-        logger.info(f"Node {node.name} executing custom restart logic for run {node.run_id}")
+        logger.info(f"Node {stage.name} executing custom restart logic for run {stage.run_id}")
 
     # All code that comes before this for loop will be executed only on pipeline start and restart, but not on subsequent runs. 
 
@@ -108,16 +108,16 @@ def node_func():
         
         # All code here will execute prior to the run starting
         
-        with node.stage_run():
+        with stage.stage_run() as staging_directory:
 
             # All code here will execute during the run
 
-            odd_path = odd_producer.get_staging_directory() / f"processed_odd_{node.run_id}.txt"
-            even_path = even_producer.get_staging_directory() / f"processed_even_{node.run_id}.txt"
+            odd_path = staging_directory / f"processed_odd_{stage.run_id}.txt"
+            even_path = staging_directory / f"processed_even_{stage.run_id}.txt"
             
-            subdir = combined_producer.get_staging_directory() / f"combined_dir_{node.run_id}"
+            subdir = staging_directory / f"combined_dir_{stage.run_id}"
             os.makedirs(subdir, exist_ok=True)
-            combined_staging_path = subdir / f"processed_combined_{node.run_id}.txt"
+            combined_staging_path = subdir / f"processed_combined_{stage.run_id}.txt"
 
             for i, (artifact1, artifact2) in enumerate(zip(bundle1, bundle2)):
                 # All code here will execute on each item in the bundle
@@ -139,7 +139,7 @@ def node_func():
                 # simulate failure at run 1, iter 0 (first iteration of the second run)
                 # disable this stop_if after restart to allow the pipeline to continue and finish processing
                 if args.restart == False:
-                    stop_if(current_run=node.run_id, current_iter=i, target_run=1, target_iter=0, mode="sigint", logger=logger) 
+                    stop_if(current_run=stage.run_id, current_iter=i, target_run=1, target_iter=0, mode="sigint", logger=logger) 
                 
                 with open(combined_staging_path, "a") as file:
                     with open(artifact1.location["path"], "r") as f1, open(artifact2.location["path"], "r") as f2:
@@ -153,24 +153,24 @@ def node_func():
 
             odd_producer.commit_artifact(
                 artifact_staging_path=odd_path, 
-                artifact_final_path=odd_producer.get_final_directory() / f"processed_odd_{node.run_id}.txt"
+                artifact_final_path=odd_producer.get_final_directory() / f"processed_odd_{stage.run_id}.txt"
             )
 
             even_producer.commit_artifact(
                 artifact_staging_path=even_path, 
-                artifact_final_path=even_producer.get_final_directory() / f"processed_even_{node.run_id}.txt"
+                artifact_final_path=even_producer.get_final_directory() / f"processed_even_{stage.run_id}.txt"
             )
 
             # commit artifacts you want to keep track of. uncommited artifacts will be deleted when run ends. 
             committed_artifact = combined_producer.commit_artifact(
                 artifact_staging_path=combined_staging_path, 
-                artifact_final_path=combined_producer.get_final_directory() / f"processed_combined_{node.run_id}.txt"
+                artifact_final_path=combined_producer.get_final_directory() / f"processed_combined_{stage.run_id}.txt"
             )
 
             # stage artifact for prepare for transport packaging
             combined_transport.stage_artifact(
                 artifact=committed_artifact,
-                artifact_staging_path=combined_transport.get_staging_directory() / f"processed_combined_{node.run_id}.txt",
+                artifact_staging_path=combined_transport.get_staging_directory() / f"processed_combined_{stage.run_id}.txt",
                 producer_name=combined_producer.name
             )
 
@@ -187,7 +187,7 @@ def node_func():
         # All code here outside the node.stage_run() context manager will execute after the run ends but before the next run begins
 
 
-graph = Graph(name="TestGraph", nodes=[node], db_folder=db_folder_path, logger=logger)
+graph = Graph(name="TestGraph", nodes=[stage], db_folder=db_folder_path, logger=logger)
 
 
 if __name__ == "__main__":
@@ -197,7 +197,7 @@ if __name__ == "__main__":
     try:
         graph.join()
     except KeyboardInterrupt:
-        print(f"Node {node.name} received KeyboardInterrupt. Stopping...")
+        print(f"Node {stage.name} received KeyboardInterrupt. Stopping...")
         graph.stop()
 
         """

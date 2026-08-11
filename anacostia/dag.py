@@ -2,7 +2,7 @@ from typing import List
 from logging import Logger
 from pathlib import Path
 
-from anacostia.node import Node
+from anacostia.node import Stage
 from anacostia.utils.connection import ConnectionManager
 from anacostia.utils.logging import log
 
@@ -11,7 +11,7 @@ sql = str   # alias of the str type for syntax highlighting using the Python Inl
 
 
 class Graph:
-    def __init__(self, name: str, nodes: List[Node], db_folder: Path = ".anacostia", logger: Logger = None) -> None:
+    def __init__(self, name: str, nodes: List[Stage], db_folder: Path = ".anacostia", logger: Logger = None) -> None:
         self.name = name
         self.nodes = nodes
         self.db_folder = db_folder

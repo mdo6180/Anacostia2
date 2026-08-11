@@ -21,7 +21,7 @@ sql = str   # alias of the str type for syntax highlighting using the Python Inl
 
 
 
-class Node(threading.Thread, ABC):
+class Stage(threading.Thread, ABC):
     def __init__(
         self, 
         name: str, 
