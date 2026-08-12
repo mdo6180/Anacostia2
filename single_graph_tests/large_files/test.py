@@ -10,11 +10,11 @@ from dataclasses import asdict, dataclass
 import json
 
 from anacostia.utils.debug import attach_debugger
+from anacostia.utils.types import Artifact
 
 from package import create_deterministic_tar, gzip_file, partition_file, sha256_file
 
 
-print("imports successful, starting test...")
 
 tests_path = Path("./testing_artifacts")
 db_folder_path = tests_path / ".anacostia"
@@ -89,7 +89,7 @@ class ChunkManifest:
 class FileSystemTransport:
     def __init__(
         self, name: str, 
-        packages_directory: str, 
+        packages_directory: Path, 
         hash_chunk_size: int = 1_048_576, 
         logger: Logger = None
     ):
@@ -108,10 +108,17 @@ class FileSystemTransport:
         self.local_table_name = f"{self.name}_local"
         self.global_usage_table_name = "artifact_usage_events"
 
-        self.dest_directory = Path(packages_directory)
-        if not self.dest_directory.exists():
-            os.makedirs(self.dest_directory)
+        self.packages_directory = packages_directory
+        if not self.packages_directory.exists():
+            os.makedirs(self.packages_directory)
 
+    def set_db_folder(self, db_folder: str):
+        self.db_folder = db_folder
+
+    def register_artifact(self, artifact: Artifact):
+        # Logic to add the artifact's hash to the provenance graph
+        print(f"Registering artifact {artifact.location} with hash {artifact.hash} in the provenance graph.")
+        
     @contextmanager
     def create_transfer_package(self, compression_level: int = 6, partition_size: int = 1_048_576):
         """
@@ -122,22 +129,26 @@ class FileSystemTransport:
 
         # Logic to create a folder for the transfer package inside the destination directory,
         # create the /data folder, and yield the path to it.
-        package_path = self.dest_directory / f"transfer_{uuid4().hex}"
-        data_folder_path = package_path / "data"
-        data_folder_path.mkdir(parents=True, exist_ok=True)
+        package_path = self.packages_directory / f"transfer_{uuid4().hex}"
+        self.data_folder_path = package_path / "data"
+        self.data_folder_path.mkdir(parents=True, exist_ok=True)
 
         try:
-            yield data_folder_path
+            yield self.data_folder_path    # Yield the path to the /data folder and self for further operations
 
-            print(f"Contents of the /data folder before packaging: {[f.name for f in data_folder_path.iterdir()]}")
-            print(f"Size of the /data folder before packaging: {sum(f.stat().st_size for f in data_folder_path.iterdir())} bytes")
+            # TODO: copy the database file into the /data folder
+            with open(self.data_folder_path / "db_file.txt", "w") as db_file:
+                db_file.write("This is a placeholder for the database file.")
+
+            print(f"Contents of the /data folder before packaging: {[f.name for f in self.data_folder_path.iterdir()]}")
+            print(f"Size of the /data folder before packaging: {sum(f.stat().st_size for f in self.data_folder_path.iterdir())} bytes")
 
             # convert the /data folder to a .tar file after the context is exited (i.e., after the user has copied the artifact file into it)
-            tar_path = data_folder_path.parent / f"{data_folder_path.name}.tar"
-            tar_path = create_deterministic_tar(data_folder_path, tar_path)
+            tar_path = self.data_folder_path.parent / f"{self.data_folder_path.name}.tar"
+            tar_path = create_deterministic_tar(self.data_folder_path, tar_path)
             print(f"tar file size: {tar_path.stat().st_size} bytes")
 
-            shutil.rmtree(data_folder_path)  # Remove the /data folder after creating the .tar file
+            shutil.rmtree(self.data_folder_path)  # Remove the /data folder after creating the .tar file
 
             # compress the .tar file into a .tar.gz file
             gzip_path = tar_path.with_suffix(tar_path.suffix + ".gz")
@@ -176,11 +187,47 @@ class FileSystemTransport:
             # Clean up if necessary
             pass
     
+    def add_to_package(self, artifact_hash: str, src_path: Path, dest_path: Path, dest_pipeline_name: str, dest_stream: str) -> Artifact:
+        """
+        Add an artifact to the transfer package by moving it from the staging directory to the final directory,
+        hashing it, and registering it in the local and global databases.
+
+        Args:
+            artifact_hash (str): The hash of the artifact to be added to the package.
+            src_path (Path): The path to the artifact in the staging directory.
+            dest_path (Path): The path to move the artifact to in the package's /data directory. 
+            dest_stream (str): The name of the destination stream.
+            Note: The final path must be within the directory specified in the directory argument in the class constructor.
+            Note: The final path must be within the directory specified in the directory argument in the class constructor.
+
+        Returns:
+            Artifact: The committed artifact object where Artifact(location={"path": str(dest_path)}, hash=artifact_hash).
+        """
+
+        if not isinstance(src_path, Path):
+            raise TypeError("src_path must be of type pathlib.Path")
+
+        if not isinstance(dest_path, Path): 
+            raise TypeError("dest_path must be of type pathlib.Path")
+        
+        if not dest_path.is_relative_to(self.packages_directory):
+            raise ValueError(f"Destination path {dest_path} is not within the directory {self.directory}")
+
+    
 
 if __name__ == "__main__":
     artifact_path = tests_path / "10mb.txt"
 
+    artifact = Artifact(
+        location={"path": str(artifact_path)},
+        hash=sha256_file(artifact_path)
+    )
+
     # Example usage of the FileSystemTransport
-    transport = FileSystemTransport(name="example_transport", packages_directory=str(transport_package_dir), logger=logger)
+    transport = FileSystemTransport(
+        name="example_transport", packages_directory=transport_package_dir, logger=logger
+    )
     with transport.create_transfer_package(partition_size=10000) as data_folder_path:   # 10 KB partitions
+        artifact_path = Path(artifact.location["path"])
         shutil.copy(artifact_path, data_folder_path / artifact_path.name)
+        transport.register_artifact(artifact)
