@@ -91,6 +91,8 @@ class TransferManifest:
     archive_sha256: str
     chunk_count: int
     chunk_info: ChunkInfo
+    previous_transfer_id: str = None  # Optional field for the previous transfer ID
+    previous_transfer_sha256: str = None  # Optional field for the previous transfer SHA256
 
 
 class FileSystemTransport:
@@ -187,7 +189,9 @@ class FileSystemTransport:
                     archive_size=gzip_path.stat().st_size,
                     archive_sha256=gzip_sha256,
                     chunk_count=len(chunks),
-                    chunk_info=chunk
+                    chunk_info=chunk,
+                    previous_transfer_id=None,  # Set to None for the first transfer
+                    previous_transfer_sha256=None  # Set to None for the first transfer, otherwise it would be the hash of the previous tranfer manifest file
                 )
                 transfer_manifest_path = chunk_folder / "transfer_manifest.json"
                 with transfer_manifest_path.open("x", encoding="utf-8") as manifest_file:
