@@ -77,25 +77,20 @@ class ChunkInfo:
     sha256: str
 
 @dataclass(frozen=True)
-class ChunkManifest:
-    archive_size: int
-    archive_sha256: str
-    chunk_size: int
-    chunk_count: int
-    chunks: list[ChunkInfo]
-
-@dataclass(frozen=True)
 class TransferArtifact:
     artifact_hash: str
     source_pipeline_name: str
     destination_pipeline_name: str
-    destination_stream: str
+    destination_stream: str = None  # Optional field for the destination stream name (database will not have this field)
 
 @dataclass(frozen=True)
 class TransferManifest:
     transfer_id: str
     transfer_artifacts: list[TransferArtifact]
-    chunk_manifest: ChunkManifest
+    archive_size: int
+    archive_sha256: str
+    chunk_count: int
+    chunk_info: ChunkInfo
 
 
 class FileSystemTransport:
@@ -180,47 +175,34 @@ class FileSystemTransport:
             chunks = partition_file(gzip_path, partitioned_dir, chunk_size=partition_size)
             print(f"divided gzip file into {len(list(partitioned_dir.iterdir()))} partitions with sizes (bytes): {[f.stat().st_size for f in partitioned_dir.iterdir()]}")
 
-            chunk_manifest = ChunkManifest(
-                archive_size=gzip_path.stat().st_size,
-                archive_sha256=gzip_sha256,
-                chunk_size=partition_size,
-                chunk_count=len(chunks),
-                chunks=chunks,
-            )
-            chunk_manifest_path = gzip_path.parent / "chunk_manifest.json"
-            with chunk_manifest_path.open("x", encoding="utf-8") as manifest_file:
-                json.dump(
-                    {
-                        **asdict(chunk_manifest),
-                        "chunks": [asdict(chunk) for chunk in chunks],
-                    },
-                    manifest_file,
-                    indent=2,
+            for chunk in chunks:
+                chunk_folder = partitioned_dir / f"chunk_{chunk.index}"
+                chunk_folder.mkdir(parents=True, exist_ok=True)
+                chunk_file_path = chunk_folder / chunk.filename
+                shutil.move(str(partitioned_dir / chunk.filename), str(chunk_file_path))
+
+                transfer_manifest = TransferManifest(
+                    transfer_id=package_path.name,
+                    transfer_artifacts=self.transfer_artifacts,
+                    archive_size=gzip_path.stat().st_size,
+                    archive_sha256=gzip_sha256,
+                    chunk_count=len(chunks),
+                    chunk_info=chunk
                 )
-                manifest_file.write("\n")
+                transfer_manifest_path = chunk_folder / "transfer_manifest.json"
+                with transfer_manifest_path.open("x", encoding="utf-8") as manifest_file:
+                    json.dump(
+                        {
+                            **asdict(transfer_manifest),
+                            "transfer_artifacts": [asdict(artifact) for artifact in self.transfer_artifacts],
+                        },
+                        manifest_file,
+                        indent=2,
+                    )
+                    manifest_file.write("\n")
 
             os.remove(gzip_path)  # Remove the .tar.gz file after partitioning
 
-            transfer_manifest = TransferManifest(
-                transfer_id=package_path.name,
-                transfer_artifacts=self.transfer_artifacts,
-                chunk_manifest=chunk_manifest,
-            )
-            transfer_manifest_path = gzip_path.parent / "transfer_manifest.json"
-            with transfer_manifest_path.open("x", encoding="utf-8") as manifest_file:
-                json.dump(
-                    {
-                        **asdict(transfer_manifest),
-                        "transfer_artifacts": [asdict(artifact) for artifact in self.transfer_artifacts],
-                        "chunk_manifest": {
-                            **asdict(chunk_manifest),
-                            "chunks": [asdict(chunk) for chunk in chunks],
-                        },
-                    },
-                    manifest_file,
-                    indent=2,
-                )
-                manifest_file.write("\n")
         finally:
             # Clean up if necessary
             pass
