@@ -76,7 +76,6 @@ class ChunkInfo:
     size: int
     sha256: str
 
-
 @dataclass(frozen=True)
 class ChunkManifest:
     archive_size: int
@@ -84,6 +83,19 @@ class ChunkManifest:
     chunk_size: int
     chunk_count: int
     chunks: list[ChunkInfo]
+
+@dataclass(frozen=True)
+class TransferArtifact:
+    artifact_hash: str
+    source_pipeline_name: str
+    destination_pipeline_name: str
+    destination_stream: str
+
+@dataclass(frozen=True)
+class TransferManifest:
+    transfer_id: str
+    transfer_artifacts: list[TransferArtifact]
+    chunk_manifest: ChunkManifest
 
 
 class FileSystemTransport:
@@ -112,8 +124,14 @@ class FileSystemTransport:
         if not self.packages_directory.exists():
             os.makedirs(self.packages_directory)
 
+        self.transfer_artifacts = []  # List to keep track of artifacts added to the transfer package
+        self.pipeline_name = None  # Initialize pipeline_name to None
+
     def set_db_folder(self, db_folder: str):
         self.db_folder = db_folder
+
+    def set_pipeline_name(self, pipeline_name: str):
+        self.pipeline_name = pipeline_name
 
     def register_artifact(self, artifact: Artifact):
         # Logic to add the artifact's hash to the provenance graph
@@ -162,18 +180,18 @@ class FileSystemTransport:
             chunks = partition_file(gzip_path, partitioned_dir, chunk_size=partition_size)
             print(f"divided gzip file into {len(list(partitioned_dir.iterdir()))} partitions with sizes (bytes): {[f.stat().st_size for f in partitioned_dir.iterdir()]}")
 
-            manifest = ChunkManifest(
+            chunk_manifest = ChunkManifest(
                 archive_size=gzip_path.stat().st_size,
                 archive_sha256=gzip_sha256,
                 chunk_size=partition_size,
                 chunk_count=len(chunks),
                 chunks=chunks,
             )
-            manifest_path = gzip_path.parent / "manifest.json"
-            with manifest_path.open("x", encoding="utf-8") as manifest_file:
+            chunk_manifest_path = gzip_path.parent / "chunk_manifest.json"
+            with chunk_manifest_path.open("x", encoding="utf-8") as manifest_file:
                 json.dump(
                     {
-                        **asdict(manifest),
+                        **asdict(chunk_manifest),
                         "chunks": [asdict(chunk) for chunk in chunks],
                     },
                     manifest_file,
@@ -183,6 +201,26 @@ class FileSystemTransport:
 
             os.remove(gzip_path)  # Remove the .tar.gz file after partitioning
 
+            transfer_manifest = TransferManifest(
+                transfer_id=package_path.name,
+                transfer_artifacts=self.transfer_artifacts,
+                chunk_manifest=chunk_manifest,
+            )
+            transfer_manifest_path = gzip_path.parent / "transfer_manifest.json"
+            with transfer_manifest_path.open("x", encoding="utf-8") as manifest_file:
+                json.dump(
+                    {
+                        **asdict(transfer_manifest),
+                        "transfer_artifacts": [asdict(artifact) for artifact in self.transfer_artifacts],
+                        "chunk_manifest": {
+                            **asdict(chunk_manifest),
+                            "chunks": [asdict(chunk) for chunk in chunks],
+                        },
+                    },
+                    manifest_file,
+                    indent=2,
+                )
+                manifest_file.write("\n")
         finally:
             # Clean up if necessary
             pass
@@ -211,7 +249,18 @@ class FileSystemTransport:
             raise TypeError("dest_path must be of type pathlib.Path")
         
         if not dest_path.is_relative_to(self.packages_directory):
-            raise ValueError(f"Destination path {dest_path} is not within the directory {self.directory}")
+            raise ValueError(f"Destination path {dest_path} is not within the directory {self.packages_directory}")
+
+        # move the artifact
+        dest_path.parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(src_path), str(dest_path))
+
+        self.transfer_artifacts.append(TransferArtifact(
+            artifact_hash=artifact_hash,
+            source_pipeline_name=self.pipeline_name,
+            destination_pipeline_name=dest_pipeline_name,
+            destination_stream=dest_stream
+        ))
 
     
 
@@ -227,7 +276,14 @@ if __name__ == "__main__":
     transport = FileSystemTransport(
         name="example_transport", packages_directory=transport_package_dir, logger=logger
     )
+    transport.set_pipeline_name("example_src_pipeline")
     with transport.create_transfer_package(partition_size=10000) as data_folder_path:   # 10 KB partitions
         artifact_path = Path(artifact.location["path"])
-        shutil.copy(artifact_path, data_folder_path / artifact_path.name)
-        transport.register_artifact(artifact)
+        #shutil.copy(artifact_path, data_folder_path / artifact_path.name)
+        transport.add_to_package(
+            artifact_hash=artifact.hash,
+            src_path=Path(artifact.location["path"]),
+            dest_path=data_folder_path / artifact_path.name,
+            dest_pipeline_name="example_dest_pipeline",
+            dest_stream="example_dest_stream"
+        )
