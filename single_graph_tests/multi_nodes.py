@@ -9,7 +9,7 @@ from anacostia.streams.directory import DirectoryStream
 from anacostia.producer import Producer
 from anacostia.consumer import Consumer
 from anacostia.transports.local import FileSystemTransport
-from anacostia.node import Node
+from anacostia.node import Stage
 from anacostia.dag import Graph
 from anacostia.utils.debug import stop_if
 
@@ -94,7 +94,7 @@ file_transport = FolderTransport(name="file_transport", dest_directory=transport
 # example producer to write combined results and send to transport
 combined_producer = Producer(name="combined_producer", directory=output_combined_path, transports=[file_transport], logger=logger)
 
-node = Node(name="TestNode", consumers=[stream_consumer_odd, stream_consumer_even], producers=[odd_producer, even_producer, combined_producer], logger=logger)
+node = Stage(name="TestNode", consumers=[stream_consumer_odd, stream_consumer_even], producers=[odd_producer, even_producer, combined_producer], logger=logger)
 
 @node.entrypoint
 def node_func():
@@ -119,7 +119,7 @@ def node_func():
     # you can check if node.run_id == 0 to determine if it's the first run or a restart, and execute the code accordingly.
     # Restart logic example: load previously trained model and the state of the optimizer from the model registry and continue training in the current run.
     for bundle1, bundle2 in zip(stream_consumer_odd, stream_consumer_even):
-        with node.stage_run():
+        with node.stage_run() as staging_directory:
             for i, (item1, item2) in enumerate(zip(bundle1, bundle2)):
                 with open(os.path.join(odd_staging_path, f"processed_odd_{node.run_id}.txt"), "a") as file:
                     file.write(f"Processed {item1} from odd stream\n")
@@ -161,7 +161,7 @@ class CombinedStream(DirectoryStream):
                 return content
 
 
-class ModelRetrainingNode(Node):
+class ModelRetrainingNode(Stage):
     def __init__(self, name: str, consumers: list[Consumer], producers: list[Producer], logger: logging.Logger = None):
         super().__init__(name, consumers, producers, logger)
         self.metrics_table_name = f"{self.name}_metrics"
@@ -214,7 +214,7 @@ def node2_func():
     model_registry_final_path = model_registry_producer.directory
 
     for bundle in combined_consumer:
-        with node2.stage_run():
+        with node2.stage_run() as staging_directory:
             for i, item in enumerate(bundle):
 
                 subdir = os.path.join(model_registry_staging_path, f"model_dir_{node2.run_id}")

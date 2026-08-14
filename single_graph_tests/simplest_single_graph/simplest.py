@@ -2,7 +2,7 @@ from pathlib import Path
 
 from anacostia.streams.directory import DirectoryStream
 from anacostia.consumer import Consumer
-from anacostia.node import Node
+from anacostia.node import Stage
 from anacostia.dag import Graph
 
 # 1. Set up streams, consumers, and nodes
@@ -12,13 +12,13 @@ input_path1 = tests_path / "incoming1"
 
 stream = DirectoryStream(name="odd_folder", directory=input_path1)
 stream_consumer_odd = Consumer(name="stream_consumer_odd", stream=stream)
-node = Node(name="TestNode", consumers=[stream_consumer_odd])
+node = Stage(name="TestNode", consumers=[stream_consumer_odd])
 
 # 2. Define the node's processing function
 @node.entrypoint
 def node_func():
     for bundle in stream_consumer_odd:
-        with node.stage_run():
+        with node.stage_run() as staging_directory:
             print(f"processed bundle {bundle} in run {node.run_id}")
 
 # 3. Create and start the graph

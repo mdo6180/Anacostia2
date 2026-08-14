@@ -5,7 +5,7 @@ import logging
 
 from anacostia.streams.filesystem import DirectoryStream
 from anacostia.consumer import Consumer
-from anacostia.node import Node
+from anacostia.node import Stage
 from anacostia.dag import Graph
 
 from anacostia.utils.debug import stop_if
@@ -38,13 +38,13 @@ logger = logging.getLogger(__name__)
 
 stream = DirectoryStream(name="odd_folder", directory=input_path1, logger=logger)
 stream_consumer_odd = Consumer(name="stream_consumer_odd", stream=stream, logger=logger)
-node = Node(name="TestNode", consumers=[stream_consumer_odd], logger=logger)
+node = Stage(name="TestNode", consumers=[stream_consumer_odd], logger=logger)
 
 # 2. Define the node's processing function
 @node.entrypoint
 def node_func():
     for bundle in stream_consumer_odd:
-        with node.stage_run():
+        with node.stage_run() as staging_directory:
             # bundle = [Artifact(location={'filepath': 'testing_artifacts/incoming1/test_file0.txt'}, hash='d41d8cd98f00b204e9800998ecf8427e')]
             artifact = bundle[0]
             file_path = artifact.location["path"]
