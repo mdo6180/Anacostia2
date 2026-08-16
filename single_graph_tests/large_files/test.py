@@ -80,6 +80,8 @@ class ChunkInfo:
 @dataclass(frozen=True)
 class TransferArtifact:
     artifact_hash: str
+    filepath: str
+    size_bytes: int
     source_pipeline_name: str
     destination_pipeline_name: str
     destination_stream: str = None  # Optional field for the destination stream name (database will not have this field)
@@ -93,6 +95,7 @@ class TransferManifest:
     chunk_count: int
     chunk_info: ChunkInfo
     merkle_root: str
+    merkle_leaf_index: int
     merkle_proof: list[ProofEntry]
     previous_transfer_id: str = None  # Optional field for the previous transfer ID
     previous_transfer_sha256: str = None  # Optional field for the previous transfer SHA256
@@ -199,6 +202,7 @@ class FileSystemTransport:
                     chunk_count=len(chunks),
                     chunk_info=chunk,
                     merkle_root=root,
+                    merkle_leaf_index=chunk.index,      # Note: leaf index is the index of the chunk in the list of chunks
                     merkle_proof=proof,
                     previous_transfer_id=None,  # Set to None for the first transfer
                     previous_transfer_sha256=None  # Set to None for the first transfer, otherwise it would be the hash of the previous tranfer manifest file
@@ -251,8 +255,12 @@ class FileSystemTransport:
         dest_path.parent.mkdir(parents=True, exist_ok=True)
         shutil.move(str(src_path), str(dest_path))
 
+        filepath = dest_path.relative_to(self.data_folder_path).as_posix()  # Store the relative path to the packages directory
+
         self.transfer_artifacts.append(TransferArtifact(
             artifact_hash=artifact_hash,
+            filepath=filepath,
+            size_bytes=dest_path.stat().st_size,
             source_pipeline_name=self.pipeline_name,
             destination_pipeline_name=dest_pipeline_name,
             destination_stream=dest_stream

@@ -51,6 +51,6 @@ def stop_if(
 def attach_debugger():
     # 5678 is the default attach port in the VS Code debug configurations. Unless a host and port are specified, host defaults to localhost.
     debugpy.listen(5678)
-    print("Waiting for debugger attach")
+    print("Waiting for debugger to attach...")
     debugpy.wait_for_client()
-    print("Debugger attached, starting test...")
+    print("Debugger attached.")
