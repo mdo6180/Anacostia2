@@ -1,0 +1,144 @@
+from pathlib import Path
+import threading
+import json
+import argparse
+import shutil
+import time
+
+from anacostia.utils.debug import attach_debugger
+
+
+
+tests_path = Path("./testing_artifacts")
+receiving_directory = tests_path / "receiving_dir"
+storage_directory = tests_path / "storage_dir"
+
+parser = argparse.ArgumentParser(description="Run the pipeline after restart test")
+parser.add_argument("-r", "--restart", action="store_true", help="Flag to indicate if this is a restart")
+parser.add_argument("-d", "--debug", action="store_true", help="Flag to indicate if debugging is enabled")
+args = parser.parse_args()
+
+if args.debug:
+    # To debug this test:
+    # Add a breakpoint by clicking on the left side of the line number you want to break on.
+    # run the script: python mid_stream_stop.py -r -d
+    # open the debug tab in vscode
+    # select the "Python Debugger: Remote Attach" configuration, then click on the play button.
+    # The script will pause at the breakpoint and you can inspect the values of variables in the debug console.
+    attach_debugger()
+
+if args.restart == False:
+    if receiving_directory.exists() is True:
+        shutil.rmtree(receiving_directory)
+    receiving_directory.mkdir(parents=True, exist_ok=True)
+
+
+
+class Receiver:
+    def __init__(self, receiving_directory: Path, storage_directory: Path):
+        self.receiving_directory = receiving_directory
+        self.receiving_directory.mkdir(parents=True, exist_ok=True)
+        
+        self.storage_directory = storage_directory
+        self.storage_directory.mkdir(parents=True, exist_ok=True)
+
+        self._stop = threading.Event()
+
+    def start(self):
+        def _receive_chunks():
+            while self._stop.is_set() is False:
+
+                # Assumption: everything in the receiving directory is a chunk folder
+                for folder in self.receiving_directory.iterdir():
+                    if folder.is_dir():
+                        chunk_binary = folder / "chunk.bin"
+                        chunk_manifest = folder / "transfer_manifest.json"
+
+                        try:
+                            with open(chunk_manifest, "r") as manifest_file:
+                                manifest_data = json.load(manifest_file)
+
+                                transfer_id = manifest_data["transfer_id"]
+
+                                transfer_dir = self.storage_directory / transfer_id
+                                if transfer_dir.exists() is False:
+                                    transfer_dir.mkdir(parents=True, exist_ok=True)
+
+                        except FileNotFoundError:
+                            # Sometimes the chunk binary is so big that it takes the OS some time to copy over 
+                            # both the binary and the transfer manifest chunk folder.
+                            # Because the chunk takes some time to copy over, the open() command will fail and throw a FileNotFoundError
+                            # because the transfer manifest has not been transfered yet.
+
+                            # if the chunk binary has been copied successfully but the transfer manifest still hasn't arrived,
+                            # then we need to throw a warning and move onto other packages.
+                            # Eventually we will come back to check on this chunk to see if maybe the user has found the transfer manifest.
+                            print("Warning: No transfer manifest detected")
+
+                        """
+                        if chunk_binary.exists() and chunk_manifest.exists():
+                            # Move the chunk folder to the storage directory
+                            destination_folder = self.storage_directory / folder.name
+                            folder.rename(destination_folder)
+                        """
+
+                time.sleep(0.1)
+
+        self.thread = threading.Thread(target=_receive_chunks, daemon=True)
+        self.thread.start()
+
+    def stop(self):
+        self._stop.set()
+
+
+    
+def combine_chunks(
+    chunks_directory: Path,
+    chunk_prefix: str,
+    output_path: Path,
+    buffer_size: int = 1024 * 1024,
+) -> None:
+    if buffer_size <= 0:
+        raise ValueError("buffer_size must be greater than zero")
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    for chunk_folder in sorted(chunks_directory.iterdir()):
+        chunk_binary = chunk_folder / f"{chunk_prefix}.bin"
+        chunk_manifest = chunk_folder / "transfer_manifest.json"
+
+    """
+    with output_path.open("wb") as output_file:
+        index = 0
+
+        while True:
+            chunk_filename = f"{chunk_prefix}-{index:06d}.bin"
+            chunk_path = chunks_directory / chunk_filename
+
+            if not chunk_path.exists():
+                break
+
+            with chunk_path.open("rb") as chunk_file:
+                while True:
+                    block = chunk_file.read(buffer_size)
+
+                    if not block:
+                        break
+
+                    output_file.write(block)
+
+            index += 1
+    """
+
+
+if __name__ == "__main__":
+    #chunk_directory = Path("./testing_artifacts/transport_dir")
+
+    receiver = Receiver(receiving_directory=receiving_directory, storage_directory=storage_directory)
+    receiver.start()
+
+    try:
+        receiver.thread.join()
+    except KeyboardInterrupt:
+        print("Receiver interrupted. Exiting...")
+        receiver.stop()
