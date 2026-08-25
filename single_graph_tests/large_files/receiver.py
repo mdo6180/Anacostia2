@@ -49,10 +49,10 @@ class Receiver:
             while self._stop.is_set() is False:
 
                 # Assumption: everything in the receiving directory is a chunk folder
-                for folder in self.receiving_directory.iterdir():
-                    if folder.is_dir():
-                        chunk_binary = folder / "chunk.bin"
-                        chunk_manifest = folder / "transfer_manifest.json"
+                for chunk_folder in self.receiving_directory.iterdir():
+                    if chunk_folder.is_dir():
+                        chunk_binary = chunk_folder / "chunk.bin"
+                        chunk_manifest = chunk_folder / "transfer_manifest.json"
 
                         try:
                             with open(chunk_manifest, "r") as manifest_file:
@@ -63,6 +63,12 @@ class Receiver:
                                 transfer_dir = self.storage_directory / transfer_id
                                 if transfer_dir.exists() is False:
                                     transfer_dir.mkdir(parents=True, exist_ok=True)
+
+                                # check if folder for transfer_id already exists in storage_directory
+                                # if it does not exist, move the chunk folder to the storage directory
+                                destination_folder = transfer_dir / chunk_folder.name
+                                if destination_folder.exists() is False:
+                                    chunk_folder.rename(destination_folder)
 
                         except FileNotFoundError:
                             # Sometimes the chunk binary is so big that it takes the OS some time to copy over 
@@ -78,7 +84,7 @@ class Receiver:
                         """
                         if chunk_binary.exists() and chunk_manifest.exists():
                             # Move the chunk folder to the storage directory
-                            destination_folder = self.storage_directory / folder.name
+                            destination_folder = self.storage_directory / chunk_folder.name
                             folder.rename(destination_folder)
                         """
 

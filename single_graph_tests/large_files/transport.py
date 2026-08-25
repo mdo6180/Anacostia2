@@ -184,7 +184,7 @@ class FileSystemTransport:
             print(f"divided gzip file into {len(list(partitioned_dir.iterdir()))} partitions with sizes (bytes): {[f.stat().st_size for f in partitioned_dir.iterdir()]}")
 
             for chunk in chunks:
-                chunk_folder = partitioned_dir / f"chunk_{chunk.index}"
+                chunk_folder = partitioned_dir / f"{package_path.name}_chunk_{chunk.index}"
                 chunk_folder.mkdir(parents=True, exist_ok=True)
                 chunk_file_path = chunk_folder / chunk.filename
                 shutil.move(str(partitioned_dir / chunk.filename), str(chunk_file_path))
