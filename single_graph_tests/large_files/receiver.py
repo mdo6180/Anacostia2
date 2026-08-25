@@ -32,6 +32,10 @@ if args.restart == False:
         shutil.rmtree(receiving_directory)
     receiving_directory.mkdir(parents=True, exist_ok=True)
 
+    if storage_directory.exists() is True:
+        shutil.rmtree(storage_directory)
+    storage_directory.mkdir(parents=True, exist_ok=True)
+
 
 
 class Receiver:
