@@ -66,8 +66,17 @@ class Receiver:
 
                                 # Expected SHA-256 hash
                                 chunk_sha256 = manifest_data["chunk_info"]["sha256"]
-                                chunk_sha256 = bytes.fromhex(chunk_sha256)
 
+                                # Check 1: is the chunk the same as what the manifest says it is?
+                                # Hash chunk and check to see if actual chunk hash == hash provided in manifest
+                                chunk_path = chunk_folder / manifest_data["chunk_info"]["filename"]
+                                actual_sha256 = hash_file(chunk_path)
+                                if actual_sha256 != chunk_sha256:
+                                    print(f"Actual chunk hash is not the same as expected chunk hash in manifest")
+                                    continue
+
+                                # Check 2: does chunk belong to the same artifact?
+                                # Check if the hash satisfies the merkle tree
                                 merkle_proof = manifest_data["merkle_proof"]
                                 merkle_proof = [
                                     ProofEntry(
@@ -79,16 +88,13 @@ class Receiver:
                                 merkle_root = manifest_data["merkle_root"]
                                 merkle_root = bytes.fromhex(merkle_root)
 
-                                verified = verify_proof(chunk_sha256, merkle_proof, merkle_root)
+                                verified = verify_proof(
+                                    item=bytes.fromhex(chunk_sha256), 
+                                    proof=merkle_proof, 
+                                    expected_root=merkle_root
+                                )
                                 if verified is False:
                                     print(f"Merkle proof verification failed for transfer_id: {transfer_id}")
-                                    continue
-
-                                chunk_path = chunk_folder / manifest_data["chunk_info"]["filename"]
-                                actual_sha256 = hash_file(chunk_path)
-                                expected_sha256 = chunk_sha256 = manifest_data["chunk_info"]["sha256"]
-                                if actual_sha256 != expected_sha256:
-                                    print(f"Actual chunk hash is not the same as expected chunk hash in manifest")
                                     continue
 
                                 transfer_dir = self.storage_directory / transfer_id
