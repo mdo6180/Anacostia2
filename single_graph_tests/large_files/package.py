@@ -235,6 +235,14 @@ def partition_file(
     return chunks
 
 
+def hash_file(chunk_path: Path, buffer_size: int = 1024 * 1024) -> str:
+    sha256 = hashlib.sha256()
+    with open(chunk_path, 'rb') as f:
+        while chunk := f.read(buffer_size):
+            sha256.update(chunk)
+    return sha256.hexdigest()
+
+
 def package_directory_into_chunks(
     source_directory: str | Path,
     output_directory: str | Path,

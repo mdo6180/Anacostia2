@@ -6,6 +6,7 @@ import shutil
 import time
 
 from merkle_tree import verify_proof, ProofEntry
+from package import hash_file
 from anacostia.utils.debug import attach_debugger
 
 
@@ -63,6 +64,7 @@ class Receiver:
                                 manifest_data = json.load(manifest_file)
                                 transfer_id = manifest_data["transfer_id"]
 
+                                # Expected SHA-256 hash
                                 chunk_sha256 = manifest_data["chunk_info"]["sha256"]
                                 chunk_sha256 = bytes.fromhex(chunk_sha256)
 
@@ -80,6 +82,13 @@ class Receiver:
                                 verified = verify_proof(chunk_sha256, merkle_proof, merkle_root)
                                 if verified is False:
                                     print(f"Merkle proof verification failed for transfer_id: {transfer_id}")
+                                    continue
+
+                                chunk_path = chunk_folder / manifest_data["chunk_info"]["filename"]
+                                actual_sha256 = hash_file(chunk_path)
+                                expected_sha256 = chunk_sha256 = manifest_data["chunk_info"]["sha256"]
+                                if actual_sha256 != expected_sha256:
+                                    print(f"Actual chunk hash is not the same as expected chunk hash in manifest")
                                     continue
 
                                 transfer_dir = self.storage_directory / transfer_id

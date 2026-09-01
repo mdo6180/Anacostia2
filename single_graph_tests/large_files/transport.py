@@ -189,6 +189,7 @@ class FileSystemTransport:
                 chunk_file_path = chunk_folder / chunk.filename
                 shutil.move(str(partitioned_dir / chunk.filename), str(chunk_file_path))
 
+                # Note: we are using the SHA-256 hashes of the chunks as the leaves of the merkle tree
                 hashes = [bytes.fromhex(chunk.sha256) for chunk in chunks]
                 proof = generate_proof(hashes, leaf_index=chunk.index)
                 proof = [ProofEntry(side=entry.side, hash=entry.hash.hex()) for entry in proof]
