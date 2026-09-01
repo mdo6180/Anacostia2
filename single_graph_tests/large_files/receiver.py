@@ -5,6 +5,7 @@ import argparse
 import shutil
 import time
 
+from merkle_tree import verify_proof, ProofEntry
 from anacostia.utils.debug import attach_debugger
 
 
@@ -55,14 +56,31 @@ class Receiver:
                 # Assumption: everything in the receiving directory is a chunk folder
                 for chunk_folder in self.receiving_directory.iterdir():
                     if chunk_folder.is_dir():
-                        chunk_binary = chunk_folder / "chunk.bin"
                         chunk_manifest = chunk_folder / "transfer_manifest.json"
 
                         try:
                             with open(chunk_manifest, "r") as manifest_file:
                                 manifest_data = json.load(manifest_file)
-
                                 transfer_id = manifest_data["transfer_id"]
+
+                                chunk_sha256 = manifest_data["chunk_info"]["sha256"]
+                                chunk_sha256 = bytes.fromhex(chunk_sha256)
+
+                                merkle_proof = manifest_data["merkle_proof"]
+                                merkle_proof = [
+                                    ProofEntry(
+                                        side=entry['side'], 
+                                        hash=bytes.fromhex(entry['hash'])
+                                    ) for entry in merkle_proof
+                                ]
+
+                                merkle_root = manifest_data["merkle_root"]
+                                merkle_root = bytes.fromhex(merkle_root)
+
+                                verified = verify_proof(chunk_sha256, merkle_proof, merkle_root)
+                                if verified is False:
+                                    print(f"Merkle proof verification failed for transfer_id: {transfer_id}")
+                                    continue
 
                                 transfer_dir = self.storage_directory / transfer_id
                                 if transfer_dir.exists() is False:
