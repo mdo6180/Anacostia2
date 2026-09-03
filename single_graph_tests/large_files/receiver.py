@@ -57,19 +57,25 @@ class Receiver:
                 # Assumption: everything in the receiving directory is a chunk folder
                 for chunk_folder in self.receiving_directory.iterdir():
                     if chunk_folder.is_dir():
-                        chunk_manifest = chunk_folder / "transfer_manifest.json"
+                        transfer_manifest = chunk_folder / "transfer_manifest.json"
+                        chunk_manifest = chunk_folder / "chunk_manifest.json"
 
                         try:
-                            with open(chunk_manifest, "r") as manifest_file:
-                                manifest_data = json.load(manifest_file)
-                                transfer_id = manifest_data["transfer_id"]
+                            with (
+                                open(transfer_manifest, "r") as transfer_manifest_file,
+                                open(chunk_manifest, "r") as chunk_manifest_file
+                            ):
+                                transfer_manifest_data = json.load(transfer_manifest_file)
+                                transfer_id = transfer_manifest_data["transfer_id"]
+
+                                chunk_manifest_data = json.load(chunk_manifest_file)
 
                                 # Expected SHA-256 hash
-                                chunk_sha256 = manifest_data["chunk_info"]["sha256"]
+                                chunk_sha256 = chunk_manifest_data["chunk_info"]["sha256"]
 
                                 # Check 1: is the chunk the same as what the manifest says it is?
                                 # Hash chunk and check to see if actual chunk hash == hash provided in manifest
-                                chunk_path = chunk_folder / manifest_data["chunk_info"]["filename"]
+                                chunk_path = chunk_folder / chunk_manifest_data["chunk_info"]["filename"]
                                 actual_sha256 = hash_file(chunk_path)
                                 if actual_sha256 != chunk_sha256:
                                     print(f"Actual chunk hash is not the same as expected chunk hash in manifest")
@@ -77,7 +83,7 @@ class Receiver:
 
                                 # Check 2: does chunk belong to the same artifact?
                                 # Check if the hash satisfies the merkle tree
-                                merkle_proof = manifest_data["merkle_proof"]
+                                merkle_proof = chunk_manifest_data["merkle_proof"]
                                 merkle_proof = [
                                     ProofEntry(
                                         side=entry['side'], 
@@ -85,7 +91,7 @@ class Receiver:
                                     ) for entry in merkle_proof
                                 ]
 
-                                merkle_root = manifest_data["merkle_root"]
+                                merkle_root = chunk_manifest_data["merkle_root"]
                                 merkle_root = bytes.fromhex(merkle_root)
 
                                 verified = verify_proof(
@@ -148,7 +154,7 @@ def combine_chunks(
 
     for chunk_folder in sorted(chunks_directory.iterdir()):
         chunk_binary = chunk_folder / f"{chunk_prefix}.bin"
-        chunk_manifest = chunk_folder / "transfer_manifest.json"
+        transfer_manifest = chunk_folder / "transfer_manifest.json"
 
     """
     with output_path.open("wb") as output_file:

@@ -93,12 +93,25 @@ class TransferManifest:
     archive_size: int
     archive_sha256: str
     chunk_count: int
+    previous_transfer_id: str = None  # Optional field for the previous transfer ID
+    previous_transfer_sha256: str = None  # Optional field for the previous transfer SHA256
+
+
+@dataclass(frozen=True)
+class ChunkManifest:
+    transfer_id: str
+    chunk_count: int
     chunk_info: ChunkInfo
     merkle_root: str
     merkle_leaf_index: int
     merkle_proof: list[ProofEntry]
-    previous_transfer_id: str = None  # Optional field for the previous transfer ID
-    previous_transfer_sha256: str = None  # Optional field for the previous transfer SHA256
+
+
+@dataclass(frozen=True)
+class TransferManifestSignature:
+    transfer_id: str
+    manifest_signature: str
+    manifest_hash: str
 
 
 class FileSystemTransport:
@@ -189,31 +202,50 @@ class FileSystemTransport:
                 chunk_file_path = chunk_folder / chunk.filename
                 shutil.move(str(partitioned_dir / chunk.filename), str(chunk_file_path))
 
-                # Note: we are using the SHA-256 hashes of the chunks as the leaves of the merkle tree
-                hashes = [bytes.fromhex(chunk.sha256) for chunk in chunks]
-                proof = generate_proof(hashes, leaf_index=chunk.index)
-                proof = [ProofEntry(side=entry.side, hash=entry.hash.hex()) for entry in proof]
-                root = merkle_root(hashes).hex()
-
-                transfer_manifest = TransferManifest(
-                    transfer_id=package_path.name,
-                    transfer_artifacts=self.transfer_artifacts,
-                    archive_size=gzip_path.stat().st_size,
-                    archive_sha256=gzip_sha256,
-                    chunk_count=len(chunks),
-                    chunk_info=chunk,
-                    merkle_root=root,
-                    merkle_leaf_index=chunk.index,      # Note: leaf index is the index of the chunk in the list of chunks
-                    merkle_proof=proof,
-                    previous_transfer_id=None,  # Set to None for the first transfer
-                    previous_transfer_sha256=None  # Set to None for the first transfer, otherwise it would be the hash of the previous tranfer manifest file
-                )
                 transfer_manifest_path = chunk_folder / "transfer_manifest.json"
                 with transfer_manifest_path.open("x", encoding="utf-8") as manifest_file:
+                    transfer_manifest = TransferManifest(
+                        transfer_id=package_path.name,
+                        transfer_artifacts=self.transfer_artifacts,
+                        archive_size=gzip_path.stat().st_size,
+                        archive_sha256=gzip_sha256,
+                        chunk_count=len(chunks),
+                        previous_transfer_id=None,  # Set to None for the first transfer
+                        previous_transfer_sha256=None  # Set to None for the first transfer, otherwise it would be the hash of the previous tranfer manifest file
+                    )
+
                     json.dump(
                         {
                             **asdict(transfer_manifest),
                             "transfer_artifacts": [asdict(artifact) for artifact in self.transfer_artifacts],
+                        },
+                        manifest_file,
+                        indent=2,
+                    )
+                    manifest_file.write("\n")
+
+                chunk_manifest_path = chunk_folder / "chunk_manifest.json"
+                with chunk_manifest_path.open("x", encoding="utf-8") as manifest_file:
+                    # Note: we are using the SHA-256 hashes of the chunks as the leaves of the merkle tree
+                    hashes = [bytes.fromhex(chunk.sha256) for chunk in chunks]
+                    proof = generate_proof(hashes, leaf_index=chunk.index)
+                    proof = [ProofEntry(side=entry.side, hash=entry.hash.hex()) for entry in proof]
+                    root = merkle_root(hashes).hex()
+
+                    chunk_manifest = ChunkManifest(
+                        transfer_id=package_path.name,
+                        chunk_count=len(chunks),
+                        chunk_info=chunk,
+                        merkle_root=root,
+                        merkle_leaf_index=chunk.index,      # Note: leaf index is the index of the chunk in the list of chunks
+                        merkle_proof=proof,
+                    )
+
+                    json.dump(
+                        {
+                            **asdict(chunk_manifest),
+                            "chunk_info": asdict(chunk),
+                            "merkle_proof": [asdict(entry) for entry in proof],
                         },
                         manifest_file,
                         indent=2,
