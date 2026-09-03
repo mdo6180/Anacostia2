@@ -73,7 +73,14 @@ class Receiver:
                                 # Expected SHA-256 hash
                                 chunk_sha256 = chunk_manifest_data["chunk_info"]["sha256"]
 
-                                # Check 1: is the chunk the same as what the manifest says it is?
+                                # Check 1: does chunk index < chunk_count?
+                                chunk_index = chunk_manifest_data["chunk_info"]["index"]
+                                chunk_count = transfer_manifest_data["chunk_count"]
+                                if not (chunk_index < chunk_count):
+                                    print(f"Chunk index {chunk_index} is out of bounds for transfer_id: {transfer_id}")
+                                    continue
+
+                                # Check 2: is the chunk the same as what the manifest says it is?
                                 # Hash chunk and check to see if actual chunk hash == hash provided in manifest
                                 chunk_path = chunk_folder / chunk_manifest_data["chunk_info"]["filename"]
                                 actual_sha256 = hash_file(chunk_path)
@@ -81,7 +88,7 @@ class Receiver:
                                     print(f"Actual chunk hash is not the same as expected chunk hash in manifest")
                                     continue
 
-                                # Check 2: does chunk belong to the same artifact?
+                                # Check 3: does chunk belong to the same artifact?
                                 # Check if the hash satisfies the merkle tree
                                 merkle_proof = chunk_manifest_data["merkle_proof"]
                                 merkle_proof = [
