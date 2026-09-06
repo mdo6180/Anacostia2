@@ -252,6 +252,17 @@ class FileSystemTransport:
                     )
                     manifest_file.write("\n")
 
+                signature_path = chunk_folder / "transfer_manifest_signature.json"
+                with signature_path.open("x", encoding="utf-8") as signature_file:
+                    transfer_manifest_signature = TransferManifestSignature(
+                        transfer_id=package_path.name,
+                        manifest_signature="dummy_signature",  # Placeholder for the actual signature
+                        manifest_hash=sha256_file(transfer_manifest_path)  # Using the gzip file's SHA-256 hash as the manifest hash
+                    )
+
+                    json.dump(asdict(transfer_manifest_signature), signature_file, indent=2)
+                    signature_file.write("\n")
+
             os.remove(gzip_path)  # Remove the .tar.gz file after partitioning
 
         finally:
