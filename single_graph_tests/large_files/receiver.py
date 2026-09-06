@@ -110,6 +110,12 @@ class Receiver:
                                     print(f"Merkle proof verification failed for transfer_id: {transfer_id}")
                                     continue
 
+                                # Check 4: has chunk already been moved to storage directory? (i.e., duplicate chunk hash)
+
+                                # Check 5: is this transfer meant for this pipeline?
+                                # Check if 1) destination_pipeline_name is the same as the pipeline name and 
+                                # 2) destination_stream is the name of one of the streams in the pipeline
+
                                 transfer_dir = self.storage_directory / transfer_id
                                 if transfer_dir.exists() is False:
                                     transfer_dir.mkdir(parents=True, exist_ok=True)
