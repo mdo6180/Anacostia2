@@ -52,15 +52,26 @@ node = Stage(name="TestNode", consumers=[stream_consumer_odd], logger=logger)
 # 2. Define the node's processing function
 @node.entrypoint
 def node_func():
+    def create_text_file(path: str, size_mb: int = 10):
+        target_size = size_mb * 1024 * 1024  # bytes
+        line = "The quick brown fox jumps over the lazy dog.\n"
+
+        with open(path, "w", encoding="utf-8") as f:
+            while f.tell() < target_size:
+                f.write(line)
+
+            # Trim to exactly the target size
+            f.truncate(target_size)
+
     for bundle in stream_consumer_odd:
         with node.stage_run() as staging_directory:
             artifact_obj = bundle[0]
             artifact_location = artifact_obj.location
-            artifact_path = artifact_location["path"]
+            input_artifact_path = artifact_location["path"]
 
-            with open(artifact_path, "r") as f:
-                content = f.read()
-                logger.info(f"processing artifact with content '{content}' in run {node.run_id} with location {artifact_path}")
+            with open(input_artifact_path, "r") as input_file:
+                content = input_file.read()
+                logger.info(f"processing artifact with content '{content}' in run {node.run_id} with location {input_artifact_path}")
 
 # 3. Create and start the graph
 graph = Graph(name="TestGraph", nodes=[node], db_folder=db_folder_path, logger=logger)
