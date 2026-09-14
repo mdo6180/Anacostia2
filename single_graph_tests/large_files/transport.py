@@ -152,13 +152,28 @@ class FileSystemTransport:
     def register_artifact(self, artifact: Artifact):
         # Logic to add the artifact's hash to the provenance graph
         print(f"Registering artifact {artifact.location} with hash {artifact.hash} in the provenance graph.")
+
+    def add_to_manifest(self, **kwargs):
+        """
+        Add additional metadata to the transfer_manifest.json.
+
+        Args:
+            kwargs: Key-value pairs of metadata to add to the transfer manifest.
+        """
+        for key, value in kwargs.items():
+            if key in self.transfer_manifest:
+                raise ValueError(f"Key '{key}' already exists in the transfer manifest.")
+            self.transfer_manifest[key] = value
         
-    @contextmanager
     def create_transfer_package(self, compression_level: int = 6, partition_size: int = 1_048_576):
         """
         Context manager to create a package for the given artifact.
         Yields the path to the /data folder where all the files for the transfer package should be placed.
         Copy the artifact file into this folder, and when the context is exited, the package will be finalized (e.g., zipped, hashed, and partitioned).
+
+        Args:
+            compression_level (int): The level of compression to use when creating the .tar.gz file
+            partition_size (int): The size of the partitions to create when partitioning the .tar
         """
 
         # Logic to create a folder for the transfer package inside the destination directory,
