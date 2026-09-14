@@ -1,3 +1,4 @@
+import json
 import threading
 import time
 from typing import List
@@ -67,7 +68,37 @@ class Graph:
     def monitor_receiving_directory(self):
         log(f"Monitoring receiving directory at {self.receiving_directory}.", level="info", logger=self.logger)
         while self._stop.is_set() is False:
-            time.sleep(0.5)
+            
+            # Assumption: everything in the receiving directory is a chunk folder
+            for chunk_folder in self.receiving_directory.iterdir():
+                if chunk_folder.is_dir():
+                    transfer_manifest = chunk_folder / "transfer_manifest.json"
+                    chunk_manifest = chunk_folder / "chunk_manifest.json"
+
+                    try:
+                        with (
+                            open(transfer_manifest, "r") as transfer_manifest_file,
+                            open(chunk_manifest, "r") as chunk_manifest_file
+                        ):
+                            transfer_manifest_data = json.load(transfer_manifest_file)
+                            transfer_id = transfer_manifest_data["transfer_id"]
+
+                            chunk_manifest_data = json.load(chunk_manifest_file)
+
+                            # Expected SHA-256 hash
+                            chunk_sha256 = chunk_manifest_data["chunk_info"]["sha256"]
+
+                    except FileNotFoundError:
+                        # Sometimes the chunk binary is so big that it takes the OS some time to copy over 
+                        # both the binary and the transfer manifest chunk folder.
+                        # Because the chunk takes some time to copy over, the open() command will fail and throw a FileNotFoundError
+                        # because the transfer manifest has not been transfered yet.
+
+                        # if the chunk binary has been copied successfully but the transfer manifest still hasn't arrived,
+                        # then we need to throw a warning and move onto other packages.
+                        # Eventually we will come back to check on this chunk to see if maybe the user has found the transfer manifest.
+                        print("Warning: No transfer manifest detected")
+
         log(f"Stopped monitoring receiving directory at {self.receiving_directory}.", level="info", logger=self.logger)
 
     def start(self):
