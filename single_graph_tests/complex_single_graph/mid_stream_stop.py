@@ -107,6 +107,10 @@ def node_func():
     for bundle1, bundle2 in zip(stream_consumer_odd, stream_consumer_even):
         
         # All code here will execute prior to the run starting
+        """
+        if some_condition is not met:
+            continue  # don't start the run
+        """
         
         with stage.stage_run() as staging_directory:
 
