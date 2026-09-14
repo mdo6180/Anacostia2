@@ -4,6 +4,7 @@ import shutil
 import logging
 
 from anacostia.streams.filesystem import DirectoryStream
+from anacostia.transports.local import FileSystemTransport
 from anacostia.consumer import Consumer
 from anacostia.node import Stage
 from anacostia.dag import Graph
@@ -15,6 +16,7 @@ from anacostia.utils.debug import attach_debugger
 tests_path = Path("./testing_artifacts")
 db_folder_path = tests_path / ".anacostia"
 input_path1 = tests_path / "incoming1"
+transport_package_dir = tests_path / "transport_dir"
 
 parser = argparse.ArgumentParser(description="Run the pipeline after restart test")
 parser.add_argument("-r", "--restart", action="store_true", help="Flag to indicate if this is a restart")
@@ -47,22 +49,23 @@ logger = logging.getLogger(__name__)
 
 stream = DirectoryStream(name="odd_folder", directory=input_path1, logger=logger)
 stream_consumer_odd = Consumer(name="stream_consumer_odd", stream=stream, logger=logger)
-node = Stage(name="TestNode", consumers=[stream_consumer_odd], logger=logger)
+simple_transport = FileSystemTransport(name="combined_transport", packages_directory=transport_package_dir, logger=logger)
+node = Stage(name="TestNode", consumers=[stream_consumer_odd], transports=[simple_transport], logger=logger)
+
+def create_text_file(path: str, size_mb: int = 10):
+    target_size = size_mb * 1024 * 1024  # bytes
+    line = "The quick brown fox jumps over the lazy dog.\n"
+
+    with open(path, "w", encoding="utf-8") as f:
+        while f.tell() < target_size:
+            f.write(line)
+
+        # Trim to exactly the target size
+        f.truncate(target_size)
 
 # 2. Define the node's processing function
 @node.entrypoint
 def node_func():
-    def create_text_file(path: str, size_mb: int = 10):
-        target_size = size_mb * 1024 * 1024  # bytes
-        line = "The quick brown fox jumps over the lazy dog.\n"
-
-        with open(path, "w", encoding="utf-8") as f:
-            while f.tell() < target_size:
-                f.write(line)
-
-            # Trim to exactly the target size
-            f.truncate(target_size)
-
     for bundle in stream_consumer_odd:
         with node.stage_run() as staging_directory:
             artifact_obj = bundle[0]
