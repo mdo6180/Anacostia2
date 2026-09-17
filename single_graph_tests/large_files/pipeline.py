@@ -5,6 +5,7 @@ import logging
 
 from anacostia.streams.filesystem import DirectoryStream
 from anacostia.transports.local import FileSystemTransport
+from anacostia.transports.base import BaseTransport
 from anacostia.consumer import Consumer
 from anacostia.node import Stage
 from anacostia.dag import Graph
@@ -49,7 +50,7 @@ logger = logging.getLogger(__name__)
 
 stream = DirectoryStream(name="odd_folder", directory=input_path1, logger=logger)
 stream_consumer_odd = Consumer(name="stream_consumer_odd", stream=stream, logger=logger)
-simple_transport = FileSystemTransport(name="combined_transport", packages_directory=transport_package_dir, logger=logger)
+simple_transport = BaseTransport(name="combined_transport", transfers_directory=transport_package_dir, logger=logger)
 node = Stage(name="TestNode", consumers=[stream_consumer_odd], transports=[simple_transport], logger=logger)
 
 def create_text_file(path: str, size_mb: int = 10):

@@ -61,7 +61,6 @@ class Graph:
 
             for transport in node.transports:
                 transport.set_db_folder(self.db_folder)
-                transport.initialize_staging_directory()
                 transport.initialize_db_connection(db_path)
                 transport.setup()
 
