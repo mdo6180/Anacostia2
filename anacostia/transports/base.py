@@ -72,14 +72,32 @@ class BaseTransport:
     
     def setup(self):
         """
-        Create the local table for this stream to track seen artifacts and their hashes.
+        Create the local tables for this transport to track transfers, artifacts, and chunks.
         User implemented method (call super().setup() if overriding).
-        To add additonal columns to the local table, user can execute an ALTER TABLE statement in their overridden setup() method.
         To add additional tables, user can execute CREATE TABLE statements in their overridden setup() method.
-        Make sure table names are unique to avoid conflicts with other streams and producers. 
-        We recommend using the convention of prefixing table names with the stream or producer name, 
-        e.g. {stream_name}_artifacts for a stream's local table to track artifacts.
+        Make sure table names are unique to avoid conflicts with other transports and producers. 
+        We recommend using the convention of prefixing table names with the transport or producer name, 
+        e.g. f"{transport_name}_artifacts" for a transport's local table to track artifacts.
+
+        sample implementation:
+
+        ```
+        def setup(self):
+            super().setup()  # call the base class setup to create the local tables for this transport
+
+            with self.conn_manager.write_cursor() as cursor:
+                query: sql = f'''
+                CREATE TABLE IF NOT EXISTS {self.name}_metadata (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    key TEXT NOT NULL,
+                    value TEXT NOT NULL,
+                    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+                );
+                '''
+                cursor.execute(query)
+        ```
         """
+
         with self.conn_manager.write_cursor() as cursor:
             query: sql = f"""
             CREATE TABLE IF NOT EXISTS {self.transfers_table} (
