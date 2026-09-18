@@ -119,7 +119,7 @@ class BaseTransport:
                 previous_manifest_hash TEXT GENERATED ALWAYS AS (
                     json_extract(manifest, '$.previous_manifest_hash')
                 ) STORED,
-                node_name TEXT NOT NULL,
+                transport_name TEXT NOT NULL,
                 timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
             );
             """
@@ -169,7 +169,9 @@ class BaseTransport:
 
             query: sql = f"""
             CREATE TABLE IF NOT EXISTS {self.chunks_table} (
-                chunk_hash TEXT NOT NULL,
+                chunk_hash TEXT GENERATED ALWAYS AS (
+                    json_extract(chunk_json, '$.sha256')
+                ) STORED,
                 chunk_index INTEGER NOT NULL,
                 chunk_json TEXT NOT NULL,
                 manifest_hash TEXT NOT NULL,
@@ -196,3 +198,103 @@ class BaseTransport:
             );
             """
             cursor.execute(query)
+
+    '''
+    def record_transfer(self, manifest_hash: str, manifest_signature: str, manifest: str):
+        """
+        Record a transfer in the local transfer table.
+        """
+        with self.conn_manager.write_cursor() as cursor:
+            query: sql = f"""
+            INSERT INTO {self.transfers_table} (manifest_hash, manifest_signature, manifest, transport_name)
+            VALUES (?, ?, ?, ?);
+            """
+            cursor.execute(query, (manifest_hash, manifest_signature, manifest, self.name))
+
+    def record_chunks(self, transfer_manifest_hash: str, chunks: list[ChunkManifest]):
+        """
+        Record chunks in the local chunks table.
+
+        transfer_manifest_hash: hash of the transfer manifest that these chunks belong to
+        chunks: list of ChunkManifest objects to record
+        """
+
+        with self.conn_manager.write_cursor() as cursor:
+            query: sql = f"""
+            INSERT INTO {self.chunks_table} (chunk_index, chunk_json, manifest_hash)
+            VALUES (?, ?, ?);
+            """
+            cursor.executemany(
+                query, 
+                [
+                    (chunk.index, json.dumps(chunk), transfer_manifest_hash) 
+                    for chunk in chunks
+                ]
+            )
+    '''
+
+    def create_transfer_package(self, compression_level: int = 6, partition_size: int = 1_048_576):
+        """
+        Context manager to create a package for the given artifact.
+        Yields the path to the /data folder where all the files for the transfer package should be placed.
+        Copy the artifact file into this folder, and when the context is exited, the package will be finalized (e.g., zipped, hashed, and partitioned).
+
+        Args:
+            compression_level (int): The level of compression to use when creating the .tar.gz file
+            partition_size (int): The size of the partitions to create when partitioning the .tar
+        """
+
+        # Logic to create a folder for the transfer package inside the destination directory,
+        # create the /data folder, and yield the path to it.
+        package_path = self.packages_directory / f"transfer_{uuid4().hex}"
+        self.data_folder_path = package_path / "data"
+        self.data_folder_path.mkdir(parents=True, exist_ok=True)
+
+        try:
+            yield self.data_folder_path    # Yield the path to the /data folder and self for further operations
+
+        finally:
+            # Clean up if necessary
+            pass
+    
+    def add_to_package(self, artifact_hash: str, src_path: Path, dest_path: Path, dest_pipeline_name: str, dest_stream: str) -> Artifact:
+        """
+        Add an artifact to the transfer package by moving it from the staging directory to the final directory,
+        hashing it, and registering it in the local and global databases.
+
+        Args:
+            artifact_hash (str): The hash of the artifact to be added to the package.
+            src_path (Path): The path to the artifact in the staging directory.
+            dest_path (Path): The path to move the artifact to in the package's /data directory. 
+            dest_stream (str): The name of the destination stream.
+            Note: The final path must be within the directory specified in the directory argument in the class constructor.
+            Note: The final path must be within the directory specified in the directory argument in the class constructor.
+
+        Returns:
+            Artifact: The committed artifact object where Artifact(location={"path": str(dest_path)}, hash=artifact_hash).
+        """
+
+        if not isinstance(src_path, Path):
+            raise TypeError("src_path must be of type pathlib.Path")
+
+        if not isinstance(dest_path, Path): 
+            raise TypeError("dest_path must be of type pathlib.Path")
+        
+        if not dest_path.is_relative_to(self.packages_directory):
+            raise ValueError(f"Destination path {dest_path} is not within the directory {self.packages_directory}")
+
+        # move the artifact
+        dest_path.parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(src_path), str(dest_path))
+
+        filepath = dest_path.relative_to(self.data_folder_path).as_posix()  # Store the relative path to the packages directory
+
+        self.transfer_artifacts.append(TransferArtifact(
+            artifact_hash=artifact_hash,
+            filepath=filepath,
+            size_bytes=dest_path.stat().st_size,
+            source_pipeline_name=self.pipeline_name,
+            destination_pipeline_name=dest_pipeline_name,
+            destination_stream=dest_stream
+        ))
+
