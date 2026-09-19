@@ -2,6 +2,7 @@ import json
 import sqlite3
 from contextlib import contextmanager
 import logging
+from pathlib import Path
 
 from anacostia.utils.logging import log
 from anacostia.utils.types import JsonDict, Artifact
@@ -197,3 +198,6 @@ class ConnectionManager:
                 )
             )
     
+    def copy_database(self, destination: Path) -> None:
+        with sqlite3.connect(destination) as destination_conn:
+            self.connection.backup(destination_conn)

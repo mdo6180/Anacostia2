@@ -77,6 +77,9 @@ def node_func():
                 content = input_file.read()
                 logger.info(f"processing artifact with content '{content}' in run {node.run_id} with location {input_artifact_path}")
 
+            with simple_transport.create_transfer_package() as data_folder_path:
+                pass
+
 # 3. Create and start the graph
 graph = Graph(name="TestGraph", nodes=[node], db_folder=db_folder_path, logger=logger)
 

@@ -1,4 +1,3 @@
-import argparse
 import logging
 import os
 from logging import Logger
@@ -7,9 +6,9 @@ from pathlib import Path
 from uuid import uuid4
 from dataclasses import asdict
 import json
+from contextlib import contextmanager
 
 from anacostia.utils.connection import ConnectionManager
-from anacostia.utils.debug import attach_debugger
 from anacostia.utils.types import Artifact
 from anacostia.utils.package import create_deterministic_tar, gzip_file, partition_file, sha256_file
 from anacostia.utils.merkle_tree import ProofEntry, generate_proof, merkle_root
@@ -57,13 +56,11 @@ class BaseTransport:
 
     def set_db_folder(self, db_folder: str):
         self.db_folder = db_folder
+        self.db_path = self.db_folder / "anacostia.db"
         
     def set_node_name(self, node_name: str):
         self.node_name = node_name
         
-    def initialize_db_connection(self, filename: str):
-        self.conn_manager = ConnectionManager(db_path=filename, logger=self.logger)
-
     def set_run_id(self, run_id: int):
         self.run_id = run_id
 
@@ -170,7 +167,7 @@ class BaseTransport:
             query: sql = f"""
             CREATE TABLE IF NOT EXISTS {self.chunks_table} (
                 chunk_hash TEXT GENERATED ALWAYS AS (
-                    json_extract(chunk_json, '$.sha256')
+                    json_extract(chunk_json, '$.chunk_hash')
                 ) STORED,
                 chunk_index INTEGER NOT NULL,
                 chunk_json TEXT NOT NULL,
@@ -233,6 +230,7 @@ class BaseTransport:
             )
     '''
 
+    @contextmanager
     def create_transfer_package(self, compression_level: int = 6, partition_size: int = 1_048_576):
         """
         Context manager to create a package for the given artifact.
@@ -246,12 +244,15 @@ class BaseTransport:
 
         # Logic to create a folder for the transfer package inside the destination directory,
         # create the /data folder, and yield the path to it.
-        package_path = self.packages_directory / f"transfer_{uuid4().hex}"
+        package_path = self.transfers_directory / f"transfer_{uuid4().hex}"
         self.data_folder_path = package_path / "data"
         self.data_folder_path.mkdir(parents=True, exist_ok=True)
 
         try:
             yield self.data_folder_path    # Yield the path to the /data folder and self for further operations
+
+            # Copy database file to the package directory
+            self.conn_manager.copy_database(package_path / "anacostia.db")
 
         finally:
             # Clean up if necessary
@@ -280,14 +281,14 @@ class BaseTransport:
         if not isinstance(dest_path, Path): 
             raise TypeError("dest_path must be of type pathlib.Path")
         
-        if not dest_path.is_relative_to(self.packages_directory):
-            raise ValueError(f"Destination path {dest_path} is not within the directory {self.packages_directory}")
+        if not dest_path.is_relative_to(self.transfers_directory):
+            raise ValueError(f"Destination path {dest_path} is not within the directory {self.transfers_directory}")
 
         # move the artifact
         dest_path.parent.mkdir(parents=True, exist_ok=True)
         shutil.move(str(src_path), str(dest_path))
 
-        filepath = dest_path.relative_to(self.data_folder_path).as_posix()  # Store the relative path to the packages directory
+        filepath = dest_path.relative_to(self.data_folder_path).as_posix()  # Store the relative path to the transfers directory
 
         self.transfer_artifacts.append(TransferArtifact(
             artifact_hash=artifact_hash,
