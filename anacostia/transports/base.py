@@ -291,14 +291,30 @@ class BaseTransport:
                 )
                 manifest_file.write("\n")
 
+            transfer_manifest_signature = TransferManifestSignature(
+                transfer_id=transfer_id,
+                manifest_signature=f"some_signature_{uuid4().hex}",
+                manifest_hash=sha256_file(transfer_manifest_path)
+            )
+            transfer_manifest_signature_path = package_path / "signature.json"
+            with transfer_manifest_signature_path.open("x", encoding="utf-8") as signature_file:
+                json.dump(
+                    {**asdict(transfer_manifest_signature)},
+                    signature_file,
+                    indent=4
+                )
+                signature_file.write("\n")
+
             self.record_transfer(
-                manifest_hash=sha256_file(transfer_manifest_path),
-                manifest_signature=f"some_signature_{uuid4().hex}",  # Placeholder for actual signature
+                manifest_hash=transfer_manifest_signature.manifest_hash,
+                manifest_signature=transfer_manifest_signature.manifest_signature,  # Placeholder for actual signature
                 manifest=json.dumps(asdict(transfer_manifest))
             )
 
             # Copy database file to the package directory
             self.conn_manager.copy_database(package_path / "anacostia.db")
+
+            self.transfer_artifacts = []
 
         finally:
             # Clean up if necessary
