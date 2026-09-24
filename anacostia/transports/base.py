@@ -237,7 +237,7 @@ class BaseTransport:
     '''
 
     @contextmanager
-    def create_transfer_package(self, compression_level: int = 6, partition_size: int = 1_048_576):
+    def create_transfer_package(self, compression_level: int = 6, buffer_size: int = 1024 * 1024, partition_size: int = 1_048_576):
         """
         Context manager to create a package for the given artifact.
         Yields the path to the /data folder where all the files for the transfer package should be placed.
@@ -267,12 +267,18 @@ class BaseTransport:
             tar_path = package_path / "data.tar"
             tar_path = create_deterministic_tar(self.data_folder_path, tar_path)
 
+            # shutil.rmtree(self.data_folder_path)  # Remove the /data folder after creating the .tar file
+
+            gzip_path = package_path / "data.tar.gz"
+            gzip_path = gzip_file(tar_path, gzip_path, compression_level=compression_level, buffer_size=buffer_size)
+            gzip_sha256 = sha256_file(gzip_path)
+
             # create the transfer manifest
             transfer_manifest = TransferManifest(
                 transfer_id=transfer_id,
                 transfer_artifacts=self.transfer_artifacts,
-                archive_size=sum(artifact.size_bytes for artifact in self.transfer_artifacts),
-                archive_sha256=f"some_hash_{uuid4().hex}",  # Placeholder, will be updated after creating the archive
+                archive_size=gzip_path.stat().st_size,
+                archive_sha256=gzip_sha256,
                 chunk_count=0,                  # will be updated after partitioning
                 previous_transfer_id=None,      # can be set if needed
                 previous_transfer_sha256=None   # can be set if needed
