@@ -8,6 +8,7 @@ from dataclasses import asdict
 import json
 from contextlib import contextmanager
 
+from anacostia.utils.logging import log
 from anacostia.utils.connection import ConnectionManager
 from anacostia.utils.types import Artifact
 from anacostia.utils.package import create_deterministic_tar, gzip_file, partition_file, sha256_file
@@ -47,12 +48,17 @@ class BaseTransport:
         self.transfers_table = f"{self.name}_local_transfers"
         self.chunks_table = f"{self.name}_local_chunks"
 
+        self.transfer_artifacts: list[TransferArtifact] = []  # list of TransferArtifact objects to be added to the transfer package
+
         # global tables
         self.global_usage_table_name = "artifact_usage_events"
 
         self.transfers_directory = transfers_directory
         if not self.transfers_directory.exists():
             os.makedirs(self.transfers_directory)
+
+    def set_pipeline_name(self, pipeline_name: str):
+        self.pipeline_name = pipeline_name
 
     def set_db_folder(self, db_folder: str):
         self.db_folder = db_folder
@@ -245,6 +251,8 @@ class BaseTransport:
         # Logic to create a folder for the transfer package inside the destination directory,
         # create the /data folder, and yield the path to it.
         package_path = self.transfers_directory / f"transfer_{uuid4().hex}"
+        log(message=f"Creating transfer package at '{package_path}'", level="info", logger=self.logger)
+
         self.data_folder_path = package_path / "data"
         self.data_folder_path.mkdir(parents=True, exist_ok=True)
 
@@ -286,7 +294,7 @@ class BaseTransport:
 
         # move the artifact
         dest_path.parent.mkdir(parents=True, exist_ok=True)
-        shutil.move(str(src_path), str(dest_path))
+        shutil.copy2(str(src_path), str(dest_path))
 
         filepath = dest_path.relative_to(self.data_folder_path).as_posix()  # Store the relative path to the transfers directory
 

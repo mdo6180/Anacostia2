@@ -63,6 +63,7 @@ class Graph:
                 transport.set_db_folder(self.db_folder)
                 transport.initialize_db_connection(db_path)
                 transport.setup()
+                transport.set_pipeline_name(self.name)  # Set the pipeline name for the transport to the graph's name
 
     def monitor_receiving_directory(self):
         log(f"Monitoring receiving directory at {self.receiving_directory}.", level="info", logger=self.logger)
