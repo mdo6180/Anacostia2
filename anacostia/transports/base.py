@@ -270,9 +270,9 @@ class BaseTransport:
                 transfer_artifacts=self.transfer_artifacts,
                 archive_size=sum(artifact.size_bytes for artifact in self.transfer_artifacts),
                 archive_sha256=f"some_hash_{uuid4().hex}",  # will be updated after creating the archive
-                chunk_count=0,  # will be updated after partitioning
-                previous_transfer_id=None,  # can be set if needed
-                previous_transfer_sha256=None  # can be set if needed
+                chunk_count=0,                  # will be updated after partitioning
+                previous_transfer_id=None,      # can be set if needed
+                previous_transfer_sha256=None   # can be set if needed
             )
 
             # Copy database file to the package directory
