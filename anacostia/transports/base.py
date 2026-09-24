@@ -265,19 +265,20 @@ class BaseTransport:
             tar_path = package_path / "data.tar"
             tar_path = create_deterministic_tar(self.data_folder_path, tar_path)
 
+            # create the transfer manifest
+            transfer_manifest = TransferManifest(
+                transfer_id=transfer_id,
+                transfer_artifacts=self.transfer_artifacts,
+                archive_size=sum(artifact.size_bytes for artifact in self.transfer_artifacts),
+                archive_sha256=f"some_hash_{uuid4().hex}",  # Placeholder, will be updated after creating the archive
+                chunk_count=0,                  # will be updated after partitioning
+                previous_transfer_id=None,      # can be set if needed
+                previous_transfer_sha256=None   # can be set if needed
+            )
+
+            # create the transfer_manifest.json file
             transfer_manifest_path = package_path / "transfer_manifest.json"
             with transfer_manifest_path.open("x", encoding="utf-8") as manifest_file:
-
-                transfer_manifest = TransferManifest(
-                    transfer_id=transfer_id,
-                    transfer_artifacts=self.transfer_artifacts,
-                    archive_size=sum(artifact.size_bytes for artifact in self.transfer_artifacts),
-                    archive_sha256=f"some_hash_{uuid4().hex}",  # Placeholder, will be updated after creating the archive
-                    chunk_count=0,                  # will be updated after partitioning
-                    previous_transfer_id=None,      # can be set if needed
-                    previous_transfer_sha256=None   # can be set if needed
-                )
-
                 json.dump(
                     {
                         **asdict(transfer_manifest),
