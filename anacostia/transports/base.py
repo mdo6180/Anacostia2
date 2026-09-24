@@ -202,7 +202,6 @@ class BaseTransport:
             """
             cursor.execute(query)
 
-    '''
     def record_transfer(self, manifest_hash: str, manifest_signature: str, manifest: str):
         """
         Record a transfer in the local transfer table.
@@ -214,6 +213,7 @@ class BaseTransport:
             """
             cursor.execute(query, (manifest_hash, manifest_signature, manifest, self.name))
 
+    '''
     def record_chunks(self, transfer_manifest_hash: str, chunks: list[ChunkManifest]):
         """
         Record chunks in the local chunks table.
@@ -250,7 +250,8 @@ class BaseTransport:
 
         # Logic to create a folder for the transfer package inside the destination directory,
         # create the /data folder, and yield the path to it.
-        package_path = self.transfers_directory / f"transfer_{uuid4().hex}"
+        transfer_id = f"transfer_{uuid4().hex}"
+        package_path = self.transfers_directory / transfer_id
         log(message=f"Creating transfer package at '{package_path}'", level="info", logger=self.logger)
 
         self.data_folder_path = package_path / "data"
@@ -258,6 +259,21 @@ class BaseTransport:
 
         try:
             yield self.data_folder_path    # Yield the path to the /data folder and self for further operations
+
+            # Creating tar file from the /data folder
+            # transfer_7bs43.../data -> transfer_7bs43.../data.tar
+            tar_path = package_path / "data.tar"
+            tar_path = create_deterministic_tar(self.data_folder_path, tar_path)
+
+            transfer_manifest = TransferManifest(
+                transfer_id=transfer_id,
+                transfer_artifacts=self.transfer_artifacts,
+                archive_size=sum(artifact.size_bytes for artifact in self.transfer_artifacts),
+                archive_sha256=f"some_hash_{uuid4().hex}",  # will be updated after creating the archive
+                chunk_count=0,  # will be updated after partitioning
+                previous_transfer_id=None,  # can be set if needed
+                previous_transfer_sha256=None  # can be set if needed
+            )
 
             # Copy database file to the package directory
             self.conn_manager.copy_database(package_path / "anacostia.db")
