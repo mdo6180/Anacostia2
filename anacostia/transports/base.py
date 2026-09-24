@@ -257,9 +257,11 @@ class BaseTransport:
         self.data_folder_path = package_path / "data"
         self.data_folder_path.mkdir(parents=True, exist_ok=True)
 
-        try:
-            yield self.data_folder_path    # Yield the path to the /data folder and self for further operations
+        # Yield the path to the /data folder to the user
+        yield self.data_folder_path    
 
+        # create transfer package once user is done adding files to the package
+        try:
             # Creating tar file from the /data folder
             # transfer_7bs43.../data -> transfer_7bs43.../data.tar
             tar_path = package_path / "data.tar"
