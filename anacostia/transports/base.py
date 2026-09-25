@@ -327,6 +327,10 @@ class BaseTransport:
             # Copy database file to the package directory
             self.conn_manager.copy_database(package_path / "anacostia.db")
 
+            # Creating the final tar file before sending to receiver pipeline
+            final_tar_path = self.transfers_directory / f"{transfer_id}.tar"
+            create_deterministic_tar(package_path, final_tar_path)
+
             self.transfer_artifacts = []
 
         finally:
