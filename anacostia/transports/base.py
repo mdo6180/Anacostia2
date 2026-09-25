@@ -269,15 +269,22 @@ class BaseTransport:
 
             # shutil.rmtree(self.data_folder_path)  # Remove the /data folder after creating the .tar file
 
+            # Compress tar archive using gzip
+            # transfer_7bs43.../data.tar -> transfer_7bs43.../data.tar.gz
             gzip_path = package_path / "data.tar.gz"
             gzip_path = gzip_file(tar_path, gzip_path, compression_level=compression_level, buffer_size=buffer_size)
+
+            # hash the compressed archive and get its size
             gzip_sha256 = sha256_file(gzip_path)
+            gzip_size = gzip_path.stat().st_size
+
+            # os.remove(tar_path)  # Remove the .tar file after creating the .tar.gz file
 
             # create the transfer manifest
             transfer_manifest = TransferManifest(
                 transfer_id=transfer_id,
                 transfer_artifacts=self.transfer_artifacts,
-                archive_size=gzip_path.stat().st_size,
+                archive_size=gzip_size,
                 archive_sha256=gzip_sha256,
                 chunk_count=0,                  # will be updated after partitioning
                 previous_transfer_id=None,      # can be set if needed
