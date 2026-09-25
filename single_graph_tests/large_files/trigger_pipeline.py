@@ -1,4 +1,5 @@
 import time
+from pathlib import Path
 
 
 def create_file(file_path, content):
@@ -11,9 +12,9 @@ def create_file(file_path, content):
 
 
 if __name__ == "__main__":
-    tests_path = f"./testing_artifacts"
-    data_store1_input = f"{tests_path}/incoming1"
+    tests_path = Path("./testing_artifacts") / "pipeline1"
+    input_path1 = tests_path / "incoming1"
 
     for i in range(12):
-        create_file(f"{data_store1_input}/test_file{i}.txt", f"incoming1 {i}")
+        create_file(input_path1 / f"test_file{i}.txt", f"incoming1 {i}")
         time.sleep(1.5)

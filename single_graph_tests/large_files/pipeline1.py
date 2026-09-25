@@ -15,7 +15,7 @@ from anacostia.utils.logging import log
 
 
 # 1. Set up streams, consumers, and nodes
-tests_path = Path("./testing_artifacts")
+tests_path = Path("./testing_artifacts") / "pipeline1"
 db_folder_path = tests_path / ".anacostia"
 input_path1 = tests_path / "incoming1"
 producer_path = tests_path / "producer_dir"
