@@ -15,11 +15,13 @@ from anacostia.utils.logging import log
 
 
 # 1. Set up streams, consumers, and nodes
-tests_path = Path("./testing_artifacts") / "pipeline1"
-db_folder_path = tests_path / ".anacostia"
-input_path1 = tests_path / "incoming1"
-producer_path = tests_path / "producer_dir"
-transport_package_dir = tests_path / "transport_dir"
+testing_artifacts_dir = Path("./testing_artifacts")
+pipeline1_dir = testing_artifacts_dir / "pipeline1"
+db_folder_path = pipeline1_dir / ".anacostia"
+input_path1 = pipeline1_dir / "incoming1"
+producer_path = pipeline1_dir / "producer_dir"
+transport_package_dir = pipeline1_dir / "transport_dir"
+combined_log_path = testing_artifacts_dir / "combined.log"
 
 parser = argparse.ArgumentParser(description="Run the pipeline after restart test")
 parser.add_argument("-r", "--restart", action="store_true", help="Flag to indicate if this is a restart")
@@ -36,17 +38,19 @@ if args.debug:
     attach_debugger()
 
 if args.restart == False:
-    if tests_path.exists() is True:
-        shutil.rmtree(tests_path)
-    tests_path.mkdir(parents=True, exist_ok=True)
+    if pipeline1_dir.exists() is True:
+        shutil.rmtree(pipeline1_dir)
+    pipeline1_dir.mkdir(parents=True, exist_ok=True)
 
-log_path = tests_path / "anacostia.log"
+log_path = pipeline1_dir / "pipeline1.log"
 logging.basicConfig(
     level=logging.DEBUG,
-    format='%(asctime)s - %(levelname)s - %(message)s',
+    format='%(asctime)s - %(levelname)s - "Pipeline1" - %(message)s',
     datefmt='%Y-%m-%d %H:%M:%S',
-    filename=str(log_path),
-    filemode='a'
+    handlers=[
+        logging.FileHandler(log_path, mode='a'),
+        logging.FileHandler(combined_log_path, mode='a'),
+    ]
 )
 logger = logging.getLogger(__name__)
 
@@ -58,7 +62,7 @@ simple_transport = BaseTransport(name="combined_transport", transfers_directory=
 node = Stage(name="TestNode", consumers=[stream_consumer_odd], producers=[producer], transports=[simple_transport], logger=logger)
 
 # 2. Create the graph with the node
-graph = Graph(name="TestGraph", nodes=[node], db_folder=db_folder_path, logger=logger)
+graph = Graph(name="Pipeline2", nodes=[node], db_folder=db_folder_path, logger=logger)
 
 def create_large_file(path: str, size_mb: int = 10):
     target_size = size_mb * 1024 * 1024  # bytes

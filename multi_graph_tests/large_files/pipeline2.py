@@ -12,9 +12,11 @@ from anacostia.utils.debug import attach_debugger
 
 
 # 1. Set up streams, consumers, and nodes
-tests_path = Path("./testing_artifacts") / "pipeline2"
-db_folder_path = tests_path / ".anacostia"
-input_path1 = tests_path / "incoming1"
+testing_artifacts_dir = Path("./testing_artifacts")
+pipeline2_dir = testing_artifacts_dir / "pipeline2"
+db_folder_path = pipeline2_dir / ".anacostia"
+input_path1 = pipeline2_dir / "incoming1"
+combined_log_path = testing_artifacts_dir / "combined.log"
 
 parser = argparse.ArgumentParser(description="Run the pipeline after restart test")
 parser.add_argument("-r", "--restart", action="store_true", help="Flag to indicate if this is a restart")
@@ -31,19 +33,22 @@ if args.debug:
     attach_debugger()
 
 if args.restart == False:
-    if tests_path.exists() is True:
-        shutil.rmtree(tests_path)
-    tests_path.mkdir(parents=True, exist_ok=True)
+    if pipeline2_dir.exists() is True:
+        shutil.rmtree(pipeline2_dir)
+    pipeline2_dir.mkdir(parents=True, exist_ok=True)
 
-log_path = tests_path / "anacostia.log"
+log_path = pipeline2_dir / "pipeline2.log"
 logging.basicConfig(
     level=logging.DEBUG,
-    format='%(asctime)s - %(levelname)s - %(message)s',
+    format='%(asctime)s - %(levelname)s - "Pipeline2" - %(message)s',
     datefmt='%Y-%m-%d %H:%M:%S',
-    filename=str(log_path),
-    filemode='a'
+    handlers=[
+        logging.FileHandler(log_path, mode='a'),
+        logging.FileHandler(combined_log_path, mode='a'),
+    ]
 )
 logger = logging.getLogger(__name__)
+
 
 # Assemble the first stage of the pipeline with a stream, consumer, producer, and transport
 stream = DirectoryStream(name="odd_folder", directory=input_path1, logger=logger)
@@ -51,7 +56,7 @@ stream_consumer_odd = Consumer(name="stream_consumer_odd", stream=stream, logger
 node = Stage(name="TestNode", consumers=[stream_consumer_odd], logger=logger)
 
 # 2. Create the graph with the node
-graph = Graph(name="TestGraph", nodes=[node], db_folder=db_folder_path, logger=logger)
+graph = Graph(name="Pipeline2", nodes=[node], db_folder=db_folder_path, logger=logger)
 
 # 3. Define the node's processing function
 @node.entrypoint
