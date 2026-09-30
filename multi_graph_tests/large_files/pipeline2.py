@@ -16,28 +16,22 @@ testing_artifacts_dir = Path("./testing_artifacts")
 pipeline2_dir = testing_artifacts_dir / "pipeline2"
 db_folder_path = pipeline2_dir / ".anacostia"
 input_path1 = pipeline2_dir / "incoming1"
-combined_log_path = testing_artifacts_dir / "combined.log"
 
 parser = argparse.ArgumentParser(description="Run the pipeline after restart test")
-parser.add_argument("-r", "--restart", action="store_true", help="Flag to indicate if this is a restart")
 parser.add_argument("-d", "--debug", action="store_true", help="Flag to indicate if debugging is enabled")
 args = parser.parse_args()
 
 if args.debug:
     # To debug this test:
     # Add a breakpoint by clicking on the left side of the line number you want to break on.
-    # run the script: python mid_stream_stop.py -r -d
+    # run the script: python pipeline2.py -d
     # open the debug tab in vscode
     # select the "Python Debugger: Remote Attach" configuration, then click on the play button.
     # The script will pause at the breakpoint and you can inspect the values of variables in the debug console.
     attach_debugger()
 
-if args.restart == False:
-    if pipeline2_dir.exists() is True:
-        shutil.rmtree(pipeline2_dir)
-    pipeline2_dir.mkdir(parents=True, exist_ok=True)
-
 log_path = pipeline2_dir / "pipeline2.log"
+combined_log_path = testing_artifacts_dir / "combined.log"
 logging.basicConfig(
     level=logging.DEBUG,
     format='%(asctime)s - %(levelname)s - "Pipeline2" - %(message)s',
