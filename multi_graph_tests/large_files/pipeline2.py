@@ -17,12 +17,14 @@ args = parser.parse_args()
 
 if args.debug:
     # To debug this test:
+    # Go to File -> Duplicate Workspace
+    # Navigate to muli_graph_tests/large_files/
     # Add a breakpoint by clicking on the left side of the line number you want to break on.
     # run the script: python pipeline2.py -d
     # open the debug tab in vscode
-    # select the "Python Debugger: Remote Attach" configuration, then click on the play button.
+    # select the "Port 4567 - Remote Attach" configuration, then click on the play button.
     # The script will pause at the breakpoint and you can inspect the values of variables in the debug console.
-    attach_debugger()
+    attach_debugger(4567)
 
 # 1. Set up streams, consumers, and nodes
 testing_artifacts_dir = Path("./testing_artifacts")

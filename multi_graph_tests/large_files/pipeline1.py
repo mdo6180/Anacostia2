@@ -23,7 +23,7 @@ if args.debug:
     # Add a breakpoint by clicking on the left side of the line number you want to break on.
     # run the script: python pipeline1.py -d
     # open the debug tab in vscode
-    # select the "Python Debugger: Remote Attach" configuration, then click on the play button.
+    # select the "Port 5678 - Remote Attach" configuration, then click on the play button.
     # The script will pause at the breakpoint and you can inspect the values of variables in the debug console.
     attach_debugger()
 
@@ -107,6 +107,8 @@ def node_func():
                     dest_pipeline_name="some_pipeline_name",  # This is a placeholder; replace with the actual destination pipeline name if needed
                     dest_stream="some_other_stream"  # This is a placeholder; replace with the actual destination stream name if needed
                 )
+
+            # Copy the transfer package to pipeline2_receiving_dir
 
 # 3. Start the pipeline
 graph.start()
