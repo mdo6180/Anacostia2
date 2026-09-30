@@ -14,14 +14,6 @@ from anacostia.utils.logging import log
 
 
 
-# 1. Set up streams, consumers, and nodes
-testing_artifacts_dir = Path("./testing_artifacts")
-pipeline1_dir = testing_artifacts_dir / "pipeline1"
-db_folder_path = pipeline1_dir / ".anacostia"
-input_path1 = pipeline1_dir / "incoming1"
-producer_path = pipeline1_dir / "producer_dir"
-transport_package_dir = pipeline1_dir / "transport_dir"
-
 parser = argparse.ArgumentParser(description="Run the pipeline after restart test")
 parser.add_argument("-d", "--debug", action="store_true", help="Flag to indicate if debugging is enabled")
 args = parser.parse_args()
@@ -34,6 +26,15 @@ if args.debug:
     # select the "Python Debugger: Remote Attach" configuration, then click on the play button.
     # The script will pause at the breakpoint and you can inspect the values of variables in the debug console.
     attach_debugger()
+
+# 1. Set up streams, consumers, and nodes
+testing_artifacts_dir = Path("./testing_artifacts")
+pipeline1_dir = testing_artifacts_dir / "pipeline1"
+pipeline2_receiving_dir = testing_artifacts_dir / "pipeline2" / ".anacostia" / "receiving"
+db_folder_path = pipeline1_dir / ".anacostia"
+input_path1 = pipeline1_dir / "incoming1"
+producer_path = pipeline1_dir / "producer_dir"
+transport_package_dir = pipeline1_dir / "transport_dir"
 
 log_path = pipeline1_dir / "pipeline1.log"
 combined_log_path = testing_artifacts_dir / "combined.log"
@@ -56,7 +57,7 @@ simple_transport = BaseTransport(name="combined_transport", transfers_directory=
 node = Stage(name="TestNode", consumers=[stream_consumer_odd], producers=[producer], transports=[simple_transport], logger=logger)
 
 # 2. Create the graph with the node
-graph = Graph(name="Pipeline2", nodes=[node], db_folder=db_folder_path, logger=logger)
+graph = Graph(name="Pipeline1", nodes=[node], db_folder=db_folder_path, logger=logger)
 
 def create_large_file(path: str, size_mb: int = 10):
     target_size = size_mb * 1024 * 1024  # bytes

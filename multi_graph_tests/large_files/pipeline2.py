@@ -11,12 +11,6 @@ from anacostia.utils.debug import attach_debugger
 
 
 
-# 1. Set up streams, consumers, and nodes
-testing_artifacts_dir = Path("./testing_artifacts")
-pipeline2_dir = testing_artifacts_dir / "pipeline2"
-db_folder_path = pipeline2_dir / ".anacostia"
-input_path1 = pipeline2_dir / "incoming1"
-
 parser = argparse.ArgumentParser(description="Run the pipeline after restart test")
 parser.add_argument("-d", "--debug", action="store_true", help="Flag to indicate if debugging is enabled")
 args = parser.parse_args()
@@ -29,6 +23,12 @@ if args.debug:
     # select the "Python Debugger: Remote Attach" configuration, then click on the play button.
     # The script will pause at the breakpoint and you can inspect the values of variables in the debug console.
     attach_debugger()
+
+# 1. Set up streams, consumers, and nodes
+testing_artifacts_dir = Path("./testing_artifacts")
+pipeline2_dir = testing_artifacts_dir / "pipeline2"
+db_folder_path = pipeline2_dir / ".anacostia"
+input_path1 = pipeline2_dir / "incoming1"
 
 log_path = pipeline2_dir / "pipeline2.log"
 combined_log_path = testing_artifacts_dir / "combined.log"
