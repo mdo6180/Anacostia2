@@ -4,6 +4,7 @@ import time
 from typing import List
 from logging import Logger
 from pathlib import Path
+import tarfile
 
 from anacostia.node import Stage
 from anacostia.utils.connection import ConnectionManager
@@ -106,7 +107,11 @@ class Graph:
         for node in self.nodes:
             node.start()
 
-        self.monitor_thread = threading.Thread(target=self.monitor_receiving_directory, daemon=True)
+        self.monitor_thread = threading.Thread(
+            name=f"{self.name}-receiving-monitor",
+            target=self.monitor_receiving_directory, 
+            daemon=True
+        )
         self.monitor_thread.start()
     
     def join(self):

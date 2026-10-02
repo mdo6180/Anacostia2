@@ -7,6 +7,7 @@ from uuid import uuid4
 from dataclasses import asdict
 import json
 from contextlib import contextmanager
+from math import ceil
 
 from anacostia.utils.logging import log
 from anacostia.utils.connection import ConnectionManager
@@ -280,13 +281,19 @@ class BaseTransport:
 
             # os.remove(tar_path)  # Remove the .tar file after creating the .tar.gz file
 
+            # determine the number of chunks to create based on the partition size
+            # Note: num_chunks = 1 means no partitioning, just one chunk
+            db_size = self.db_path.stat().st_size
+            approximate_total_size = gzip_size + db_size + 1024  # add 1KB for the transfer manifest and signature files
+            num_chunks = ceil(approximate_total_size / partition_size)
+
             # create the transfer manifest
             transfer_manifest = TransferManifest(
                 transfer_id=transfer_id,
                 transfer_artifacts=self.transfer_artifacts,
                 archive_size=gzip_size,
                 archive_sha256=gzip_sha256,
-                chunk_count=0,                  # will be updated after partitioning
+                chunk_count=num_chunks, 
                 previous_transfer_id=None,      # can be set if needed
                 previous_transfer_sha256=None   # can be set if needed
             )
