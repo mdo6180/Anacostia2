@@ -15,6 +15,6 @@ if __name__ == "__main__":
     tests_path = Path("./testing_artifacts") / "pipeline1"
     input_path1 = tests_path / "incoming1"
 
-    for i in range(12):
+    for i in range(1):
         create_file(input_path1 / f"test_file{i}.txt", f"incoming1 {i}")
         time.sleep(1.5)

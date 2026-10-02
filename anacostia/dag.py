@@ -6,6 +6,7 @@ from logging import Logger
 from pathlib import Path
 import tarfile
 
+from anacostia.streams.base import Stream
 from anacostia.node import Stage
 from anacostia.utils.connection import ConnectionManager
 from anacostia.utils.logging import log
@@ -42,6 +43,8 @@ class Graph:
         self.conn_manager = ConnectionManager(db_path, logger=self.logger)
         self.conn_manager.create_global_tables()
 
+        self.streams: List[Stream] = []
+
         for node in self.nodes:
             # initialize DB connection for each node, its consumers, and producers
             node.set_db_path(db_path)
@@ -54,6 +57,7 @@ class Graph:
                 consumer.set_db_path(db_path)
                 consumer.stream.initialize_db_connection(db_path)
                 consumer.stream.setup()
+                self.streams.append(consumer.stream)
                 
             for producer in node.producers:
                 producer.set_db_folder(self.db_folder)
@@ -70,8 +74,40 @@ class Graph:
         log(f"Monitoring receiving directory at {self.receiving_directory}.", level="info", logger=self.logger)
         while self._stop.is_set() is False:
             
-            # Assumption: everything in the receiving directory is a chunk folder
-            for chunk_folder in self.receiving_directory.iterdir():
+            # Assumption: everything in the receiving directory is a tar file that has been transferred from a remote location. 
+            # The tar file contains a transfer_manifest.json, a signature.json, and maybe a chunk.json
+            for transfer_package in self.receiving_directory.iterdir():
+                if transfer_package.is_file() and transfer_package.suffix == ".tar":
+                    try:
+                        with tarfile.open(transfer_package, "r") as tar:
+                            contents = [member.name for member in tar.getmembers()]
+                            transfer_id = contents[0]   # first member of the tar file is the name of the transfer folder, which is also the transfer_id
+
+                            if f"{transfer_id}/transfer_manifest.json" not in contents:
+                                log(f"Transfer package {transfer_package} does not contain a transfer_manifest.json. Skipping.", level="warning", logger=self.logger)
+                                continue
+
+                            if f"{transfer_id}/signature.json" not in contents:
+                                log(f"Transfer package {transfer_package} does not contain a signature.json. Skipping.", level="warning", logger=self.logger)
+                                continue
+
+                            # if no chunk.json file is found in the tar file, then we can assume this transfer package is not a chunked transfer
+                            # and we can immediately move it to the desired stream directory.
+                            if f"{transfer_id}/chunk.json" not in contents:
+                                log(f"Transfer package {transfer_package} does not contain a chunk.json. Moving to stream directory.", level="warning", logger=self.logger)
+
+                    except Exception as e:
+                        log(f"Failed to extract transfer package {transfer_package}: {e}", level="error", logger=self.logger)
+                        continue
+
+                    # After extracting, we can remove the original tar file
+                    transfer_package.unlink()
+                    log(f"Removed transfer package {transfer_package} after extraction.", level="info", logger=self.logger)
+                
+                else:
+                    log(f"Skipping non-tar file {transfer_package} in receiving directory.", level="warning", logger=self.logger)
+
+                """
                 if chunk_folder.is_dir():
                     transfer_manifest = chunk_folder / "transfer_manifest.json"
                     chunk_manifest = chunk_folder / "chunk_manifest.json"
@@ -99,6 +135,7 @@ class Graph:
                         # then we need to throw a warning and move onto other packages.
                         # Eventually we will come back to check on this chunk to see if maybe the user has found the transfer manifest.
                         print("Warning: No transfer manifest detected")
+                """
 
         log(f"Stopped monitoring receiving directory at {self.receiving_directory}.", level="info", logger=self.logger)
 
