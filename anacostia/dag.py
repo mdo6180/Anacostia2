@@ -91,10 +91,18 @@ class Graph:
                                 log(f"Transfer package {transfer_package} does not contain a signature.json. Skipping.", level="warning", logger=self.logger)
                                 continue
 
+                            if f"{transfer_id}/anacostia.db" not in contents:
+                                log(f"Transfer package {transfer_package} does not contain anacostia.db. Skipping.", level="warning", logger=self.logger)
+                                continue
+
                             # if no chunk.json file is found in the tar file, then we can assume this transfer package is not a chunked transfer
                             # and we can immediately move it to the desired stream directory.
                             if f"{transfer_id}/chunk.json" not in contents:
                                 log(f"Transfer package {transfer_package} does not contain a chunk.json. Moving to stream directory.", level="warning", logger=self.logger)
+
+                            log(f"Extracting transfer package {transfer_package} to storage directory.", level="info", logger=self.logger)
+                            tar.extractall(path=self.storage_directory)
+                            log(f"Extracted transfer package {transfer_package} to storage directory.", level="info", logger=self.logger)
 
                     except Exception as e:
                         log(f"Failed to extract transfer package {transfer_package}: {e}", level="error", logger=self.logger)
@@ -136,6 +144,8 @@ class Graph:
                         # Eventually we will come back to check on this chunk to see if maybe the user has found the transfer manifest.
                         print("Warning: No transfer manifest detected")
                 """
+
+            time.sleep(1)  # Sleep for a short duration to avoid busy waiting
 
         log(f"Stopped monitoring receiving directory at {self.receiving_directory}.", level="info", logger=self.logger)
 

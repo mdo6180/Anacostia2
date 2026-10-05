@@ -49,23 +49,23 @@ logger = logging.getLogger(__name__)
 # Assemble the first stage of the pipeline with a stream, consumer, producer, and transport
 stream = DirectoryStream(name="odd_folder", directory=input_path1, logger=logger)
 stream_consumer_odd = Consumer(name="stream_consumer_odd", stream=stream, logger=logger)
-node = Stage(name="TestNode", consumers=[stream_consumer_odd], logger=logger)
+stage = Stage(name="TestNode", consumers=[stream_consumer_odd], logger=logger)
 
 # 2. Create the graph with the node
-graph = Graph(name="Pipeline2", nodes=[node], db_folder=db_folder_path, logger=logger)
+graph = Graph(name="Pipeline2", nodes=[stage], db_folder=db_folder_path, logger=logger)
 
 # 3. Define the node's processing function
-@node.entrypoint
+@stage.entrypoint
 def node_func():
     for bundle in stream_consumer_odd:
-        with node.stage_run() as staging_directory:
+        with stage.stage_run() as staging_directory:
             artifact_obj = bundle[0]
             artifact_location = artifact_obj.location
             input_artifact_path = artifact_location["path"]
 
             with open(input_artifact_path, "r") as input_file:
                 content = input_file.read()
-                logger.info(f"processing artifact with content '{content}' in run {node.run_id} with location {input_artifact_path}")
+                logger.info(f"processing artifact with content '{content}' in run {stage.run_id} with location {input_artifact_path}")
 
 # 4. Start the pipeline
 graph.start()

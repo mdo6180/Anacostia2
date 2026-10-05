@@ -54,10 +54,10 @@ stream = DirectoryStream(name="odd_folder", directory=input_path1, logger=logger
 stream_consumer_odd = Consumer(name="stream_consumer_odd", stream=stream, logger=logger)
 producer = Producer(name="test_producer", directory=producer_path, logger=logger)
 simple_transport = BaseTransport(name="combined_transport", transfers_directory=transport_package_dir, logger=logger)
-node = Stage(name="TestNode", consumers=[stream_consumer_odd], producers=[producer], transports=[simple_transport], logger=logger)
+stage = Stage(name="TestNode", consumers=[stream_consumer_odd], producers=[producer], transports=[simple_transport], logger=logger)
 
 # 2. Create the graph with the node
-graph = Graph(name="Pipeline1", nodes=[node], db_folder=db_folder_path, logger=logger)
+graph = Graph(name="Pipeline1", nodes=[stage], db_folder=db_folder_path, logger=logger)
 
 def create_large_file(path: str, size_mb: int = 10):
     target_size = size_mb * 1024 * 1024  # bytes
@@ -71,17 +71,17 @@ def create_large_file(path: str, size_mb: int = 10):
         f.truncate(target_size)
 
 # 2. Define the node's processing function
-@node.entrypoint
+@stage.entrypoint
 def node_func():
     for bundle in stream_consumer_odd:
-        with node.stage_run() as staging_directory:
+        with stage.stage_run() as staging_directory:
             artifact_obj = bundle[0]
             artifact_location = artifact_obj.location
             input_artifact_path = artifact_location["path"]
 
             with open(input_artifact_path, "r") as input_file:
                 content = input_file.read()
-                logger.info(f"processing artifact with content '{content}' in run {node.run_id} with location {input_artifact_path}")
+                logger.info(f"processing artifact with content '{content}' in run {stage.run_id} with location {input_artifact_path}")
 
                 output_file_path = staging_directory / "output.txt"     # Define the output file path in the staging directory
 
@@ -92,7 +92,7 @@ def node_func():
                 create_large_file(path=output_file_path, size_mb=10)    # Append to create a 10MB file in the staging directory
 
                 # Commit the output artifact to the producer
-                committed_path = producer_path / f"output_{node.run_id}.txt"
+                committed_path = producer_path / f"output_{stage.run_id}.txt"
                 committed_artifact = producer.commit_artifact(
                     artifact_staging_path=output_file_path,
                     artifact_final_path=committed_path
