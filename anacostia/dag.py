@@ -150,7 +150,7 @@ class Graph:
                         print("Warning: No transfer manifest detected")
                 """
 
-            time.sleep(1)  # Sleep for a short duration to avoid busy waiting
+            time.sleep(0.1)  # Sleep for a short duration to avoid busy waiting
 
         log(f"Stopped monitoring receiving directory at {self.receiving_directory}.", level="info", logger=self.logger)
 
