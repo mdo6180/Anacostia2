@@ -35,6 +35,11 @@ class Graph:
             self.receiving_directory.mkdir(parents=True, exist_ok=True)
             log(f"Created receiving directory at {self.receiving_directory}.", level="info", logger=self.logger)
 
+        self.staging_directory = self.db_folder / 'staging'
+        if not self.staging_directory.exists():
+            self.staging_directory.mkdir(parents=True, exist_ok=True)
+            log(f"Created staging directory at {self.staging_directory}.", level="info", logger=self.logger)
+
         self.storage_directory = self.db_folder / 'storage'
         if not self.storage_directory.exists():
             self.storage_directory.mkdir(parents=True, exist_ok=True)
@@ -50,7 +55,7 @@ class Graph:
             node.set_db_path(db_path)
             node.initialize_db_connection(db_path)
             node.set_db_folder(self.db_folder)
-            node.set_staging_directory(self.db_folder / 'staging')
+            node.set_staging_directory(self.staging_directory)
             node.setup()
 
             for consumer in node.consumers:
