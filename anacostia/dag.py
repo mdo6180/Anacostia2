@@ -10,6 +10,7 @@ from anacostia.streams.base import Stream
 from anacostia.node import Stage
 from anacostia.utils.connection import ConnectionManager
 from anacostia.utils.logging import log
+from anacostia.utils.hashing import hash_file_object
 
 sql = str   # alias of the str type for syntax highlighting using the Python Inline Source Syntax Highlighting extension by Sam Willis in VSCode.
 
@@ -85,25 +86,41 @@ class Graph:
                 if transfer_package.is_file() and transfer_package.suffix == ".tar":
                     try:
                         with tarfile.open(transfer_package, "r") as tar:
-                            contents = [member.name for member in tar.getmembers()]
+                            contents = [Path(member.name) for member in tar.getmembers()]
                             transfer_id = contents[0]   # first member of the tar file is the name of the transfer folder, which is also the transfer_id
 
-                            if f"{transfer_id}/transfer_manifest.json" not in contents:
+                            if transfer_id / "transfer_manifest.json" not in contents:
                                 log(f"Transfer package {transfer_package} does not contain a transfer_manifest.json. Skipping.", level="warning", logger=self.logger)
                                 continue
 
-                            if f"{transfer_id}/signature.json" not in contents:
+                            if transfer_id / "signature.json" not in contents:
                                 log(f"Transfer package {transfer_package} does not contain a signature.json. Skipping.", level="warning", logger=self.logger)
                                 continue
 
-                            if f"{transfer_id}/anacostia.db" not in contents:
+                            if transfer_id / "anacostia.db" not in contents:
                                 log(f"Transfer package {transfer_package} does not contain anacostia.db. Skipping.", level="warning", logger=self.logger)
                                 continue
 
                             # if no chunk.json file is found in the tar file, then we can assume this transfer package is not a chunked transfer
                             # and we can immediately move it to the desired stream directory.
-                            if f"{transfer_id}/chunk.json" not in contents:
+                            if transfer_id / "chunk.json" not in contents:
                                 log(f"Transfer package {transfer_package} does not contain a chunk.json. Moving to stream directory.", level="warning", logger=self.logger)
+
+                            with (
+                                tar.extractfile(str(transfer_id / "transfer_manifest.json")) as manifest_file, 
+                                tar.extractfile(str(transfer_id / "signature.json")) as signature_file
+                            ):
+                                manifest_signature = json.load(signature_file)
+                                expected_sha256 = manifest_signature['manifest_hash']
+                                if expected_sha256 is None:
+                                    log(f"Transfer package {transfer_package} does not contain a SHA-256 hash in signature.json. Skipping.", level="warning", logger=self.logger)
+                                    continue
+                                
+                                # Calculate the SHA-256 hash of the transfer_manifest.json
+                                actual_sha256 = hash_file_object(manifest_file)
+                                if actual_sha256 != expected_sha256:
+                                    log(f"SHA-256 hash mismatch for transfer package {transfer_package}. Expected: {expected_sha256}, Actual: {actual_sha256}. Skipping.", level="error", logger=self.logger)
+                                    continue
 
                             log(f"Extracting transfer package {transfer_package} to storage directory.", level="info", logger=self.logger)
                             tar.extractall(path=self.storage_directory)
