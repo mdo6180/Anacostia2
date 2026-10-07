@@ -83,7 +83,7 @@ class Graph:
             # Assumption: everything in the receiving directory is a tar file that has been transferred from a remote location. 
             # The tar file contains a transfer_manifest.json, a signature.json, and maybe a chunk.json
             for transfer_package in self.receiving_directory.iterdir():
-                if transfer_package.is_file() and transfer_package.suffix == ".tar":
+                if transfer_package.is_file() and transfer_package.suffix == ".tar" and transfer_package.name.startswith("transfer_"):
                     try:
                         with tarfile.open(transfer_package, "r") as tar:
                             contents = [Path(member.name) for member in tar.getmembers()]
