@@ -137,37 +137,7 @@ class Graph:
                 else:
                     log(f"Skipping non-tar file {transfer_package} in receiving directory.", level="warning", logger=self.logger)
 
-                """
-                if chunk_folder.is_dir():
-                    transfer_manifest = chunk_folder / "transfer_manifest.json"
-                    chunk_manifest = chunk_folder / "chunk_manifest.json"
-
-                    try:
-                        with (
-                            open(transfer_manifest, "r") as transfer_manifest_file,
-                            open(chunk_manifest, "r") as chunk_manifest_file
-                        ):
-                            transfer_manifest_data = json.load(transfer_manifest_file)
-                            transfer_id = transfer_manifest_data["transfer_id"]
-
-                            chunk_manifest_data = json.load(chunk_manifest_file)
-
-                            # Expected SHA-256 hash
-                            chunk_sha256 = chunk_manifest_data["chunk_info"]["sha256"]
-
-                    except FileNotFoundError:
-                        # Sometimes the chunk binary is so big that it takes the OS some time to copy over 
-                        # both the binary and the transfer manifest chunk folder.
-                        # Because the chunk takes some time to copy over, the open() command will fail and throw a FileNotFoundError
-                        # because the transfer manifest has not been transfered yet.
-
-                        # if the chunk binary has been copied successfully but the transfer manifest still hasn't arrived,
-                        # then we need to throw a warning and move onto other packages.
-                        # Eventually we will come back to check on this chunk to see if maybe the user has found the transfer manifest.
-                        print("Warning: No transfer manifest detected")
-                """
-
-            time.sleep(0.1)  # Sleep for a short duration to avoid busy waiting
+            time.sleep(0.2)  # Sleep for a short duration to avoid busy waiting
 
         log(f"Stopped monitoring receiving directory at {self.receiving_directory}.", level="info", logger=self.logger)
 
