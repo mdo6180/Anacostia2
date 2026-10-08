@@ -201,3 +201,48 @@ class ConnectionManager:
     def copy_database(self, destination: Path) -> None:
         with sqlite3.connect(destination) as destination_conn:
             self.connection.backup(destination_conn)
+
+    @contextmanager
+    def attach_database(self, alias: str, incoming_db_path: Path):
+        """
+        Context manager to attach an incoming database to the current connection.
+        This allows you to query the incoming database as if it were part of the current connection.
+
+        Usage:
+            with connection_manager.attach_database(incoming_db_path) as cursor:
+                # Perform queries on the attached database using the cursor
+        """
+
+        with self.write_cursor() as cursor:
+            try:
+                query: sql = f"ATTACH DATABASE ? AS {alias};"
+                cursor.execute(query, (str(incoming_db_path),))
+                yield
+
+            except Exception as e:
+                log(f"Error attaching database {incoming_db_path}: {e}", level="error", logger=self.logger)
+                raise
+            
+            finally:
+                query: sql = f"DETACH DATABASE {alias};"
+                cursor.execute(query)
+
+    def get_incoming_db_tables(self, alias: str, incoming_db_path: Path) -> list[str]:
+        with self.attach_database(alias, incoming_db_path):
+            with self.read_cursor() as cursor:
+                tables = cursor.execute(
+                    f"""
+                    SELECT name, sql
+                    FROM {alias}.sqlite_schema
+                    WHERE type = 'table'
+                    AND name NOT LIKE 'sqlite_%'
+                    AND sql IS NOT NULL
+                    ORDER BY name
+                    """
+                ).fetchall()
+
+        return tables
+
+
+def quote_identifier(identifier: str) -> str:
+    return '"' + identifier.replace('"', '""') + '"'

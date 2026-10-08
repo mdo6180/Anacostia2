@@ -141,23 +141,47 @@ class Graph:
 
         log(f"Stopped monitoring receiving directory at {self.receiving_directory}.", level="info", logger=self.logger)
 
+    def monitor_storage_directory(self):
+        log(f"Monitoring storage directory at {self.storage_directory}.", level="info", logger=self.logger)
+        while self._stop.is_set() is False:
+
+            for transfer_folder in self.storage_directory.iterdir():
+                if transfer_folder.is_dir() and transfer_folder.name.startswith("transfer_"):
+                    incoming_db_path = transfer_folder / "anacostia.db"
+                    alias = "incoming"
+
+                    self.conn_manager.get_incoming_db_tables(alias, incoming_db_path)
+
+            time.sleep(0.2)  # Sleep for a short duration to avoid busy waiting
+
+        log(f"Stopped monitoring storage directory at {self.storage_directory}.", level="info", logger=self.logger)
+
     def start(self):
         log(f"Starting graph '{self.name}' with {len(self.nodes)} nodes.", level="info", logger=self.logger)
         for node in self.nodes:
             node.start()
 
-        self.monitor_thread = threading.Thread(
+        self.receiving_directory_monitor_thread = threading.Thread(
             name=f"{self.name}-receiving-monitor",
             target=self.monitor_receiving_directory, 
             daemon=True
         )
-        self.monitor_thread.start()
+        self.receiving_directory_monitor_thread.start()
+
+        self.storage_directory_monitor_thread = threading.Thread(
+            name=f"{self.name}-storage-monitor",
+            target=self.monitor_storage_directory,
+            daemon=True
+        )
+        self.storage_directory_monitor_thread.start()
     
     def join(self):
         for node in self.nodes:
             node.join()
-        self.monitor_thread.join()
-    
+
+        self.receiving_directory_monitor_thread.join()
+        self.storage_directory_monitor_thread.join()
+
     def stop(self):
         log(f"Stopping graph '{self.name}' with {len(self.nodes)} nodes.", level="info", logger=self.logger)
         self._stop.set()
