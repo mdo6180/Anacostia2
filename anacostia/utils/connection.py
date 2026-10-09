@@ -215,9 +215,9 @@ class ConnectionManager:
     
 class AttachedConnectionManager:
 
-    def __init__(self, db_path: str | Path, logger: logging.Logger | None = None) -> None:
+    def __init__(self, db_path: Path, logger: logging.Logger | None = None) -> None:
 
-        self.db_path = Path(db_path)
+        self.db_path = db_path
         self.logger = logger
 
         self.connection = sqlite3.connect(
@@ -232,8 +232,15 @@ class AttachedConnectionManager:
         self.connection.execute("PRAGMA synchronous=NORMAL")
         self.connection.execute("PRAGMA busy_timeout=5000")
 
-    def close(self) -> None:
-        self.connection.close()
+    def __enter__(self) -> "AttachedConnectionManager":
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback) -> None:
+        try:
+            if self.connection.in_transaction:
+                self.connection.rollback()
+        finally:
+            self.connection.close()
 
     @contextmanager
     def read_cursor(self) -> Generator[sqlite3.Cursor, None, None]:

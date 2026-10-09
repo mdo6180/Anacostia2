@@ -151,9 +151,8 @@ class Graph:
                     incoming_db_path = transfer_folder / "anacostia.db"
                     alias = "incoming"
 
-                    attached_connection_manager = AttachedConnectionManager(self.db_path, logger=self.logger)
-                    attached_connection_manager.import_incoming_db(alias, incoming_db_path)
-                    attached_connection_manager.close()
+                    with AttachedConnectionManager(self.db_path, logger=self.logger) as attached_connection_manager:
+                        attached_connection_manager.import_incoming_db(alias, incoming_db_path)
 
             time.sleep(0.2)  # Sleep for a short duration to avoid busy waiting
 
