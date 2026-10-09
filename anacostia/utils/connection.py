@@ -1,3 +1,4 @@
+from collections.abc import Generator
 import json
 import sqlite3
 from contextlib import contextmanager
@@ -211,80 +212,137 @@ class ConnectionManager:
         with sqlite3.connect(destination) as destination_conn:
             self.connection.backup(destination_conn)
 
+    
+class AttachedConnectionManager:
+
+    def __init__(self, db_path: str | Path, logger: logging.Logger | None = None) -> None:
+
+        self.db_path = Path(db_path)
+        self.logger = logger
+
+        self.connection = sqlite3.connect(
+            str(self.db_path),
+            check_same_thread=False,
+            timeout=5.0,
+            isolation_level=None,
+            detect_types=sqlite3.PARSE_DECLTYPES
+        )
+
+        self.connection.execute("PRAGMA journal_mode=WAL")
+        self.connection.execute("PRAGMA synchronous=NORMAL")
+        self.connection.execute("PRAGMA busy_timeout=5000")
+
+    def close(self) -> None:
+        self.connection.close()
+
     @contextmanager
-    def attach_database(self, alias: str, incoming_db_path: Path):
+    def read_cursor(self) -> Generator[sqlite3.Cursor, None, None]:
         """
-        Context manager to attach an incoming database to the current connection.
-        This allows you to query the incoming database as if it were part of the current connection.
-
-        Usage:
-            with connection_manager.attach_database(incoming_db_path) as cursor:
-                # Perform queries on the attached database using the cursor
+        Read cursor. Does not manage transactions.
         """
+        cursor = self.connection.cursor()
 
-        with self.write_cursor() as cursor:
-            try:
-                query: sql = f"ATTACH DATABASE ? AS {alias};"
-                cursor.execute(query, (str(incoming_db_path),))
-                yield
+        try:
+            yield cursor
+        finally:
+            cursor.close()
 
-            except Exception as e:
-                log(f"Error attaching database {incoming_db_path}: {e}", level="error", logger=self.logger)
-                raise
-            
-            finally:
-                query: sql = f"DETACH DATABASE {alias};"
-                cursor.execute(query)
+    @contextmanager
+    def write_cursor(self) -> Generator[sqlite3.Cursor, None, None]:
+        """
+        Write cursor with an explicit transaction.
 
-    def import_incoming_db(self, alias: str, incoming_db_path: Path) -> list[str]:
+        Commits on success and rolls back on failure.
+        """
+        cursor = self.connection.cursor()
 
-        tables = []
+        try:
+            cursor.execute("BEGIN IMMEDIATE")
+
+            yield cursor
+
+            self.connection.commit()
+
+        except Exception:
+            self.connection.rollback()
+            raise
+
+        finally:
+            cursor.close()
+
+    @contextmanager
+    def attach_database(self, alias: str, incoming_db_path: Path) -> Generator[sqlite3.Cursor, None, None]:
+        """
+        Attach an incoming database and yield a cursor.
+
+        The attachment is removed when the context exits.
+        Any unfinished transaction is rolled back before
+        detaching.
+        """
         quoted_alias = quote_identifier(alias)
 
-        with self.write_cursor() as cursor:
+        with self.read_cursor() as cursor:
             attached = False
 
             try:
-                query: sql = f"ATTACH DATABASE ? AS {quoted_alias};"
                 cursor.execute(
-                    query,
+                    f"ATTACH DATABASE ? AS {quoted_alias}",
                     (str(incoming_db_path),)
                 )
                 attached = True
 
-                query: sql = f"""
-                    SELECT name, sql
-                    FROM {quoted_alias}.sqlite_schema
-                    WHERE type = 'table'
-                    AND name NOT LIKE 'sqlite_%'
-                    AND sql IS NOT NULL
-                    ORDER BY name
-                """
-                tables = cursor.execute(query).fetchall()
+                yield cursor
 
-                cursor.execute("BEGIN IMMEDIATE")
+            finally:
+                if self.connection.in_transaction:
+                    self.connection.rollback()
+
+                if attached:
+                    cursor.execute(
+                        f"DETACH DATABASE {quoted_alias}"
+                    )
+
+    def import_incoming_db(self, alias: str, incoming_db_path: Path) -> list[tuple[str, str]]:
+        """
+        Import supported tables from an incoming database
+        into the local database.
+
+        All writes are performed in one transaction.
+        """
+
+        quoted_alias = quote_identifier(alias)
+
+        with self.attach_database(alias, incoming_db_path) as cursor:
+
+            # Retrieve incoming table schemas.
+            query = f"""
+                SELECT name, sql
+                FROM {quoted_alias}.sqlite_schema
+                WHERE type = 'table'
+                  AND name NOT LIKE 'sqlite_%'
+                  AND sql IS NOT NULL
+                ORDER BY name
+            """
+
+            tables = cursor.execute(query).fetchall()
+
+            # Import data atomically.
+            with self.write_cursor() as write_cursor:
 
                 for table_name, create_sql in tables:
                     quoted_table = quote_identifier(table_name)
 
                     if table_name == "nodes":
-                        merge_query: sql = f"""
+
+                        query = f"""
                             INSERT OR IGNORE INTO main.nodes
-                            SELECT * FROM {quoted_alias}.{quoted_table}
+                            SELECT *
+                            FROM {quoted_alias}.{quoted_table}
                         """
-                        cursor.execute(merge_query)
 
-                # Commit BEFORE detaching
-                self.connection.commit()
+                        write_cursor.execute(query)
 
-            except Exception:
-                self.connection.rollback()
-                raise
-
-            finally:
-                if attached:
-                    query: sql = f"DETACH DATABASE {quoted_alias}"
-                    cursor.execute(query)
+            # write_cursor has committed before DETACH.
 
         return tables
 

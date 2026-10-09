@@ -8,7 +8,7 @@ import tarfile
 
 from anacostia.streams.base import Stream
 from anacostia.node import Stage
-from anacostia.utils.connection import ConnectionManager
+from anacostia.utils.connection import ConnectionManager, AttachedConnectionManager
 from anacostia.utils.logging import log
 from anacostia.utils.hashing import hash_file_object
 
@@ -27,9 +27,9 @@ class Graph:
         if not self.db_folder.exists():
             self.db_folder.mkdir(parents=True, exist_ok=True)
         
-        db_path = self.db_folder / 'anacostia.db'
-        if db_path.exists() is True:
-            log(f"Database found at {db_path}. Connecting...", level="info", logger=self.logger)
+        self.db_path = self.db_folder / 'anacostia.db'
+        if self.db_path.exists() is True:
+            log(f"Database found at {self.db_path}. Connecting...", level="info", logger=self.logger)
 
         self.receiving_directory = self.db_folder / 'receiving'
         if not self.receiving_directory.exists():
@@ -46,7 +46,7 @@ class Graph:
             self.storage_directory.mkdir(parents=True, exist_ok=True)
             log(f"Created storage directory at {self.storage_directory}.", level="info", logger=self.logger)
 
-        self.conn_manager = ConnectionManager(db_path, logger=self.logger)
+        self.conn_manager = ConnectionManager(self.db_path, logger=self.logger)
         self.conn_manager.create_global_tables()
 
         self.streams: List[Stream] = []
@@ -54,26 +54,26 @@ class Graph:
         for node in self.nodes:
             # initialize DB connection for each node, its consumers, and producers
             node.set_pipeline_name(self.name)  # Set the pipeline name for the node to the graph's name
-            node.set_db_path(db_path)
-            node.initialize_db_connection(db_path)
+            node.set_db_path(self.db_path)
+            node.initialize_db_connection(self.db_path)
             node.set_db_folder(self.db_folder)
             node.set_staging_directory(self.staging_directory)
             node.setup()
 
             for consumer in node.consumers:
-                consumer.set_db_path(db_path)
-                consumer.stream.initialize_db_connection(db_path)
+                consumer.set_db_path(self.db_path)
+                consumer.stream.initialize_db_connection(self.db_path)
                 consumer.stream.setup()
                 self.streams.append(consumer.stream)
                 
             for producer in node.producers:
                 producer.set_db_folder(self.db_folder)
-                producer.initialize_db_connection(db_path)
+                producer.initialize_db_connection(self.db_path)
                 producer.setup()
 
             for transport in node.transports:
                 transport.set_db_folder(self.db_folder)
-                transport.initialize_db_connection(db_path)
+                transport.initialize_db_connection(self.db_path)
                 transport.setup()
                 transport.set_pipeline_name(self.name)  # Set the pipeline name for the transport to the graph's name
 
@@ -151,7 +151,9 @@ class Graph:
                     incoming_db_path = transfer_folder / "anacostia.db"
                     alias = "incoming"
 
-                    self.conn_manager.import_incoming_db(alias, incoming_db_path)
+                    attached_connection_manager = AttachedConnectionManager(self.db_path, logger=self.logger)
+                    attached_connection_manager.import_incoming_db(alias, incoming_db_path)
+                    attached_connection_manager.close()
 
             time.sleep(0.2)  # Sleep for a short duration to avoid busy waiting
 
