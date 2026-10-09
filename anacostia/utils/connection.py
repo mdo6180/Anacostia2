@@ -288,24 +288,24 @@ class AttachedConnectionManager:
         """
         quoted_alias = quote_identifier(alias)
 
-        with self.read_cursor() as cursor:
+        with self.read_cursor() as read_cursor:
             attached = False
 
             try:
-                cursor.execute(
+                read_cursor.execute(
                     f"ATTACH DATABASE ? AS {quoted_alias}",
                     (str(incoming_db_path),)
                 )
                 attached = True
 
-                yield cursor
+                yield read_cursor
 
             finally:
                 if self.connection.in_transaction:
                     self.connection.rollback()
 
                 if attached:
-                    cursor.execute(
+                    read_cursor.execute(
                         f"DETACH DATABASE {quoted_alias}"
                     )
 
@@ -319,10 +319,10 @@ class AttachedConnectionManager:
 
         quoted_alias = quote_identifier(alias)
 
-        with self.attach_database(alias, incoming_db_path) as cursor:
+        with self.attach_database(alias, incoming_db_path) as read_cursor:
 
-            # Retrieve incoming table schemas.
-            query = f"""
+            # Retrieve incoming table names and schemas.
+            query: sql = f"""
                 SELECT name, sql
                 FROM {quoted_alias}.sqlite_schema
                 WHERE type = 'table'
@@ -330,8 +330,7 @@ class AttachedConnectionManager:
                   AND sql IS NOT NULL
                 ORDER BY name
             """
-
-            tables = cursor.execute(query).fetchall()
+            tables: list[tuple[str, str]] = read_cursor.execute(query).fetchall()
 
             # Import data atomically.
             with self.write_cursor() as write_cursor:
@@ -341,7 +340,7 @@ class AttachedConnectionManager:
 
                     if table_name == "nodes":
 
-                        query = f"""
+                        query: sql = f"""
                             INSERT OR IGNORE INTO main.nodes
                             SELECT *
                             FROM {quoted_alias}.{quoted_table}
