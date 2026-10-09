@@ -82,11 +82,15 @@ class Stage(threading.Thread, ABC):
     def set_db_path(self, db_path: str):
         self.db_path = db_path
 
+    def set_pipeline_name(self, pipeline_name: str):
+        self.pipeline_name = pipeline_name
+
     def setup(self):
         pass
 
     def initialize_db_connection(self, filename: str):
         self.conn_manager = ConnectionManager(db_path=filename, logger=self.logger)
+        self.conn_manager.insert_node(self.name, "stage", self.pipeline_name)
 
     def start_consumers(self):
         # in the future, add logic here to check if there are any primed artifacts that haven't been marked as being used in the DB 

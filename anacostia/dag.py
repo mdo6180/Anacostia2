@@ -53,6 +53,7 @@ class Graph:
 
         for node in self.nodes:
             # initialize DB connection for each node, its consumers, and producers
+            node.set_pipeline_name(self.name)  # Set the pipeline name for the node to the graph's name
             node.set_db_path(db_path)
             node.initialize_db_connection(db_path)
             node.set_db_folder(self.db_folder)
@@ -150,7 +151,7 @@ class Graph:
                     incoming_db_path = transfer_folder / "anacostia.db"
                     alias = "incoming"
 
-                    self.conn_manager.get_incoming_db_tables(alias, incoming_db_path)
+                    self.conn_manager.import_incoming_db(alias, incoming_db_path)
 
             time.sleep(0.2)  # Sleep for a short duration to avoid busy waiting
 

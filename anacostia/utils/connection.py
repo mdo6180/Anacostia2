@@ -60,9 +60,11 @@ class ConnectionManager:
         with self.write_cursor() as cursor:
             query: sql = f"""
                 CREATE TABLE IF NOT EXISTS nodes (
-                    node_name TEXT UNIQUE,
+                    node_name TEXT,
                     node_type TEXT,
-                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                    pipeline_name TEXT,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY (node_name, pipeline_name)
                 );
             """
             cursor.execute(query)
@@ -103,6 +105,13 @@ class ConnectionManager:
                 );
             """
             cursor.execute(query)
+
+    def insert_node(self, node_name: str, node_type: str, pipeline_name: str) -> None:
+        with self.write_cursor() as cursor:
+            query: sql = f"""
+                INSERT OR IGNORE INTO nodes (node_name, node_type, pipeline_name) VALUES (?, ?, ?);
+            """
+            cursor.execute(query, (node_name, node_type, pipeline_name))
         
     def start_run(self, node_name: str, run_id: int) -> int:
         try:
@@ -227,19 +236,55 @@ class ConnectionManager:
                 query: sql = f"DETACH DATABASE {alias};"
                 cursor.execute(query)
 
-    def get_incoming_db_tables(self, alias: str, incoming_db_path: Path) -> list[str]:
-        with self.attach_database(alias, incoming_db_path):
-            with self.read_cursor() as cursor:
-                tables = cursor.execute(
-                    f"""
+    def import_incoming_db(self, alias: str, incoming_db_path: Path) -> list[str]:
+
+        tables = []
+        quoted_alias = quote_identifier(alias)
+
+        with self.write_cursor() as cursor:
+            attached = False
+
+            try:
+                query: sql = f"ATTACH DATABASE ? AS {quoted_alias};"
+                cursor.execute(
+                    query,
+                    (str(incoming_db_path),)
+                )
+                attached = True
+
+                query: sql = f"""
                     SELECT name, sql
-                    FROM {alias}.sqlite_schema
+                    FROM {quoted_alias}.sqlite_schema
                     WHERE type = 'table'
                     AND name NOT LIKE 'sqlite_%'
                     AND sql IS NOT NULL
                     ORDER BY name
-                    """
-                ).fetchall()
+                """
+                tables = cursor.execute(query).fetchall()
+
+                cursor.execute("BEGIN IMMEDIATE")
+
+                for table_name, create_sql in tables:
+                    quoted_table = quote_identifier(table_name)
+
+                    if table_name == "nodes":
+                        merge_query: sql = f"""
+                            INSERT OR IGNORE INTO main.nodes
+                            SELECT * FROM {quoted_alias}.{quoted_table}
+                        """
+                        cursor.execute(merge_query)
+
+                # Commit BEFORE detaching
+                self.connection.commit()
+
+            except Exception:
+                self.connection.rollback()
+                raise
+
+            finally:
+                if attached:
+                    query: sql = f"DETACH DATABASE {quoted_alias}"
+                    cursor.execute(query)
 
         return tables
 
