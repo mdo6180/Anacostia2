@@ -280,11 +280,12 @@ class AttachedConnectionManager:
     @contextmanager
     def attached_read_cursor(self, alias: str, incoming_db_path: Path) -> Generator[sqlite3.Cursor, None, None]:
         """
-        Attach an incoming database and yield a cursor.
+        A read cursor that attaches an incoming database for the duration of the context.
+        This allows for reading from the incoming database without permanently attaching it to the main connection.
 
-        The attachment is removed when the context exits.
-        Any unfinished transaction is rolled back before
-        detaching.
+        Parameters:
+            alias: The alias to use for the attached database.
+            incoming_db_path: The path to the incoming database file.
         """
         quoted_alias = quote_identifier(alias)
 
@@ -311,9 +312,7 @@ class AttachedConnectionManager:
 
     def import_incoming_db(self, alias: str, incoming_db_path: Path) -> list[tuple[str, str]]:
         """
-        Import supported tables from an incoming database
-        into the local database.
-
+        Import supported tables from an incoming database into the local database.
         All writes are performed in one transaction.
         """
 
@@ -338,6 +337,7 @@ class AttachedConnectionManager:
                 for table_name, create_sql in tables:
                     quoted_table = quote_identifier(table_name)
 
+                    # Import nodes table into the main database, ignoring duplicates.
                     if table_name == "nodes":
 
                         query: sql = f"""
@@ -345,7 +345,6 @@ class AttachedConnectionManager:
                             SELECT *
                             FROM {quoted_alias}.{quoted_table}
                         """
-
                         write_cursor.execute(query)
 
             # write_cursor has committed before DETACH.
