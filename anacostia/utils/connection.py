@@ -278,7 +278,7 @@ class AttachedConnectionManager:
             cursor.close()
 
     @contextmanager
-    def attach_database(self, alias: str, incoming_db_path: Path) -> Generator[sqlite3.Cursor, None, None]:
+    def attached_read_cursor(self, alias: str, incoming_db_path: Path) -> Generator[sqlite3.Cursor, None, None]:
         """
         Attach an incoming database and yield a cursor.
 
@@ -319,7 +319,7 @@ class AttachedConnectionManager:
 
         quoted_alias = quote_identifier(alias)
 
-        with self.attach_database(alias, incoming_db_path) as read_cursor:
+        with self.attached_read_cursor(alias, incoming_db_path) as read_cursor:
 
             # Retrieve incoming table names and schemas.
             query: sql = f"""
