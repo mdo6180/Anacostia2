@@ -350,6 +350,15 @@ class AttachedConnectionManager:
                         """
                         write_cursor.execute(query)
 
+                    elif table_name == "artifact_usage_events":
+
+                        query: sql = f"""
+                            INSERT OR IGNORE INTO main.artifact_usage_events
+                            SELECT *
+                            FROM {quoted_alias}.{quoted_table}
+                        """
+                        write_cursor.execute(query)
+
             # write_cursor has committed before DETACH.
 
 

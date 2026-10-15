@@ -12,8 +12,9 @@ def create_file(file_path, content):
 
 
 if __name__ == "__main__":
-    pipeline2_path = Path("./testing_artifacts") / "high_side_local"
-    input_path2 = pipeline2_path / "incoming2"
+    testing_artifacts_dir = Path("./testing_artifacts")
+    pipeline2_dir = testing_artifacts_dir / "pipeline2"
+    input_path2 = pipeline2_dir / "high_side_local"
 
     for i in range(1):
         num_artifacts = len([f for f in input_path2.iterdir() if f.is_file()])
