@@ -30,7 +30,10 @@ if args.debug:
 testing_artifacts_dir = Path("./testing_artifacts")
 pipeline2_dir = testing_artifacts_dir / "pipeline2"
 db_folder_path = pipeline2_dir / ".anacostia"
-input_path1 = pipeline2_dir / "incoming1"
+high_side_path = pipeline2_dir / "high_side_local"
+
+# This is the directory where the low side artifacts will be stored after extraction from transfer package.
+low_side_path = pipeline2_dir / "low_side_local"
 
 log_path = pipeline2_dir / "pipeline2.log"
 combined_log_path = testing_artifacts_dir / "combined.log"
@@ -47,9 +50,13 @@ logger = logging.getLogger(__name__)
 
 
 # Assemble the first stage of the pipeline with a stream, consumer, producer, and transport
-stream = DirectoryStream(name="odd_folder", directory=input_path1, logger=logger)
-stream_consumer_odd = Consumer(name="stream_consumer_odd", stream=stream, logger=logger)
-stage = Stage(name="TestNode", consumers=[stream_consumer_odd], logger=logger)
+high_side_local_stream = DirectoryStream(name="high_side", directory=high_side_path, logger=logger)
+high_side_local_consumer = Consumer(name="high_side_consumer", stream=high_side_local_stream, logger=logger)
+
+low_side_local_stream = DirectoryStream(name="low_side", directory=low_side_path, logger=logger)
+low_side_local_consumer = Consumer(name="low_side_consumer", stream=low_side_local_stream, logger=logger)
+
+stage = Stage(name="TestNode", consumers=[high_side_local_consumer, low_side_local_consumer], logger=logger)
 
 # 2. Create the graph with the node
 graph = Graph(name="Pipeline2", nodes=[stage], db_folder=db_folder_path, logger=logger)
@@ -57,9 +64,9 @@ graph = Graph(name="Pipeline2", nodes=[stage], db_folder=db_folder_path, logger=
 # 3. Define the node's processing function
 @stage.entrypoint
 def node_func():
-    for bundle in stream_consumer_odd:
+    for high_side_bundle, low_side_bundle in zip(high_side_local_consumer, low_side_local_consumer):
         with stage.stage_run() as staging_directory:
-            artifact_obj = bundle[0]
+            artifact_obj = high_side_bundle[0]
             artifact_location = artifact_obj.location
             input_artifact_path = artifact_location["path"]
 

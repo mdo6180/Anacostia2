@@ -310,10 +310,13 @@ class AttachedConnectionManager:
                         f"DETACH DATABASE {quoted_alias}"
                     )
 
-    def import_incoming_db(self, alias: str, incoming_db_path: Path) -> list[tuple[str, str]]:
+    def import_incoming_db(self, alias: str, incoming_db_path: Path) -> None:
         """
         Import supported tables from an incoming database into the local database.
-        All writes are performed in one transaction.
+
+        Parameters:
+            alias: The alias to use for the attached database.
+            incoming_db_path: The path to the incoming database file.
         """
 
         quoted_alias = quote_identifier(alias)
@@ -348,8 +351,6 @@ class AttachedConnectionManager:
                         write_cursor.execute(query)
 
             # write_cursor has committed before DETACH.
-
-        return tables
 
 
 def quote_identifier(identifier: str) -> str:
