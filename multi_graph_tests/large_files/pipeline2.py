@@ -64,8 +64,7 @@ graph = Graph(name="Pipeline2", nodes=[stage], db_folder=db_folder_path, logger=
 # 3. Define the node's processing function
 @stage.entrypoint
 def node_func():
-    #for high_side_bundle, low_side_bundle in zip(high_side_local_consumer, low_side_local_consumer):
-    for high_side_bundle in high_side_local_consumer:
+    for high_side_bundle, low_side_bundle in zip(high_side_local_consumer, low_side_local_consumer):
         with stage.stage_run() as staging_directory:
             artifact_obj = high_side_bundle[0]
             artifact_location = artifact_obj.location

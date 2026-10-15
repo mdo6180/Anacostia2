@@ -268,7 +268,7 @@ class BaseTransport:
             tar_path = package_path / "data.tar"
             tar_path = create_deterministic_tar(self.data_folder_path, tar_path)
 
-            # shutil.rmtree(self.data_folder_path)  # Remove the /data folder after creating the .tar file
+            shutil.rmtree(self.data_folder_path)  # Remove the /data folder after creating the .tar file
 
             # Compress tar archive using gzip
             # transfer_7bs43.../data.tar -> transfer_7bs43.../data.tar.gz
@@ -279,7 +279,7 @@ class BaseTransport:
             gzip_sha256 = sha256_file(gzip_path)
             gzip_size = gzip_path.stat().st_size
 
-            # os.remove(tar_path)  # Remove the .tar file after creating the .tar.gz file
+            os.remove(tar_path)  # Remove the .tar file after creating the .tar.gz file
 
             # determine the number of chunks to create based on the partition size
             # Note: num_chunks = 1 means no partitioning, just one chunk

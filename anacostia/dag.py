@@ -5,6 +5,7 @@ from typing import List
 from logging import Logger
 from pathlib import Path
 import tarfile
+import os
 
 from anacostia.streams.base import Stream
 from anacostia.node import Stage
@@ -153,6 +154,14 @@ class Graph:
 
                     with AttachedConnectionManager(self.db_path, logger=self.logger) as attached_connection_manager:
                         attached_connection_manager.import_incoming_db(alias, incoming_db_path)
+
+                    # uncompress the data.tar.gz file into the transfer folder and remove the data.tar.gz file
+                    data_compress_folder = transfer_folder / "data.tar.gz"
+                    
+                    with tarfile.open(data_compress_folder, "r:gz") as tar:
+                        tar.extractall(path=transfer_folder, filter="data")
+
+                    os.remove(data_compress_folder)
 
             time.sleep(0.2)  # Sleep for a short duration to avoid busy waiting
 
