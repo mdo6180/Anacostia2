@@ -12,6 +12,7 @@ from anacostia.node import Stage
 from anacostia.utils.connection import ConnectionManager, AttachedConnectionManager
 from anacostia.utils.logging import log
 from anacostia.utils.hashing import hash_file_object
+from anacostia.utils.extraction import inspect_and_extract_tar_gz
 
 sql = str   # alias of the str type for syntax highlighting using the Python Inline Source Syntax Highlighting extension by Sam Willis in VSCode.
 
@@ -156,12 +157,12 @@ class Graph:
                         attached_connection_manager.import_incoming_db(alias, incoming_db_path)
 
                     # uncompress the data.tar.gz file into the transfer folder and remove the data.tar.gz file
-                    data_compress_folder = transfer_folder / "data.tar.gz"
+                    data_compress_path = transfer_folder / "data.tar.gz"
+                    data_folder = transfer_folder / "data"
                     
-                    with tarfile.open(data_compress_folder, "r:gz") as tar:
-                        tar.extractall(path=transfer_folder, filter="data")
+                    inspect_and_extract_tar_gz(data_compress_path, data_folder)
 
-                    os.remove(data_compress_folder)
+                    os.remove(data_compress_path)
 
             time.sleep(0.2)  # Sleep for a short duration to avoid busy waiting
 
