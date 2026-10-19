@@ -156,12 +156,9 @@ class Graph:
                     with AttachedConnectionManager(self.db_path, logger=self.logger) as attached_connection_manager:
                         attached_connection_manager.import_incoming_db(alias, incoming_db_path)
 
-                    # uncompress the data.tar.gz file into the transfer folder and remove the data.tar.gz file
                     data_compress_path = transfer_folder / "data.tar.gz"
-                    data_folder = transfer_folder / "data"
-                    
-                    inspect_and_extract_tar_gz(data_compress_path, data_folder)
 
+                    # inspect data.tar.gz file using the information in transfer_manifest.json before extracting it to the transfer folder.
                     manifest_path = transfer_folder / "transfer_manifest.json"
                     with open(manifest_path, "r") as manifest_file:
                         manifest = json.load(manifest_file)
@@ -193,6 +190,10 @@ class Graph:
                             if destination_stream_name not in streams:
                                 log(f"Destination stream '{destination_stream_name}' for artifact '{artifact['artifact_id']}' not found in graph streams. Skipping.", level="error", logger=self.logger)
                                 continue
+
+                    # uncompress the data.tar.gz file into the transfer folder and remove the data.tar.gz file
+                    data_folder = transfer_folder / "data"
+                    inspect_and_extract_tar_gz(data_compress_path, data_folder)
 
                     data_folder_path = transfer_folder / "data" / "data"
                     os.remove(data_compress_path)
