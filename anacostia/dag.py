@@ -179,6 +179,21 @@ class Graph:
                                 log(f"SHA-256 hash mismatch for data.tar.gz in transfer folder {transfer_folder}. Expected: {expected_archive_sha256}, Actual: {actual_archive_sha256}. Skipping.", level="error", logger=self.logger)
                                 continue
 
+                        streams = [stream.name for stream in self.streams]
+                        transfer_artifacts = manifest["transfer_artifacts"]
+
+                        for artifact in transfer_artifacts:
+
+                            destination_pipeline_name = artifact["destination_pipeline_name"]
+                            if destination_pipeline_name != self.name:
+                                log(f"Destination pipeline '{destination_pipeline_name}' for artifact '{artifact['artifact_id']}' does not match current graph name '{self.name}'. Skipping.", level="error", logger=self.logger)
+                                continue
+
+                            destination_stream_name = artifact["destination_stream"]
+                            if destination_stream_name not in streams:
+                                log(f"Destination stream '{destination_stream_name}' for artifact '{artifact['artifact_id']}' not found in graph streams. Skipping.", level="error", logger=self.logger)
+                                continue
+
                     data_folder_path = transfer_folder / "data" / "data"
                     os.remove(data_compress_path)
 

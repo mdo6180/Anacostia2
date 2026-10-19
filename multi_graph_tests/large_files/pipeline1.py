@@ -104,8 +104,8 @@ def node_func():
                     artifact_hash=committed_artifact.hash,
                     src_path=committed_path,
                     dest_path=data_folder_path / committed_path.name,
-                    dest_pipeline_name="some_pipeline_name",  # This is a placeholder; replace with the actual destination pipeline name if needed
-                    dest_stream="some_other_stream"  # This is a placeholder; replace with the actual destination stream name if needed
+                    dest_pipeline_name="Pipeline2",  
+                    dest_stream="low_side"  
                 )
 
             # Copy the transfer package to pipeline2_receiving_dir
