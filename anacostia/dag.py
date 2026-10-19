@@ -165,11 +165,16 @@ class Graph:
                     manifest_path = transfer_folder / "transfer_manifest.json"
                     with open(manifest_path, "r") as manifest_file:
                         manifest = json.load(manifest_file)
-                        expected_archive_sha256 = manifest["archive_sha256"]
 
+                        expected_archive_size = manifest["archive_size"]
+                        actual_archive_size = data_compress_path.stat().st_size
+                        if actual_archive_size != expected_archive_size:
+                            log(f"Size mismatch for data.tar.gz in transfer folder {transfer_folder}. Expected: {expected_archive_size}, Actual: {actual_archive_size}. Skipping.", level="error", logger=self.logger)
+                            continue
+
+                        expected_archive_sha256 = manifest["archive_sha256"]
                         with open(data_compress_path, "rb") as f:
                             actual_archive_sha256 = hash_file_object(f)
-
                             if actual_archive_sha256 != expected_archive_sha256:
                                 log(f"SHA-256 hash mismatch for data.tar.gz in transfer folder {transfer_folder}. Expected: {expected_archive_sha256}, Actual: {actual_archive_sha256}. Skipping.", level="error", logger=self.logger)
                                 continue
