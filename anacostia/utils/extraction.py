@@ -19,7 +19,103 @@ class ArchiveEntry:
     size: int
 
 
-def inspect_and_extract_tar_gz(
+def _validate_member_path(member_name: str) -> PurePosixPath:
+    """Validate and normalize one tar member path."""
+    if not member_name:
+        raise UnsafeArchiveError("Archive contains an empty path")
+
+    if "\x00" in member_name:
+        raise UnsafeArchiveError(
+            f"Archive path contains a NUL byte: {member_name!r}"
+        )
+
+    # Tar paths are POSIX paths. Rejecting backslashes avoids ambiguous
+    # behavior if the extracted directory is later processed on Windows.
+    if "\\" in member_name:
+        raise UnsafeArchiveError(
+            f"Backslashes are not permitted in archive paths: "
+            f"{member_name!r}"
+        )
+
+    path = PurePosixPath(member_name)
+
+    if path.is_absolute():
+        raise UnsafeArchiveError(
+            f"Absolute archive path is not permitted: {member_name!r}"
+        )
+
+    # Ignore harmless leading "./" components while retaining a canonical
+    # representation for duplicate detection.
+    components = tuple(
+        component
+        for component in path.parts
+        if component not in ("", ".")
+    )
+
+    if not components:
+        raise UnsafeArchiveError(
+            f"Archive path does not identify a file or directory: "
+            f"{member_name!r}"
+        )
+
+    if ".." in components:
+        raise UnsafeArchiveError(
+            f"Parent traversal is not permitted: {member_name!r}"
+        )
+
+    # Reject names that can be interpreted as Windows drive paths.
+    if ":" in components[0]:
+        raise UnsafeArchiveError(
+            f"Drive-like archive path is not permitted: {member_name!r}"
+        )
+
+    return PurePosixPath(*components)
+
+
+def _validate_path_relationships(
+    validated_paths: dict[PurePosixPath, str],
+) -> None:
+    """
+    Reject archives that place descendants beneath regular files.
+
+    Example of an invalid archive:
+
+        models             # regular file
+        models/model.bin   # child beneath that regular file
+    """
+    for path in validated_paths:
+        parents = path.parents
+
+        for parent in parents:
+            if parent == PurePosixPath("."):
+                continue
+
+            parent_type = validated_paths.get(parent)
+
+            if parent_type == "file":
+                raise UnsafeArchiveError(
+                    f"Archive path {path.as_posix()!r} is located beneath "
+                    f"regular file {parent.as_posix()!r}"
+                )
+
+
+def _ensure_path_is_within_directory(
+    candidate: Path,
+    directory: Path,
+) -> None:
+    """Ensure a filesystem path resolves beneath the expected directory."""
+    directory_resolved = directory.resolve()
+    candidate_resolved = candidate.resolve(strict=False)
+
+    try:
+        candidate_resolved.relative_to(directory_resolved)
+    except ValueError as exc:
+        raise UnsafeArchiveError(
+            f"Extraction path escapes the destination: {candidate}"
+        ) from exc
+
+
+def inspect_tar_gz(
     archive_path: str | Path,
     destination: str | Path,
     *,
@@ -201,6 +297,52 @@ def inspect_and_extract_tar_gz(
 
     _validate_path_relationships(validated_paths)
 
+    return inspected_entries
+
+
+def extract_tar_gz(
+    archive_path: str | Path,
+    destination: str | Path,
+    *,
+    copy_buffer_size: int = 1024**2,     # 1 MiB
+) -> list[ArchiveEntry]:
+    """
+    Validate and safely extract a .tar.gz archive.
+
+    Security policy:
+    - Only regular files and directories are allowed.
+    - Absolute paths are rejected.
+    - '..' traversal is rejected.
+    - Backslashes and NUL bytes in names are rejected.
+    - Symbolic links and hard links are rejected.
+    - Device files, FIFOs, and other special entries are rejected.
+    - Duplicate paths are rejected.
+    - Existing destinations are never overwritten.
+    - File-count and expanded-size limits are enforced.
+    - Archive permissions, ownership, and timestamps are not restored.
+
+    The archive is first validated in full. Extraction then occurs inside
+    a temporary staging directory. The staging directory is renamed to the
+    final destination only after every file has been written successfully.
+
+    Returns:
+        Metadata describing the validated archive entries.
+
+    Raises:
+        FileNotFoundError:
+            If the archive does not exist.
+
+        FileExistsError:
+            If the destination already exists.
+
+        UnsafeArchiveError:
+            If the archive violates the security policy.
+
+        tarfile.TarError:
+            If the input is not a valid gzip-compressed tar archive.
+    """
+    destination_parent = Path(destination).parent.resolve()
+    
     # ------------------------------------------------------------------
     # Phase 2: extract approved entries into an isolated staging folder.
     # ------------------------------------------------------------------
@@ -288,101 +430,3 @@ def inspect_and_extract_tar_gz(
     except Exception:
         shutil.rmtree(staging_root, ignore_errors=True)
         raise
-
-    return inspected_entries
-
-
-def _validate_member_path(member_name: str) -> PurePosixPath:
-    """Validate and normalize one tar member path."""
-    if not member_name:
-        raise UnsafeArchiveError("Archive contains an empty path")
-
-    if "\x00" in member_name:
-        raise UnsafeArchiveError(
-            f"Archive path contains a NUL byte: {member_name!r}"
-        )
-
-    # Tar paths are POSIX paths. Rejecting backslashes avoids ambiguous
-    # behavior if the extracted directory is later processed on Windows.
-    if "\\" in member_name:
-        raise UnsafeArchiveError(
-            f"Backslashes are not permitted in archive paths: "
-            f"{member_name!r}"
-        )
-
-    path = PurePosixPath(member_name)
-
-    if path.is_absolute():
-        raise UnsafeArchiveError(
-            f"Absolute archive path is not permitted: {member_name!r}"
-        )
-
-    # Ignore harmless leading "./" components while retaining a canonical
-    # representation for duplicate detection.
-    components = tuple(
-        component
-        for component in path.parts
-        if component not in ("", ".")
-    )
-
-    if not components:
-        raise UnsafeArchiveError(
-            f"Archive path does not identify a file or directory: "
-            f"{member_name!r}"
-        )
-
-    if ".." in components:
-        raise UnsafeArchiveError(
-            f"Parent traversal is not permitted: {member_name!r}"
-        )
-
-    # Reject names that can be interpreted as Windows drive paths.
-    if ":" in components[0]:
-        raise UnsafeArchiveError(
-            f"Drive-like archive path is not permitted: {member_name!r}"
-        )
-
-    return PurePosixPath(*components)
-
-
-def _validate_path_relationships(
-    validated_paths: dict[PurePosixPath, str],
-) -> None:
-    """
-    Reject archives that place descendants beneath regular files.
-
-    Example of an invalid archive:
-
-        models             # regular file
-        models/model.bin   # child beneath that regular file
-    """
-    for path in validated_paths:
-        parents = path.parents
-
-        for parent in parents:
-            if parent == PurePosixPath("."):
-                continue
-
-            parent_type = validated_paths.get(parent)
-
-            if parent_type == "file":
-                raise UnsafeArchiveError(
-                    f"Archive path {path.as_posix()!r} is located beneath "
-                    f"regular file {parent.as_posix()!r}"
-                )
-
-
-def _ensure_path_is_within_directory(
-    candidate: Path,
-    directory: Path,
-) -> None:
-    """Ensure a filesystem path resolves beneath the expected directory."""
-    directory_resolved = directory.resolve()
-    candidate_resolved = candidate.resolve(strict=False)
-
-    try:
-        candidate_resolved.relative_to(directory_resolved)
-    except ValueError as exc:
-        raise UnsafeArchiveError(
-            f"Extraction path escapes the destination: {candidate}"
-        ) from exc

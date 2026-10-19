@@ -12,7 +12,7 @@ from anacostia.node import Stage
 from anacostia.utils.connection import ConnectionManager, AttachedConnectionManager
 from anacostia.utils.logging import log
 from anacostia.utils.hashing import hash_file_object
-from anacostia.utils.extraction import inspect_and_extract_tar_gz
+from anacostia.utils.extraction import inspect_tar_gz, extract_tar_gz
 
 sql = str   # alias of the str type for syntax highlighting using the Python Inline Source Syntax Highlighting extension by Sam Willis in VSCode.
 
@@ -193,7 +193,7 @@ class Graph:
 
                     # uncompress the data.tar.gz file into the transfer folder and remove the data.tar.gz file
                     data_folder = transfer_folder / "data"
-                    inspect_and_extract_tar_gz(data_compress_path, data_folder)
+                    inspected_entries = inspect_tar_gz(data_compress_path, data_folder)
 
                     data_folder_path = transfer_folder / "data" / "data"
                     os.remove(data_compress_path)
