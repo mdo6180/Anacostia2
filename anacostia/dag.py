@@ -125,9 +125,9 @@ class Graph:
                                     log(f"SHA-256 hash mismatch for transfer package {transfer_package}. Expected: {expected_sha256}, Actual: {actual_sha256}. Skipping.", level="error", logger=self.logger)
                                     continue
 
-                            log(f"Extracting transfer package {transfer_package} to storage directory.", level="info", logger=self.logger)
-                            tar.extractall(path=self.storage_directory)
-                            log(f"Extracted transfer package {transfer_package} to storage directory.", level="info", logger=self.logger)
+                            log(f"Extracting transfer package {transfer_package} to staging directory.", level="info", logger=self.logger)
+                            tar.extractall(path=self.staging_directory)
+                            log(f"Extracted transfer package {transfer_package} to staging directory.", level="info", logger=self.logger)
 
                     except Exception as e:
                         log(f"Failed to extract transfer package {transfer_package}: {e}", level="error", logger=self.logger)
@@ -144,11 +144,11 @@ class Graph:
 
         log(f"Stopped monitoring receiving directory at {self.receiving_directory}.", level="info", logger=self.logger)
 
-    def monitor_storage_directory(self):
-        log(f"Monitoring storage directory at {self.storage_directory}.", level="info", logger=self.logger)
+    def monitor_staging_directory(self):
+        log(f"Monitoring staging directory at {self.staging_directory}.", level="info", logger=self.logger)
         while self._stop.is_set() is False:
 
-            for transfer_folder in self.storage_directory.iterdir():
+            for transfer_folder in self.staging_directory.iterdir():
                 if transfer_folder.is_dir() and transfer_folder.name.startswith("transfer_"):
                     incoming_db_path = transfer_folder / "anacostia.db"
                     alias = "incoming"
@@ -184,7 +184,7 @@ class Graph:
 
             time.sleep(0.2)  # Sleep for a short duration to avoid busy waiting
 
-        log(f"Stopped monitoring storage directory at {self.storage_directory}.", level="info", logger=self.logger)
+        log(f"Stopped monitoring staging directory at {self.staging_directory}.", level="info", logger=self.logger)
 
     def start(self):
         log(f"Starting graph '{self.name}' with {len(self.nodes)} nodes.", level="info", logger=self.logger)
@@ -198,19 +198,19 @@ class Graph:
         )
         self.receiving_directory_monitor_thread.start()
 
-        self.storage_directory_monitor_thread = threading.Thread(
-            name=f"{self.name}-storage-monitor",
-            target=self.monitor_storage_directory,
+        self.staging_directory_monitor_thread = threading.Thread(
+            name=f"{self.name}-staging-monitor",
+            target=self.monitor_staging_directory,
             daemon=True
         )
-        self.storage_directory_monitor_thread.start()
+        self.staging_directory_monitor_thread.start()
     
     def join(self):
         for node in self.nodes:
             node.join()
 
         self.receiving_directory_monitor_thread.join()
-        self.storage_directory_monitor_thread.join()
+        self.staging_directory_monitor_thread.join()
 
     def stop(self):
         log(f"Stopping graph '{self.name}' with {len(self.nodes)} nodes.", level="info", logger=self.logger)
