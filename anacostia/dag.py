@@ -162,6 +162,19 @@ class Graph:
                     
                     inspect_and_extract_tar_gz(data_compress_path, data_folder)
 
+                    manifest_path = transfer_folder / "transfer_manifest.json"
+                    with open(manifest_path, "r") as manifest_file:
+                        manifest = json.load(manifest_file)
+                        expected_archive_sha256 = manifest["archive_sha256"]
+
+                        with open(data_compress_path, "rb") as f:
+                            actual_archive_sha256 = hash_file_object(f)
+
+                            if actual_archive_sha256 != expected_archive_sha256:
+                                log(f"SHA-256 hash mismatch for data.tar.gz in transfer folder {transfer_folder}. Expected: {expected_archive_sha256}, Actual: {actual_archive_sha256}. Skipping.", level="error", logger=self.logger)
+                                continue
+
+                    data_folder_path = transfer_folder / "data" / "data"
                     os.remove(data_compress_path)
 
             time.sleep(0.2)  # Sleep for a short duration to avoid busy waiting
