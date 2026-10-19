@@ -118,11 +118,9 @@ def _ensure_path_is_within_directory(
 def inspect_tar_gz(
     archive_path: str | Path,
     destination: str | Path,
-    *,
     max_entries: int = 100_000,
     max_total_size: int = 20 * 1024**3,  # 20 GiB
     max_file_size: int = 5 * 1024**3,    # 5 GiB
-    copy_buffer_size: int = 1024**2,     # 1 MiB
 ) -> list[ArchiveEntry]:
     """
     Validate and safely extract a .tar.gz archive.
@@ -142,6 +140,13 @@ def inspect_tar_gz(
     The archive is first validated in full. Extraction then occurs inside
     a temporary staging directory. The staging directory is renamed to the
     final destination only after every file has been written successfully.
+
+    Args:
+        archive_path: Path to the .tar.gz archive to be extracted.
+        destination: Path where the contents of the archive will be extracted.
+        max_entries: Maximum number of entries allowed in the archive.
+        max_total_size: Maximum total size of all entries in the archive.
+        max_file_size: Maximum size of any single file in the archive.
 
     Returns:
         Metadata describing the validated archive entries.
@@ -179,12 +184,6 @@ def inspect_tar_gz(
 
     if max_file_size <= 0:
         raise ValueError("max_file_size must be greater than zero")
-
-    if copy_buffer_size <= 0:
-        raise ValueError("copy_buffer_size must be greater than zero")
-
-    destination_parent = destination.parent.resolve()
-    destination_parent.mkdir(parents=True, exist_ok=True)
 
     inspected_entries: list[ArchiveEntry] = []
     validated_paths: dict[PurePosixPath, str] = {}
@@ -303,7 +302,6 @@ def inspect_tar_gz(
 def extract_tar_gz(
     archive_path: str | Path,
     destination: str | Path,
-    *,
     copy_buffer_size: int = 1024**2,     # 1 MiB
 ) -> list[ArchiveEntry]:
     """
@@ -325,6 +323,11 @@ def extract_tar_gz(
     a temporary staging directory. The staging directory is renamed to the
     final destination only after every file has been written successfully.
 
+    Args:
+        archive_path: Path to the .tar.gz archive to be extracted.
+        destination: Path where the contents of the archive will be extracted.
+        copy_buffer_size: Size of the buffer used for copying files during extraction.
+
     Returns:
         Metadata describing the validated archive entries.
 
@@ -341,7 +344,12 @@ def extract_tar_gz(
         tarfile.TarError:
             If the input is not a valid gzip-compressed tar archive.
     """
-    destination_parent = Path(destination).parent.resolve()
+
+    if copy_buffer_size <= 0:
+        raise ValueError("copy_buffer_size must be greater than zero")
+
+    destination_parent = destination.parent.resolve()
+    destination_parent.mkdir(parents=True, exist_ok=True)
     
     # ------------------------------------------------------------------
     # Phase 2: extract approved entries into an isolated staging folder.
