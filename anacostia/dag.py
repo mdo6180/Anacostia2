@@ -1,4 +1,5 @@
 import json
+import shutil
 import threading
 import time
 from typing import List
@@ -203,9 +204,8 @@ class Graph:
 
                         # extract_tar_gz unpacked the data.tar.gz file into a "data" folder inside the transfer folder. 
                         # The artifacts are now located in transfer_folder/data/data
-                        data_folder_path = transfer_folder / "data" / "data"
                         for artifact_entry in transfer_artifacts:
-                            artifact_location = data_folder_path / artifact_entry["filepath"]
+                            artifact_location = data_folder / "data" / artifact_entry["filepath"]
 
                             for stream in self.streams:
                                 if stream.name == artifact_entry["destination_stream"]:
@@ -219,6 +219,16 @@ class Graph:
                                         artifact_location.rename(destination_path)
                                         log(f"Moved artifact '{artifact_entry['filepath']}' to stream '{stream.name}' from transfer folder '{transfer_folder}'.", level="info", logger=self.logger)
                                         break
+
+                        # remove data folder after moving all artifacts to their respective streams
+                        shutil.rmtree(data_folder)
+
+                        # remove sqlite database file after moving all artifacts to their respective streams
+                        os.remove(incoming_db_path)
+
+                        # move tranfer folder to storage directory after moving all artifacts to their respective streams
+                        storage_transfer_folder = self.storage_directory / transfer_folder.name
+                        transfer_folder.rename(storage_transfer_folder)
 
             time.sleep(0.2)  # Sleep for a short duration to avoid busy waiting
 
