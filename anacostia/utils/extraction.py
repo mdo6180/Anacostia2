@@ -117,13 +117,12 @@ def _ensure_path_is_within_directory(
 
 def inspect_tar_gz(
     archive_path: str | Path,
-    destination: str | Path,
     max_entries: int = 100_000,
     max_total_size: int = 20 * 1024**3,  # 20 GiB
     max_file_size: int = 5 * 1024**3,    # 5 GiB
 ) -> list[ArchiveEntry]:
     """
-    Validate and safely extract a .tar.gz archive.
+    Validate and inspect a .tar.gz archive.
 
     Security policy:
     - Only regular files and directories are allowed.
@@ -137,13 +136,8 @@ def inspect_tar_gz(
     - File-count and expanded-size limits are enforced.
     - Archive permissions, ownership, and timestamps are not restored.
 
-    The archive is first validated in full. Extraction then occurs inside
-    a temporary staging directory. The staging directory is renamed to the
-    final destination only after every file has been written successfully.
-
     Args:
         archive_path: Path to the .tar.gz archive to be extracted.
-        destination: Path where the contents of the archive will be extracted.
         max_entries: Maximum number of entries allowed in the archive.
         max_total_size: Maximum total size of all entries in the archive.
         max_file_size: Maximum size of any single file in the archive.
@@ -155,9 +149,6 @@ def inspect_tar_gz(
         FileNotFoundError:
             If the archive does not exist.
 
-        FileExistsError:
-            If the destination already exists.
-
         UnsafeArchiveError:
             If the archive violates the security policy.
 
@@ -165,16 +156,9 @@ def inspect_tar_gz(
             If the input is not a valid gzip-compressed tar archive.
     """
     archive_path = Path(archive_path)
-    destination = Path(destination)
 
     if not archive_path.is_file():
         raise FileNotFoundError(f"Archive not found: {archive_path}")
-
-    if destination.exists():
-        raise FileExistsError(
-            f"Destination already exists; refusing to overwrite it: "
-            f"{destination}"
-        )
 
     if max_entries <= 0:
         raise ValueError("max_entries must be greater than zero")

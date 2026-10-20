@@ -8,6 +8,7 @@ import tarfile
 import os
 
 from anacostia.streams.base import Stream
+from anacostia.streams.filesystem import DirectoryStream
 from anacostia.node import Stage
 from anacostia.utils.connection import ConnectionManager, AttachedConnectionManager
 from anacostia.utils.logging import log
@@ -191,12 +192,33 @@ class Graph:
                                 log(f"Destination stream '{destination_stream_name}' for artifact '{artifact['artifact_id']}' not found in graph streams. Skipping.", level="error", logger=self.logger)
                                 continue
 
-                    # uncompress the data.tar.gz file into the transfer folder and remove the data.tar.gz file
-                    data_folder = transfer_folder / "data"
-                    inspected_entries = inspect_tar_gz(data_compress_path, data_folder)
+                        # inspect the data.tar.gz file to ensure it meets the security policy and size limits before extracting it.
+                        inspected_entries = inspect_tar_gz(data_compress_path)
 
-                    data_folder_path = transfer_folder / "data" / "data"
-                    os.remove(data_compress_path)
+                        # uncompress the data.tar.gz file into the transfer folder and remove the data.tar.gz file
+                        data_folder = transfer_folder / "data"
+                        extract_tar_gz(data_compress_path, data_folder)
+
+                        os.remove(data_compress_path)
+
+                        # extract_tar_gz unpacked the data.tar.gz file into a "data" folder inside the transfer folder. 
+                        # The artifacts are now located in transfer_folder/data/data
+                        data_folder_path = transfer_folder / "data" / "data"
+                        for artifact_entry in transfer_artifacts:
+                            artifact_location = data_folder_path / artifact_entry["filepath"]
+
+                            for stream in self.streams:
+                                if stream.name == artifact_entry["destination_stream"]:
+                                    if not isinstance(stream, DirectoryStream):
+                                        log(f"Stream '{stream.name}' is not a DirectoryStream. Cannot add artifact '{artifact_entry['artifact_id']}' to it.", level="error", logger=self.logger)
+                                        continue
+                                    else:
+                                        stream_folder = stream.directory
+                                        destination_path = stream_folder / artifact_entry["filepath"]
+                                        destination_path.parent.mkdir(parents=True, exist_ok=True)
+                                        artifact_location.rename(destination_path)
+                                        log(f"Moved artifact '{artifact_entry['filepath']}' to stream '{stream.name}' from transfer folder '{transfer_folder}'.", level="info", logger=self.logger)
+                                        break
 
             time.sleep(0.2)  # Sleep for a short duration to avoid busy waiting
 
