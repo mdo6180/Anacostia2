@@ -75,7 +75,7 @@ class ConnectionManager:
                     artifact_hash TEXT,
                     node_name TEXT,
                     run_id INTEGER DEFAULT NULL,
-                    state TEXT CHECK (state IN ('created', 'committed', 'detected', 'primed', 'using', 'used', 'ignored', 'sent', 'received', 'packaged')),
+                    state TEXT CHECK (state IN ('created', 'committed', 'detected', 'primed', 'using', 'used', 'ignored', 'sent', 'received', 'packaged', 'unpackaged', 'deleted')) NOT NULL,
                     details TEXT DEFAULT NULL CHECK (details IS NULL OR json_valid(details)),
                     timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
                 );

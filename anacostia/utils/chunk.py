@@ -15,8 +15,6 @@ class TransferArtifact:
     artifact_hash: str
     filepath: str
     size_bytes: int
-    source_pipeline_name: str
-    destination_pipeline_name: str
     destination_stream: str = None  # Optional field for the destination stream name (database will not have this field)
 
 @dataclass(frozen=True)
@@ -26,6 +24,8 @@ class TransferManifest:
     archive_size: int
     archive_sha256: str
     chunk_count: int
+    source_pipeline_name: str
+    destination_pipeline_name: str
     previous_transfer_id: str = None  # Optional field for the previous transfer ID
     previous_transfer_sha256: str = None  # Optional field for the previous transfer SHA256
 

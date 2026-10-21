@@ -28,6 +28,9 @@ class Graph:
         self.logger = logger
         self._stop = threading.Event()
 
+        self.global_usage_table_name = "artifact_usage_events"
+        self.provenance_graph_table_name = "provenance_graph"
+
         if not self.db_folder.exists():
             self.db_folder.mkdir(parents=True, exist_ok=True)
         
@@ -127,9 +130,40 @@ class Graph:
                                     log(f"SHA-256 hash mismatch for transfer package {transfer_package}. Expected: {expected_sha256}, Actual: {actual_sha256}. Skipping.", level="error", logger=self.logger)
                                     continue
 
+                                # Rewind the stream pointer back to the start of the file
+                                manifest_file.seek(0)
+
+                                manifest = json.load(manifest_file)
+                                destination_pipeline_name = manifest["destination_pipeline_name"]
+                                if destination_pipeline_name != self.name:
+                                    log(f"Destination pipeline '{destination_pipeline_name}' does not match current graph name '{self.name}'. Skipping.", level="error", logger=self.logger)
+                                    continue
+
+                                '''
+                                # If the transfer package is valid, we can extract it to the staging directory and record its usage in the global_usage table.
+                                with self.conn_manager.write_cursor() as cursor:
+                                    query: sql = f"""
+                                        INSERT OR IGNORE INTO {self.global_usage_table_name} 
+                                        (artifact_hash, node_name, state, details) 
+                                        VALUES (?, ?, ?, ?);
+                                    """
+                                    cursor.execute(query, (actual_sha256, self.name, "received", {"transfer_package": transfer_package}))
+                                '''
+
                             log(f"Extracting transfer package {transfer_package} to staging directory.", level="info", logger=self.logger)
                             tar.extractall(path=self.staging_directory)
                             log(f"Extracted transfer package {transfer_package} to staging directory.", level="info", logger=self.logger)
+
+                            '''
+                            # After extracting, we can update the artifact usage state to "unpackaged" in the global_usage_table
+                            with self.conn_manager.write_cursor() as cursor:
+                                query: sql = f"""
+                                    INSERT OR IGNORE INTO {self.global_usage_table_name} 
+                                    (artifact_hash, node_name, state, details) 
+                                    VALUES (?, ?, ?, ?);
+                                """
+                                cursor.execute(query, (actual_sha256, self.name, "unpackaged", {"transfer_package": transfer_package}))
+                            '''
 
                     except Exception as e:
                         log(f"Failed to extract transfer package {transfer_package}: {e}", level="error", logger=self.logger)
@@ -182,12 +216,6 @@ class Graph:
                         transfer_artifacts = manifest["transfer_artifacts"]
 
                         for artifact in transfer_artifacts:
-
-                            destination_pipeline_name = artifact["destination_pipeline_name"]
-                            if destination_pipeline_name != self.name:
-                                log(f"Destination pipeline '{destination_pipeline_name}' for artifact '{artifact['artifact_id']}' does not match current graph name '{self.name}'. Skipping.", level="error", logger=self.logger)
-                                continue
-
                             destination_stream_name = artifact["destination_stream"]
                             if destination_stream_name not in streams:
                                 log(f"Destination stream '{destination_stream_name}' for artifact '{artifact['artifact_id']}' not found in graph streams. Skipping.", level="error", logger=self.logger)
