@@ -53,7 +53,9 @@ logger = logging.getLogger(__name__)
 stream = DirectoryStream(name="odd_folder", directory=input_path1, logger=logger)
 stream_consumer_odd = Consumer(name="stream_consumer_odd", stream=stream, logger=logger)
 producer = Producer(name="test_producer", directory=producer_path, logger=logger)
-simple_transport = BaseTransport(name="combined_transport", transfers_directory=transport_package_dir, logger=logger)
+simple_transport = BaseTransport(
+    name="combined_transport", transfers_directory=transport_package_dir, destination_pipeline_name="Pipeline2", logger=logger
+)
 stage = Stage(name="TestNode", consumers=[stream_consumer_odd], producers=[producer], transports=[simple_transport], logger=logger)
 
 # 2. Create the graph with the node
@@ -104,7 +106,6 @@ def node_func():
                     artifact_hash=committed_artifact.hash,
                     src_path=committed_path,
                     dest_path=data_folder_path / committed_path.name,
-                    dest_pipeline_name="Pipeline2",  
                     dest_stream="low_side"  
                 )
 

@@ -24,6 +24,7 @@ class BaseTransport:
     def __init__(
         self, name: str, 
         transfers_directory: Path, 
+        destination_pipeline_name: str,
         hash_chunk_size: int = -1, 
         logger: Logger = None
     ):
@@ -40,6 +41,7 @@ class BaseTransport:
         """
 
         self.name = name
+        self.destination_pipeline_name = destination_pipeline_name
         self.hash_chunk_size = hash_chunk_size
         self.logger = logger
         self.run_id = 0
@@ -117,6 +119,12 @@ class BaseTransport:
                 chunk_count INTEGER GENERATED ALWAYS AS (
                     json_extract(manifest, '$.chunk_count')
                 ) STORED,
+                source_pipeline_name TEXT GENERATED ALWAYS AS (
+                    json_extract(manifest, '$.source_pipeline_name')    
+                ) STORED,
+                destination_pipeline_name TEXT GENERATED ALWAYS AS (
+                    json_extract(manifest, '$.destination_pipeline_name')    
+                ) STORED,
                 previous_transfer_id TEXT GENERATED ALWAYS AS (
                     json_extract(manifest, '$.previous_transfer_id')
                 ) STORED,
@@ -144,8 +152,9 @@ class BaseTransport:
             """
             cursor.execute(query)
 
+            # Trigger to automatically insert transfer artifacts when a new transfer is added
+            # Consider removing this trigger and manually inserting into transfer_artifacts_table
             query: sql = f"""
-            /* Trigger to automatically insert transfer artifacts when a new transfer is added */
             CREATE TRIGGER insert_transfer_artifacts
             AFTER INSERT ON {self.transfers_table}
             BEGIN
@@ -162,8 +171,8 @@ class BaseTransport:
                     json_extract(artifact.value, '$.artifact_hash'),
                     json_extract(artifact.value, '$.filepath'),
                     json_extract(artifact.value, '$.size_bytes'),
-                    json_extract(artifact.value, '$.source_pipeline_name'),
-                    json_extract(artifact.value, '$.destination_pipeline_name'),
+                    NEW.source_pipeline_name,
+                    NEW.destination_pipeline_name,
                     json_extract(artifact.value, '$.destination_stream'),
                     NEW.manifest_hash
                 FROM json_each(NEW.manifest, '$.transfer_artifacts') AS artifact;
@@ -294,6 +303,8 @@ class BaseTransport:
                 archive_size=gzip_size,
                 archive_sha256=gzip_sha256,
                 chunk_count=num_chunks, 
+                source_pipeline_name=self.pipeline_name,
+                destination_pipeline_name=self.destination_pipeline_name,
                 previous_transfer_id=None,      # can be set if needed
                 previous_transfer_sha256=None   # can be set if needed
             )
@@ -344,7 +355,7 @@ class BaseTransport:
             # Clean up if necessary
             pass
     
-    def add_to_package(self, artifact_hash: str, src_path: Path, dest_path: Path, dest_pipeline_name: str, dest_stream: str) -> Artifact:
+    def add_to_package(self, artifact_hash: str, src_path: Path, dest_path: Path, dest_stream: str) -> Artifact:
         """
         Add an artifact to the transfer package by moving it from the staging directory to the final directory,
         hashing it, and registering it in the local and global databases.
@@ -380,8 +391,6 @@ class BaseTransport:
             artifact_hash=artifact_hash,
             filepath=filepath,
             size_bytes=dest_path.stat().st_size,
-            source_pipeline_name=self.pipeline_name,
-            destination_pipeline_name=dest_pipeline_name,
             destination_stream=dest_stream
         ))
 
