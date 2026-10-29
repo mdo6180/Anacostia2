@@ -15,6 +15,7 @@ from anacostia.utils.connection import ConnectionManager
 from anacostia.consumer import Consumer
 from anacostia.producer import Producer
 from anacostia.transports.local import FileSystemTransport
+from anacostia.transports.base import BaseTransport
 from anacostia.utils.logging import log
 
 sql = str   # alias of the str type for syntax highlighting using the Python Inline Source Syntax Highlighting extension by Sam Willis in VSCode.
@@ -27,13 +28,13 @@ class Stage(threading.Thread, ABC):
         name: str, 
         consumers: List[Consumer], 
         producers: List[Producer] = None, 
-        transports: List[FileSystemTransport] = None, 
+        transports: List[BaseTransport] = None, 
         staging_directory: Path = None,
         logger: Logger = None
     ):
         self.consumers = consumers
         self.producers: List[Producer] = producers if producers is not None else []
-        self.transports: List[FileSystemTransport] = transports if transports is not None else []
+        self.transports: List[BaseTransport] = transports if transports is not None else []
         self.run_id = 0
         self.logger = logger
 
@@ -115,23 +116,25 @@ class Stage(threading.Thread, ABC):
             transport.set_run_id(run_id)
 
     def start_using_artifact(self, artifact_hash: str) -> None:
-        with self.conn_manager.write_cursor() as cursor:
-            query: sql = f"""
-                INSERT OR IGNORE INTO {self.global_usage_table_name} 
-                (artifact_hash, node_name, run_id, state, details) 
-                VALUES (?, ?, ?, ?, ?);
-            """
-            cursor.execute(query, (artifact_hash, self.name, self.run_id, "using", None))
-    
+        self.conn_manager.insert_run_event(
+            artifact_hash=artifact_hash,
+            node_name=self.name,
+            pipeline_name=self.pipeline_name,
+            run_id=self.run_id,
+            state="using",
+            details=None
+        )
+        
     def finished_using_artifact(self, artifact_hash: str) -> None:
-        with self.conn_manager.write_cursor() as cursor:
-            query: sql = f"""
-                INSERT OR IGNORE INTO {self.global_usage_table_name} 
-                (artifact_hash, node_name, run_id, state, details) 
-                VALUES (?, ?, ?, ?, ?);
-            """
-            cursor.execute(query, (artifact_hash, self.name, self.run_id, "used", None))
-    
+        self.conn_manager.insert_run_event(
+            artifact_hash=artifact_hash,
+            node_name=self.name,
+            pipeline_name=self.pipeline_name,
+            run_id=self.run_id,
+            state="using",
+            details=None
+        )
+        
     @contextmanager
     def stage_run(self):
         try:

@@ -68,12 +68,15 @@ class Graph:
             node.setup()
 
             for consumer in node.consumers:
+                consumer.set_pipeline_name(self.name)
                 consumer.set_db_path(self.db_path)
+                consumer.stream.set_pipeline_name(self.name)
                 consumer.stream.initialize_db_connection(self.db_path)
                 consumer.stream.setup()
                 self.streams.append(consumer.stream)
                 
             for producer in node.producers:
+                producer.set_pipeline_name(self.name)
                 producer.set_db_folder(self.db_folder)
                 producer.initialize_db_connection(self.db_path)
                 producer.setup()
@@ -139,31 +142,26 @@ class Graph:
                                     log(f"Destination pipeline '{destination_pipeline_name}' does not match current graph name '{self.name}'. Skipping.", level="error", logger=self.logger)
                                     continue
 
-                                '''
                                 # If the transfer package is valid, we can extract it to the staging directory and record its usage in the global_usage table.
-                                with self.conn_manager.write_cursor() as cursor:
-                                    query: sql = f"""
-                                        INSERT OR IGNORE INTO {self.global_usage_table_name} 
-                                        (artifact_hash, node_name, state, details) 
-                                        VALUES (?, ?, ?, ?);
-                                    """
-                                    cursor.execute(query, (actual_sha256, self.name, "received", {"transfer_package": transfer_package}))
-                                '''
+                                self.conn_manager.insert_run_event(
+                                    artifact_hash=actual_sha256,
+                                    node_name=self.name,
+                                    pipeline_name=self.name,
+                                    state="received",
+                                    details={"transfer_package": str(transfer_package.name)}
+                                )
 
                             log(f"Extracting transfer package {transfer_package} to staging directory.", level="info", logger=self.logger)
                             tar.extractall(path=self.staging_directory)
                             log(f"Extracted transfer package {transfer_package} to staging directory.", level="info", logger=self.logger)
 
-                            '''
-                            # After extracting, we can update the artifact usage state to "unpackaged" in the global_usage_table
-                            with self.conn_manager.write_cursor() as cursor:
-                                query: sql = f"""
-                                    INSERT OR IGNORE INTO {self.global_usage_table_name} 
-                                    (artifact_hash, node_name, state, details) 
-                                    VALUES (?, ?, ?, ?);
-                                """
-                                cursor.execute(query, (actual_sha256, self.name, "unpackaged", {"transfer_package": transfer_package}))
-                            '''
+                            self.conn_manager.insert_run_event(
+                                artifact_hash=actual_sha256,
+                                node_name=self.name,
+                                pipeline_name=self.name,
+                                state="unpackaged",
+                                details={"transfer_package": str(transfer_package.name)}
+                            )
 
                     except Exception as e:
                         log(f"Failed to extract transfer package {transfer_package}: {e}", level="error", logger=self.logger)

@@ -74,6 +74,7 @@ class ConnectionManager:
                 CREATE TABLE IF NOT EXISTS artifact_usage_events (
                     artifact_hash TEXT,
                     node_name TEXT,
+                    pipeline_name TEXT,
                     run_id INTEGER DEFAULT NULL,
                     state TEXT CHECK (state IN ('created', 'committed', 'detected', 'primed', 'using', 'used', 'ignored', 'sent', 'received', 'packaged', 'unpackaged', 'deleted')) NOT NULL,
                     details TEXT DEFAULT NULL CHECK (details IS NULL OR json_valid(details)),
@@ -114,6 +115,22 @@ class ConnectionManager:
             """
             cursor.execute(query, (node_name, node_type, pipeline_name))
         
+    def insert_run_event(self, artifact_hash: str, node_name: str, pipeline_name: str, state: str, run_id: int = None, details: JsonDict = None) -> None:
+        if state not in ['created', 'committed', 'detected', 'primed', 'using', 'used', 'ignored', 'sent', 'received', 'packaged', 'unpackaged', 'deleted']:
+            raise Exception(f"State {state} must be one of these values: 'created', 'committed', 'detected', 'primed', 'using', 'used', 'ignored', 'sent', 'received', 'packaged', 'unpackaged', 'deleted'")
+
+        with self.write_cursor() as cursor:
+            query: sql = f"""
+                INSERT OR IGNORE INTO artifact_usage_events 
+                (artifact_hash, node_name, pipeline_name, run_id, state, details) 
+                VALUES (?, ?, ?, ?, ?, ?);
+            """
+
+            if details is not None:
+                details = json.dumps(details)
+            
+            cursor.execute(query, (artifact_hash, node_name, pipeline_name, run_id, state, details))
+    
     def start_run(self, node_name: str, run_id: int) -> int:
         try:
             with self.write_cursor() as cursor:

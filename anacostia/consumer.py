@@ -52,11 +52,15 @@ class Consumer:
         # restart mode, 0 means no restart, 1 means restart from the beginning of the last run, 2 means restart from new run and process primed but unused artifacts
         self.restart = 0
         self.node_name = None
+        self.pipeline_name = None
     
     def set_node_name(self, node_name: str):
         if self.node_name is not None:
             raise ValueError(f"This Consumer object has already been assigned to node {self.node_name}. Consumer objects cannot be shared between nodes.")
         self.node_name = node_name
+
+    def set_pipeline_name(self, pipeline_name: str):
+        self.pipeline_name = pipeline_name
 
     def set_restart_mode(self, mode: int):
         """
@@ -80,13 +84,14 @@ class Consumer:
         # delete this query in future if we don't need to store file paths for ignored artifacts
         artifact_location = self.stream.get_artifact_location(artifact_hash)
 
-        with self.conn_manager.write_cursor() as cursor:
-            query: sql = f"""
-                INSERT OR IGNORE INTO {self.global_usage_table_name} 
-                (artifact_hash, node_name, state, details) 
-                VALUES (?, ?, ?, ?);
-            """
-            cursor.execute(query, (artifact_hash, self.name, "primed", json.dumps(artifact_location)))
+        self.conn_manager.insert_run_event(
+            artifact_hash=artifact_hash,
+            node_name=self.name,
+            pipeline_name=self.pipeline_name,
+            state="primed",
+            run_id=self.run_id,
+            details=artifact_location
+        )
         
     def record_provenance(self, run_id: int, details: str = None) -> None:
         # record edges between the stream and the consumer for all artifacts detected between the start of the current run and the previous run
@@ -113,14 +118,15 @@ class Consumer:
         # delete this query in future if we don't need to store file paths for ignored artifacts
         artifact_location = self.stream.get_artifact_location(artifact_hash)
 
-        with self.conn_manager.write_cursor() as cursor:
-            query: sql = f"""
-                INSERT OR IGNORE INTO {self.global_usage_table_name} 
-                (artifact_hash, node_name, state, details) 
-                VALUES (?, ?, ?, ?);
-            """
-            cursor.execute(query, (artifact_hash, self.name, "ignored", json.dumps(artifact_location)))
-    
+        self.conn_manager.insert_run_event(
+            artifact_hash=artifact_hash,
+            node_name=self.name,
+            pipeline_name=self.pipeline_name,
+            state="ignored",
+            run_id=self.run_id,
+            details=artifact_location
+        )
+        
     def is_artifact_used(self, artifact_hash: str) -> bool:
         with self.conn_manager.read_cursor() as cursor:
             query: sql = f"""

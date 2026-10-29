@@ -30,6 +30,8 @@ class Stream:
         self.global_usage_table_name = "artifact_usage_events"
         self.provenance_graph_table_name = "provenance_graph"
 
+        self.pipeline_name = None
+
     def initialize_db_connection(self, filename: str):
         self.conn_manager = ConnectionManager(db_path=filename, logger=self.logger)
 
@@ -87,6 +89,9 @@ class Stream:
             """
             cursor.execute(query)
 
+    def set_pipeline_name(self, pipeline_name: str):
+        self.pipeline_name = pipeline_name
+
     def register_artifact(self, artifact: Artifact, metadata: JsonDict = None) -> None:
         """
         Register an artifact in the stream's local database table and the global database table.
@@ -96,7 +101,7 @@ class Stream:
         :param metadata: Additional metadata to be stored in the stream's local database.
         """
         self.register_artifact_local(artifact.hash, artifact.location, metadata=metadata)
-        self.register_artifact_global(artifact.hash)
+        self.register_artifact_global(artifact.hash, artifact.location)
 
     def register_artifact_local(self, artifact_hash: str, artifact_location: JsonDict, metadata: JsonDict = None) -> None:
         """
@@ -132,15 +137,15 @@ class Stream:
                 )
             )
 
-    def register_artifact_global(self, artifact_hash: str) -> None:
-        with self.conn_manager.write_cursor() as cursor:
-            query: sql = f"""
-                INSERT OR IGNORE INTO {self.global_usage_table_name} 
-                (artifact_hash, node_name, state, details) 
-                VALUES (?, ?, ?, ?);
-            """
-            cursor.execute(query, (artifact_hash, self.name, "detected", None))
-            # self.logger.info(f"Registered artifact {filepath} with hash {artifact_hash} in stream {self.name} at {timestamp}")
+    def register_artifact_global(self, artifact_hash: str, artifact_location: JsonDict) -> None:
+        self.conn_manager.insert_run_event(
+            artifact_hash=artifact_hash,
+            node_name=self.name,
+            pipeline_name=self.pipeline_name,
+            state="detected",
+            details=artifact_location
+        )
+
 
     def get_artifact_location(self, artifact_hash: str) -> JsonDict:
         """

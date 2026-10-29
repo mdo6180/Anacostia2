@@ -29,6 +29,9 @@ class Producer:
         self.global_usage_table_name = "artifact_usage_events"
         self.local_table_name = f"{self.name}_local"
 
+        self.node_name = None
+        self.pipeline_name = None
+
         # keep track of artifact paths created in the current run, so that we can log warnings if the same path is being overwritten in the same run
         self.paths_in_current_run = set()   
     
@@ -51,6 +54,9 @@ class Producer:
     def set_node_name(self, node_name: str):
         self.node_name = node_name
         
+    def set_pipeline_name(self, pipeline_name: str):
+        self.pipeline_name = pipeline_name
+
     def get_commit_directory(self) -> Path:
         return self.directory
     
@@ -101,15 +107,15 @@ class Producer:
             cursor.execute(query, local_entry)
         
         # register the artifact in the global database
-        with self.conn_manager.write_cursor() as cursor:
-            query: sql = f"""
-                INSERT OR IGNORE INTO {self.global_usage_table_name} 
-                (artifact_hash, node_name, run_id, state, details) 
-                VALUES (?, ?, ?, ?, ?);
-            """
-            global_entry = (artifact_hash, self.name, self.run_id, "created", json.dumps({"path": str(artifact_final_path)}))
-            cursor.execute(query, global_entry)
-
+        self.conn_manager.insert_run_event(
+            artifact_hash=artifact_hash,
+            node_name=self.name,
+            pipeline_name=self.pipeline_name,
+            run_id=self.run_id,
+            state="created",
+            details={"path": str(artifact_final_path)}
+        )
+        
         artifact_location = {"path": str(artifact_final_path)}
         self.conn_manager.add_provenance_edge(
             predecessor_name=self.node_name, predecessor_type="node",
