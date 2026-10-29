@@ -131,7 +131,7 @@ class Stage(threading.Thread, ABC):
             node_name=self.name,
             pipeline_name=self.pipeline_name,
             run_id=self.run_id,
-            state="using",
+            state="used",
             details=None
         )
         
