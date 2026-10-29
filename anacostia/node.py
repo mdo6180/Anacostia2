@@ -14,7 +14,6 @@ import shutil
 from anacostia.utils.connection import ConnectionManager
 from anacostia.consumer import Consumer
 from anacostia.producer import Producer
-from anacostia.transports.local import FileSystemTransport
 from anacostia.transports.base import BaseTransport
 from anacostia.utils.logging import log
 
