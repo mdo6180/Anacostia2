@@ -12,7 +12,7 @@ from math import ceil
 from anacostia.utils.logging import log
 from anacostia.utils.connection import ConnectionManager
 from anacostia.utils.types import Artifact
-from anacostia.utils.package import create_deterministic_tar, gzip_file, partition_file, sha256_file
+from anacostia.utils.package import create_deterministic_tar, gzip_file, partition_file, hash_file
 from anacostia.utils.merkle_tree import ProofEntry, generate_proof, merkle_root
 from anacostia.utils.chunk import ChunkInfo, TransferArtifact, TransferManifest, ChunkManifest, TransferManifestSignature
 
@@ -285,7 +285,7 @@ class BaseTransport:
             gzip_path = gzip_file(tar_path, gzip_path, compression_level=compression_level, buffer_size=buffer_size)
 
             # hash the compressed archive and get its size
-            gzip_sha256 = sha256_file(gzip_path)
+            gzip_sha256 = hash_file(gzip_path)
             gzip_size = gzip_path.stat().st_size
 
             os.remove(tar_path)  # Remove the .tar file after creating the .tar.gz file
@@ -325,7 +325,7 @@ class BaseTransport:
             transfer_manifest_signature = TransferManifestSignature(
                 transfer_id=transfer_id,
                 manifest_signature=f"some_signature_{uuid4().hex}",
-                manifest_hash=sha256_file(transfer_manifest_path)
+                manifest_hash=hash_file(transfer_manifest_path)
             )
             transfer_manifest_signature_path = package_path / "signature.json"
             with transfer_manifest_signature_path.open("x", encoding="utf-8") as signature_file:

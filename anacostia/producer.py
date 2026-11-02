@@ -9,6 +9,7 @@ import shutil
 from anacostia.utils.connection import ConnectionManager
 from anacostia.utils.logging import log
 from anacostia.utils.types import Artifact, JsonDict
+from anacostia.utils.package import hash_file
 
 sql = str   # alias of the str type for syntax highlighting using the Python Inline Source Syntax Highlighting extension by Sam Willis in VSCode.
 
@@ -90,7 +91,7 @@ class Producer:
             raise ValueError(f"Artifact final path {artifact_final_path} is not within the directory {self.directory}")
 
         # hash the artifact
-        artifact_hash = self.hash_file(artifact_staging_path) if artifact_staging_path.is_file() else self.hash_directory(artifact_staging_path)
+        artifact_hash = hash_file(artifact_staging_path) if artifact_staging_path.is_file() else self.hash_directory(artifact_staging_path)
 
         # move the artifact
         artifact_final_path.parent.mkdir(parents=True, exist_ok=True)
@@ -125,13 +126,6 @@ class Producer:
             run_id=self.run_id,
         )
         return Artifact(location=artifact_location, hash=artifact_hash)
-
-    def hash_file(self, filepath: str) -> str:
-        sha256 = hashlib.sha256()
-        with open(filepath, 'rb') as f:
-            while chunk := f.read(self.hash_chunk_size):
-                sha256.update(chunk)
-        return sha256.hexdigest()
 
     def hash_directory(self, directory: str) -> str:
         """

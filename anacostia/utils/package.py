@@ -33,21 +33,6 @@ class ChunkManifest:
     chunks: list[ChunkInfo]
 
 
-def sha256_file(
-    file_path: str | Path,
-    *,
-    buffer_size: int = 1024 * 1024,
-) -> str:
-    """Calculate the SHA-256 hash of a file."""
-    digest = hashlib.sha256()
-
-    with Path(file_path).open("rb") as file:
-        while block := file.read(buffer_size):
-            digest.update(block)
-
-    return digest.hexdigest()
-
-
 def create_deterministic_tar(
     source_directory: str | Path,
     tar_path: str | Path,
@@ -319,7 +304,7 @@ def package_directory_into_chunks(
             source_directory=source_directory.name,
             archive_filename=gzip_path.name,
             archive_size=archive_size,
-            archive_sha256=sha256_file(gzip_path),
+            archive_sha256=hash_file(gzip_path),
             chunk_size=chunk_size,
             chunk_count=len(chunks),
             chunks=chunks,

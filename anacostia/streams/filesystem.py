@@ -8,6 +8,7 @@ import hashlib
 from anacostia.streams.base import Stream
 from anacostia.utils.logging import log
 from anacostia.utils.types import JsonDict, Artifact
+from anacostia.utils.package import hash_file
 
 
 
@@ -38,16 +39,6 @@ class DirectoryStream(Stream):
         self.directory: Path = directory
         self.poll_interval = poll_interval
         self.hash_chunk_size = hash_chunk_size
-
-    def hash_file(self, artifact_location: JsonDict) -> str:
-        """
-        Hash the artifact using the specified hash algorithm and return the hash value. User implemented method.
-        """
-        sha256 = hashlib.sha256()
-        with open(artifact_location["path"], 'rb') as f:
-            while chunk := f.read(self.hash_chunk_size):
-                sha256.update(chunk)
-        return sha256.hexdigest()
 
     def hash_directory(self, artifact_location: JsonDict) -> str:
         """
@@ -114,7 +105,7 @@ class DirectoryStream(Stream):
                 artifact_location = {"path": str(path)}
 
                 if path.is_file():
-                    artifact_hash = self.hash_file(artifact_location)
+                    artifact_hash = hash_file(artifact_location["path"])
                 elif path.is_dir():
                     artifact_hash = self.hash_directory(artifact_location)
                 else:
