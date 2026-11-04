@@ -3,12 +3,12 @@ import os
 from pathlib import Path
 from collections.abc import Iterator
 import time
-import hashlib
+from typing import Set
 
 from anacostia.streams.base import Stream
 from anacostia.utils.logging import log
-from anacostia.utils.types import JsonDict, Artifact
-from anacostia.utils.package import hash_file
+from anacostia.utils.types import Artifact
+from anacostia.utils.package import hash_file, create_deterministic_tar
 
 
 
@@ -40,43 +40,6 @@ class DirectoryStream(Stream):
         self.poll_interval = poll_interval
         self.hash_chunk_size = hash_chunk_size
 
-    def hash_directory(self, artifact_location: JsonDict) -> str:
-        """
-        Compute a deterministic SHA256 hash of a directory and all its contents.
-
-        Hash includes:
-        - relative file paths
-        - file contents
-
-        Files are processed in sorted order to ensure determinism.
-        """
-
-        directory = artifact_location["path"]
-        root = Path(directory).resolve()
-
-        if not root.is_dir():
-            raise ValueError(f"{directory} is not a directory")
-
-        sha256 = hashlib.sha256()
-
-        # Walk files in deterministic order
-        for path in sorted(root.rglob("*")):
-            if path.is_file():
-                rel_path = path.relative_to(root)
-
-                # Hash relative path first (prevents rename collisions)
-                sha256.update(str(rel_path).encode("utf-8"))
-                sha256.update(b"\0")
-
-                # Hash file contents
-                with open(path, "rb") as f:
-                    while chunk := f.read(self.hash_chunk_size):
-                        sha256.update(chunk)
-
-                sha256.update(b"\0")
-
-        return sha256.hexdigest()
-
     def __iter__(self) -> Iterator[Artifact]:
         """
         Poll the directory for new artifacts, register them in the database,
@@ -86,18 +49,18 @@ class DirectoryStream(Stream):
         while True:
 
             # Current files in the directory.
-            current_paths = {
+            current_paths: Set = {
                 path.resolve() for path in self.directory.iterdir()
             }
 
             # Previously registered files.
-            registered_paths = {
+            registered_paths: Set = {
                 Path(location["path"]).resolve() 
                 for location in self.get_all_artifact_locations()
             }
 
             # New files only.
-            new_paths = current_paths - registered_paths
+            new_paths: Set = current_paths - registered_paths
 
             # Process in chronological order.
             for path in sorted(new_paths, key=lambda p: p.stat().st_mtime):
@@ -106,8 +69,13 @@ class DirectoryStream(Stream):
 
                 if path.is_file():
                     artifact_hash = hash_file(artifact_location["path"])
+                
                 elif path.is_dir():
-                    artifact_hash = self.hash_directory(artifact_location)
+                    temp_tar_path = f'{artifact_location["path"]}.tar'
+                    tar_path = create_deterministic_tar(artifact_location["path"], temp_tar_path)
+                    artifact_hash = hash_file(tar_path)
+                    tar_path.unlink()
+                
                 else:
                     log(f"Skipping {path} as it is neither a file nor a directory.", level="warning", logger=self.logger)
                     continue

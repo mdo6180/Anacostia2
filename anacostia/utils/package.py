@@ -6,7 +6,6 @@ import json
 import os
 import shutil
 import tarfile
-import tempfile
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
