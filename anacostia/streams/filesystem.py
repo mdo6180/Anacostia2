@@ -62,7 +62,7 @@ class DirectoryStream(Stream):
             # New files only.
             new_paths: Set = current_paths - registered_paths
 
-            # Process in chronological order.
+            # IMPORTANT: Process incoming files in chronological order.
             for path in sorted(new_paths, key=lambda p: p.stat().st_mtime):
 
                 artifact_location = {"path": str(path)}
