@@ -97,7 +97,7 @@ def node_func():
                     create_large_file(path=output_file_path, size_mb=10)    # Append to create a 10MB file in the staging directory
 
                     # Commit the output artifact to the producer
-                    committed_path = producer_path / f"output_{stage.run_id}.txt"
+                    committed_path = producer_path / f"dataset{stage.run_id}" / f"output_{stage.run_id}.txt"
                     committed_artifact = producer.commit_artifact(
                         artifact_staging_path=output_file_path,
                         artifact_final_path=committed_path
@@ -108,7 +108,7 @@ def node_func():
                     simple_transport.add_to_package(
                         artifact_hash=committed_artifact.hash,
                         src_path=committed_path,
-                        dest_path=data_folder_path / committed_path.name,
+                        dest_path=data_folder_path / f"dataset{stage.run_id}" / committed_path.name,
                         dest_stream="low_side"  
                     )
 
