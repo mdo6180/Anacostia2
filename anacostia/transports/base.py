@@ -36,7 +36,6 @@ class BaseTransport:
             - 1_048_576: 1 MB
             - 10_485_760: 10 MB
             - 104_857_600: 100 MB
-        partition_size: size of the partitions when partitioning files.
         logger: logger for logging statements
         """
 
@@ -252,10 +251,27 @@ class BaseTransport:
         Context manager to create a package for the given artifact.
         Yields the path to the /data folder where all the files for the transfer package should be placed.
         Copy the artifact file into this folder, and when the context is exited, the package will be finalized (e.g., zipped, hashed, and partitioned).
+        
+        **Tip:** if you find that hashing is taking too long, you can either increase the hash_chunk_size in the constructor of the transport, 
+        increase the compression_level (which will increase the time it takes to compress the package but it decreases the hashing time by reducing the size of the package), 
+        or decrease the partition_size (the partitions will be hashed in parallel).
 
         Args:
-            compression_level (int): The level of compression to use when creating the .tar.gz file
-            partition_size (int): The size of the partitions to create when partitioning the .tar
+            compression_level (int): The level of compression to use when creating the .tar.gz file,
+                - 0: no compression
+                - 1: fastest compression, least compression
+                - 9: slowest compression, most compression
+                - Default is 6 (balanced)
+            buffer_size (int): The size of the buffer to use when reading and writing files during compression. The buffer size is in bytes. The following are some common sizes:
+                - 1024: 1 KB
+                - 1_048_576: 1 MB
+                - 1_073_741_824: 1 GB
+                - Default is 1 MB (1_048_576 bytes)
+            partition_size (int): The size of the partitions to create when partitioning the .tar file. The partition size is in bytes. The following are some common sizes:
+                - 1024: 1 KB
+                - 1_048_576: 1 MB
+                - 1_073_741_824: 1 GB
+                - Default is 1 MB (1_048_576 bytes)
         """
 
         # Logic to create a folder for the transfer package inside the destination directory,
