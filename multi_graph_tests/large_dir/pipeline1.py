@@ -1,6 +1,5 @@
 from pathlib import Path
 import argparse
-import shutil
 import logging
 
 from anacostia.streams.filesystem import DirectoryStream
