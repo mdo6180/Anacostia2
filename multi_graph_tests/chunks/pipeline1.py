@@ -1,0 +1,122 @@
+from pathlib import Path
+import argparse
+import logging
+
+from anacostia.streams.filesystem import DirectoryStream
+from anacostia.transports.base import BaseTransport
+from anacostia.consumer import Consumer
+from anacostia.producer import Producer
+from anacostia.node import Stage
+from anacostia.dag import Graph
+from anacostia.utils.debug import attach_debugger
+from anacostia.utils.logging import log
+
+
+
+parser = argparse.ArgumentParser(description="Run the pipeline after restart test")
+parser.add_argument("-d", "--debug", action="store_true", help="Flag to indicate if debugging is enabled")
+args = parser.parse_args()
+
+if args.debug:
+    # To debug this test:
+    # Add a breakpoint by clicking on the left side of the line number you want to break on.
+    # run the script: python pipeline1.py -d
+    # open the debug tab in vscode
+    # select the "Port 5678 - Remote Attach" configuration, then click on the play button.
+    # The script will pause at the breakpoint and you can inspect the values of variables in the debug console.
+    attach_debugger()
+
+# 1. Set up streams, consumers, and nodes
+testing_artifacts_dir = Path("./testing_artifacts")
+pipeline1_dir = testing_artifacts_dir / "pipeline1"
+pipeline2_receiving_dir = testing_artifacts_dir / "pipeline2" / ".anacostia" / "receiving"
+db_folder_path = pipeline1_dir / ".anacostia"
+input_path1 = pipeline1_dir / "incoming1"
+producer_path = pipeline1_dir / "producer_dir"
+transport_package_dir = pipeline1_dir / "transport_dir"
+
+log_path = pipeline1_dir / "pipeline1.log"
+combined_log_path = testing_artifacts_dir / "combined.log"
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(levelname)s - "Pipeline1" - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S',
+    handlers=[
+        logging.FileHandler(log_path, mode='a'),
+        logging.FileHandler(combined_log_path, mode='a'),
+    ]
+)
+logger = logging.getLogger(__name__)
+
+# Assemble the first stage of the pipeline with a stream, consumer, producer, and transport
+stream = DirectoryStream(name="odd_folder", directory=input_path1, logger=logger)
+stream_consumer_odd = Consumer(name="stream_consumer_odd", stream=stream, logger=logger)
+producer = Producer(name="test_producer", directory=producer_path, logger=logger)
+simple_transport = BaseTransport(
+    name="combined_transport", transfers_directory=transport_package_dir, destination_pipeline_name="Pipeline2", logger=logger
+)
+stage = Stage(name="TestNode", consumers=[stream_consumer_odd], producers=[producer], transports=[simple_transport], logger=logger)
+
+# 2. Create the graph with the node
+graph = Graph(name="Pipeline1", nodes=[stage], db_folder=db_folder_path, logger=logger)
+
+def create_large_file(path: str, size_mb: int = 10):
+    target_size = size_mb * 1024 * 1024  # bytes
+    line = "The quick brown fox jumps over the lazy dog.\n"
+
+    with open(path, "a", encoding="utf-8") as f:
+        while f.tell() < target_size:
+            f.write(line)
+
+        # Trim to exactly the target size
+        f.truncate(target_size)
+
+# 2. Define the node's processing function
+@stage.entrypoint
+def node_func():
+    for bundle in stream_consumer_odd:
+        with stage.stage_run() as staging_directory:
+            artifact_obj = bundle[0]
+            artifact_location = artifact_obj.location
+            input_artifacts_dir = Path(artifact_location["path"])
+
+            file_paths = [p for p in input_artifacts_dir.iterdir() if p.is_file()]
+
+            for file_path in file_paths:
+                with open(file_path, "r") as input_file:
+                    content = input_file.read()
+                    logger.info(f"processing artifact with content '{content}' in run {stage.run_id} with location {file_path}")
+
+                    output_file_path = staging_directory / "output.txt"     # Define the output file path in the staging directory
+
+                    with open(output_file_path, "w") as output_file:        # Write the content to the output file in the staging directory
+                        output_file.write(content)
+                        output_file.write("\n")  # Add a newline for clarity
+
+                    create_large_file(path=output_file_path, size_mb=10)    # Append to create a 10MB file in the staging directory
+
+                    # Commit the output artifact to the producer
+                    committed_path = producer_path / f"dataset{stage.run_id}" / f"output_{stage.run_id}.txt"
+                    committed_artifact = producer.commit_artifact(
+                        artifact_staging_path=output_file_path,
+                        artifact_final_path=committed_path
+                    )              
+
+                # copy the committed artifact to the transport package's data folder
+                partition_size = 10 * 1024  # 10 KB partition size for testing
+                with simple_transport.create_transfer_package(partition_size=partition_size) as data_folder_path:
+                    simple_transport.add_to_package(
+                        artifact_hash=committed_artifact.hash,
+                        src_path=committed_path,
+                        dest_path=data_folder_path / f"dataset{stage.run_id}" / committed_path.name,
+                        dest_stream="low_side"  
+                    )
+
+                # Copy the transfer package to pipeline2_receiving_dir
+
+# 3. Start the pipeline
+graph.start()
+try:
+    graph.join()
+except KeyboardInterrupt:
+    graph.stop()
