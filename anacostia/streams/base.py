@@ -84,6 +84,7 @@ class Stream:
                     timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
                     artifact_location TEXT NOT NULL CHECK (json_valid(artifact_location)),
                     metadata TEXT CHECK (metadata IS NULL OR json_valid(metadata)),
+                    content ANY DEFAULT NULL,
                     UNIQUE(artifact_location)
                 );
             """
@@ -92,24 +93,25 @@ class Stream:
     def set_pipeline_name(self, pipeline_name: str):
         self.pipeline_name = pipeline_name
 
-    def register_artifact(self, artifact: Artifact, metadata: JsonDict = None) -> None:
+    def register_artifact(self, artifact: Artifact, metadata: JsonDict = None, content: Any = None) -> None:
         """
         Register an artifact in the stream's local database table and the global database table.
 
         :param artifact: The artifact object containing the hash and location.
         :param metadata: Additional metadata to be stored in the stream's local database.
-        :param metadata: Additional metadata to be stored in the stream's local database.
+        :param content: The content of the artifact to be stored in the stream's local database.
         """
-        self.register_artifact_local(artifact.hash, artifact.location, metadata=metadata)
+        self.register_artifact_local(artifact.hash, artifact.location, metadata=metadata, content=content)
         self.register_artifact_global(artifact.hash, artifact.location)
 
-    def register_artifact_local(self, artifact_hash: str, artifact_location: JsonDict, metadata: JsonDict = None) -> None:
+    def register_artifact_local(self, artifact_hash: str, artifact_location: JsonDict, metadata: JsonDict = None, content: Any = None) -> None:
         """
         Register an artifact in the stream's local database table. 
 
         :param artifact_location: The location of the artifact (e.g., file path, URL) formatted as a JSON dictionary.
         :param artifact_hash: The hash of the artifact.
         :param metadata: Additional metadata about the artifact to be stored in the stream's local database formatted as a JSON dictionary.
+        :param content: The content of the artifact to be stored in the stream's local database.
 
         Example usage:
         ```
@@ -124,8 +126,8 @@ class Stream:
         """
 
         query: sql = f"""
-            INSERT OR IGNORE INTO {self.local_table_name} ('artifact_hash', 'artifact_location', 'metadata')
-            VALUES (?, ?, ?);
+            INSERT OR IGNORE INTO {self.local_table_name} ('artifact_hash', 'artifact_location', 'metadata', 'content')
+            VALUES (?, ?, ?, ?);
         """
         with self.conn_manager.write_cursor() as cursor:
             cursor.execute(
@@ -134,6 +136,7 @@ class Stream:
                     artifact_hash, 
                     json.dumps(artifact_location, sort_keys=True), 
                     json.dumps(metadata) if metadata is not None else None,
+                    content
                 )
             )
 
@@ -199,6 +202,25 @@ class Stream:
             if result is None:
                 raise ValueError(f"Artifact with hash {artifact_hash} not found in local stream table.")
             return json.loads(result[0]) if result[0] is not None else None
+
+    def get_artifact_content(self, artifact_hash: str) -> Any:
+        """
+        Retrieve the content of an artifact from the stream's local database table based on its hash.
+        Artifact content is stored in the local table.
+
+        :param artifact_hash: The hash of the artifact.
+
+        :return artifact content: The content of the artifact. If no content is associated with the artifact, returns None.
+        """
+        with self.conn_manager.read_cursor() as cursor:
+            query: sql = f"""
+                SELECT content FROM {self.local_table_name} WHERE artifact_hash = ? LIMIT 1;
+            """
+            cursor.execute(query, (artifact_hash,))
+            result = cursor.fetchone()
+            if result is None:
+                raise ValueError(f"Artifact with hash {artifact_hash} not found in local stream table.")
+            return result[0] if result[0] is not None else None
 
     def is_artifact_registered(self, artifact_location: JsonDict) -> bool:
         """
