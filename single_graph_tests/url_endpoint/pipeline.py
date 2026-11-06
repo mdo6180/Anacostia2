@@ -65,49 +65,38 @@ class CustomURLStream(URLEndpointStream):
     def __iter__(self):
         while True:
 
-            # Perform health check
             try:
-                health_response = requests.get(self.health_check_url, timeout=5)
-                if health_response.status_code != 200:
-                    log(f"Health check failed with status code: {health_response.status_code}", level="error", logger=self.logger)
-                    continue
+                data_response = requests.get(self.data_url, timeout=5)
+
+                if data_response.status_code == 200:
+                    data = data_response.json()
+                    items = data.get("items", [])
+                    content = json.dumps(data)
+
+                    artifact_location = {
+                        "url": self.data_url,
+                        "min_id": items[0]["id"] if items else None,
+                        "max_id": items[-1]["id"] if items else None,
+                    }
+
+                    artifact_hash = hashlib.sha256(str(content).encode()).hexdigest()
+
+                    artifact = Artifact(
+                        location=artifact_location,
+                        hash=artifact_hash
+                    )
+                    self.register_artifact(
+                        artifact, 
+                        metadata={"min_id": artifact_location["min_id"], "max_id": artifact_location["max_id"]}, 
+                        content=content
+                    )
+                    yield artifact
+
                 else:
-                    try:
-                        data_response = requests.get(self.data_url, timeout=5)
-
-                        if data_response.status_code == 200:
-                            data = data_response.json()
-                            items = data.get("items", [])
-                            content = json.dumps(data)
-
-                            artifact_location = {
-                                "url": self.data_url,
-                                "min_id": items[0]["id"] if items else None,
-                                "max_id": items[-1]["id"] if items else None,
-                            }
-
-                            artifact_hash = hashlib.sha256(str(content).encode()).hexdigest()
-
-                            artifact = Artifact(
-                                location=artifact_location,
-                                hash=artifact_hash
-                            )
-                            self.register_artifact(
-                                artifact, 
-                                metadata={"min_id": artifact_location["min_id"], "max_id": artifact_location["max_id"]}, 
-                                content=content
-                            )
-                            yield artifact
-
-                        else:
-                            log(f"Data endpoint failed with status code: {data_response.status_code}", level="error", logger=self.logger)
-
-                    except requests.RequestException as e:
-                        log(f"Data request failed: {e}", level="error", logger=self.logger)
+                    log(f"Data endpoint failed with status code: {data_response.status_code}", level="error", logger=self.logger)
 
             except requests.RequestException as e:
-                log(f"Health check request failed: {e}", level="error", logger=self.logger)
-                continue
+                log(f"Data request failed: {e}", level="error", logger=self.logger)
 
             # IMPORTANT: prevent polling from blocking the main thread.
             time.sleep(self.poll_interval)
