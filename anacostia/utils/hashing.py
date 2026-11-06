@@ -20,3 +20,12 @@ def hash_file_object(file_obj: IO[bytes]) -> str:
         digest.update(chunk)
 
     return digest.hexdigest()
+
+
+def hash_string(input_string: str) -> str:
+    """Returns the SHA-256 hash of the input string.
+
+    Args:
+        input_string: The string to be hashed.
+    """
+    return hashlib.sha256(input_string.encode()).hexdigest()

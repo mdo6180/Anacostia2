@@ -4,16 +4,14 @@ import argparse
 import logging
 import time
 import requests
-import hashlib
 
-from anacostia.streams.filesystem import DirectoryStream
 from anacostia.streams.url import URLEndpointStream
-from anacostia.transports.base import BaseTransport
 from anacostia.consumer import Consumer
 from anacostia.producer import Producer
 from anacostia.node import Stage
 from anacostia.dag import Graph
 from anacostia.utils.debug import attach_debugger
+from anacostia.utils.hashing import hash_string
 from anacostia.utils.logging import log
 from anacostia.utils.types import Artifact
 
@@ -64,13 +62,12 @@ class CustomURLStream(URLEndpointStream):
 
     def __iter__(self):
         while True:
-
             try:
                 data_response = requests.get(self.data_url, timeout=5)
 
                 if data_response.status_code == 200:
                     data = data_response.json()
-                    items = data.get("items", [])
+                    items = data["items"]
                     content = json.dumps(data)
 
                     artifact_location = {
@@ -79,11 +76,9 @@ class CustomURLStream(URLEndpointStream):
                         "max_id": items[-1]["id"] if items else None,
                     }
 
-                    artifact_hash = hashlib.sha256(str(content).encode()).hexdigest()
-
                     artifact = Artifact(
                         location=artifact_location,
-                        hash=artifact_hash
+                        hash=hash_string(content)
                     )
                     self.register_artifact(
                         artifact, 
