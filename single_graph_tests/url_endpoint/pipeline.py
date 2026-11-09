@@ -55,8 +55,6 @@ logger = logging.getLogger(__name__)
 class CustomURLStream(URLEndpointStream):
     def __init__(self, name: str, url: str, poll_interval: float = 0.1, hash_chunk_size: int = 1_048_576, logger: logging.Logger = None):
         super().__init__(name=name, url=url, poll_interval=poll_interval, hash_chunk_size=hash_chunk_size, logger=logger)
-
-        self.health_check_url = f"{url}/health"
         self.data_url = f"{url}/data"
 
     def __iter__(self):
@@ -78,7 +76,6 @@ class CustomURLStream(URLEndpointStream):
                             content=json.dumps(item)
                         )
                         yield artifact
-
                 else:
                     log(f"Data endpoint failed with status code: {data_response.status_code}", level="error", logger=self.logger)
 
