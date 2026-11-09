@@ -323,25 +323,38 @@ class BaseTransport:
                 )
 
                 # generate merkle root and proofs for each chunk
-                # merkle_root_hash = merkle_root([chunk.sha256 for chunk in chunks])
-                for index, chunk in enumerate(chunks):
+                hashes = [bytes.fromhex(chunk.sha256) for chunk in chunks]
+                root = merkle_root(hashes).hex()
+                for chunk in chunks:
                     chunk_folder = chunks_directory / f"{transfer_id}-{chunk.filename.strip('.bin')}"
                     chunk_folder.mkdir(parents=True, exist_ok=True)
                     chunk_file_path = chunk_folder / chunk.filename
                     shutil.move(str(chunks_directory / chunk.filename), str(chunk_file_path))
 
-                """
-                    proof = generate_proof([c.sha256 for c in chunks], index)
-                    chunk_manifest = ChunkManifest(
-                        transfer_id=transfer_id,
-                        chunk_count=num_chunks,
-                        chunk_info=chunk,
-                        merkle_root=merkle_root_hash,
-                        merkle_leaf_index=index,
-                        merkle_proof=proof
-                    )
-                    self.record_chunks(transfer_manifest_hash=gzip_sha256, chunks=[chunk_manifest])
-                """
+                    chunk_manifest_path = chunk_folder / "chunk_manifest.json"
+                    with chunk_manifest_path.open("x", encoding="utf-8") as manifest_file:
+                        proof = generate_proof(hashes, leaf_index=chunk.index)
+                        proof = [ProofEntry(side=entry.side, hash=entry.hash.hex()) for entry in proof]
+
+                        chunk_manifest = ChunkManifest(
+                            transfer_id=transfer_id,
+                            chunk_count=num_chunks,
+                            chunk_info=chunk,
+                            merkle_root=root,
+                            merkle_leaf_index=chunk.index,      # Note: leaf index is the index of the chunk in the list of chunks
+                            merkle_proof=proof,
+                        )
+
+                        json.dump(
+                            {
+                                **asdict(chunk_manifest),
+                                "chunk_info": asdict(chunk),
+                                "merkle_proof": [asdict(entry) for entry in proof],
+                            },
+                            manifest_file,
+                            indent=2,
+                        )
+                        manifest_file.write("\n")
 
             # create the transfer manifest
             transfer_manifest = TransferManifest(
