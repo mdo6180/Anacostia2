@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 
 
 
-def daily_schedule(hour: int, minute: int, stop_event: threading.Event):
+def daily_scheduler(hour: int, minute: int, stop_event: threading.Event):
     """
     A generator that yields control at a specific time each day.
     Useful for implementing streams that need to perform actions at a specific time daily.
@@ -12,7 +12,7 @@ def daily_schedule(hour: int, minute: int, stop_event: threading.Event):
     ```
     class CustomStream(Stream):
     def __iter__(self):
-        for _ in daily_schedule(hour=8, minute=0, stop_event=self.stop_event):
+        for _ in daily_scheduler(hour=8, minute=0, stop_event=self.stop_event):
             # Perform daily polling actions here
             yield artifact
     ```
