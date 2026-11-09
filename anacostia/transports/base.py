@@ -319,7 +319,6 @@ class BaseTransport:
                     source_path=gzip_path,
                     chunks_directory=chunks_directory,
                     chunk_size=partition_size,
-                    chunk_prefix="chunk",
                     buffer_size=buffer_size
                 )
 

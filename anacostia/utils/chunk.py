@@ -29,7 +29,6 @@ def partition_file(
     source_path: str | Path,
     chunks_directory: str | Path,
     chunk_size: int,
-    chunk_prefix: str = "chunk",
     buffer_size: int = 1024 * 1024,
 ) -> list[ChunkInfo]:
     """Split a file into fixed-size chunks and hash each chunk."""
@@ -51,7 +50,7 @@ def partition_file(
 
     with source_path.open("rb") as source:
         while True:
-            chunk_filename = f"{chunk_prefix}-{index:06d}.bin"
+            chunk_filename = f"chunk-{index:06d}.bin"
             chunk_path = chunks_directory / chunk_filename
 
             bytes_written = 0
