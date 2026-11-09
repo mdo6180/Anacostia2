@@ -222,7 +222,6 @@ class BaseTransport:
             """
             cursor.execute(query, (manifest_hash, manifest_signature, manifest, self.name))
 
-    '''
     def record_chunks(self, transfer_manifest_hash: str, chunks: list[ChunkManifest]):
         """
         Record chunks in the local chunks table.
@@ -243,7 +242,6 @@ class BaseTransport:
                     for chunk in chunks
                 ]
             )
-    '''
 
     @contextmanager
     def create_transfer_package(self, compression_level: int = 6, buffer_size: int = 1024 * 1024, partition_size: int = 1_048_576):
@@ -311,6 +309,35 @@ class BaseTransport:
             db_size = self.db_path.stat().st_size
             approximate_total_size = gzip_size + db_size + 1024  # add 1KB for the transfer manifest and signature files
             num_chunks = ceil(approximate_total_size / partition_size)
+
+            if num_chunks > 1:
+                # partition the .tar.gz file into chunks and hash each chunk
+                chunks_directory = package_path / "chunks"
+                chunks_directory.mkdir(parents=True, exist_ok=True)
+
+                chunks: list[ChunkInfo] = partition_file(
+                    source_path=gzip_path,
+                    chunks_directory=chunks_directory,
+                    chunk_size=partition_size,
+                    chunk_prefix="chunk",
+                    buffer_size=buffer_size
+                )
+
+                """
+                # generate merkle root and proofs for each chunk
+                merkle_root_hash = merkle_root([chunk.sha256 for chunk in chunks])
+                for index, chunk in enumerate(chunks):
+                    proof = generate_proof([c.sha256 for c in chunks], index)
+                    chunk_manifest = ChunkManifest(
+                        transfer_id=transfer_id,
+                        chunk_count=num_chunks,
+                        chunk_info=chunk,
+                        merkle_root=merkle_root_hash,
+                        merkle_leaf_index=index,
+                        merkle_proof=proof
+                    )
+                    self.record_chunks(transfer_manifest_hash=gzip_sha256, chunks=[chunk_manifest])
+                """
 
             # create the transfer manifest
             transfer_manifest = TransferManifest(

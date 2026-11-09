@@ -7,7 +7,8 @@ from typing import Set
 from anacostia.streams.base import Stream
 from anacostia.utils.logging import log
 from anacostia.utils.types import Artifact
-from anacostia.utils.package import hash_file, create_deterministic_tar
+from anacostia.utils.hashing import hash_file
+from anacostia.utils.package import create_deterministic_tar
 
 
 

@@ -9,7 +9,7 @@ import shutil
 from anacostia.utils.connection import ConnectionManager
 from anacostia.utils.logging import log
 from anacostia.utils.types import Artifact, JsonDict
-from anacostia.utils.package import hash_file
+from anacostia.utils.hashing import hash_file
 
 sql = str   # alias of the str type for syntax highlighting using the Python Inline Source Syntax Highlighting extension by Sam Willis in VSCode.
 

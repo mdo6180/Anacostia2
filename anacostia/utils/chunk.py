@@ -28,7 +28,6 @@ class ChunkManifest:
 def partition_file(
     source_path: str | Path,
     chunks_directory: str | Path,
-    *,
     chunk_size: int,
     chunk_prefix: str = "chunk",
     buffer_size: int = 1024 * 1024,
@@ -45,8 +44,6 @@ def partition_file(
 
     if buffer_size <= 0:
         raise ValueError("buffer_size must be greater than zero")
-
-    chunks_directory.mkdir(parents=True, exist_ok=False)
 
     chunks: list[ChunkInfo] = []
     offset = 0
