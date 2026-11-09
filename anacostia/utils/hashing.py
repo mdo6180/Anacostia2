@@ -1,5 +1,6 @@
 import hashlib
 from typing import IO
+from pathlib import Path
 
 
 def hash_file_object(file_obj: IO[bytes]) -> str:
@@ -29,3 +30,11 @@ def hash_string(input_string: str) -> str:
         input_string: The string to be hashed.
     """
     return hashlib.sha256(input_string.encode()).hexdigest()
+
+
+def hash_file(chunk_path: Path, buffer_size: int = 1024 * 1024) -> str:
+    sha256 = hashlib.sha256()
+    with open(chunk_path, 'rb') as f:
+        while chunk := f.read(buffer_size):
+            sha256.update(chunk)
+    return sha256.hexdigest()

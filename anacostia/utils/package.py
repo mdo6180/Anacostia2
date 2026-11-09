@@ -1,35 +1,36 @@
 from __future__ import annotations
 
 import gzip
-import hashlib
-import json
-import os
 import shutil
 import tarfile
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from pathlib import Path
 
 
 @dataclass(frozen=True)
-class ChunkInfo:
-    index: int
-    filename: str
-    offset: int
-    size: int
-    sha256: str
-
+class TransferArtifact:
+    artifact_hash: str
+    filepath: str
+    size_bytes: int
+    destination_stream: str = None  # Optional field for the destination stream name (database will not have this field)
 
 @dataclass(frozen=True)
-class ChunkManifest:
-    format: str
-    version: int
-    source_directory: str
-    archive_filename: str
+class TransferManifest:
+    transfer_id: str
+    transfer_artifacts: list[TransferArtifact]
     archive_size: int
     archive_sha256: str
-    chunk_size: int
     chunk_count: int
-    chunks: list[ChunkInfo]
+    source_pipeline_name: str
+    destination_pipeline_name: str
+    previous_transfer_id: str = None  # Optional field for the previous transfer ID
+    previous_transfer_sha256: str = None  # Optional field for the previous transfer SHA256
+
+@dataclass(frozen=True)
+class TransferManifestSignature:
+    transfer_id: str
+    manifest_signature: str
+    manifest_hash: str
 
 
 def create_deterministic_tar(
@@ -143,209 +144,3 @@ def gzip_file(
 
     return gzip_path
 
-
-def partition_file(
-    source_path: str | Path,
-    chunks_directory: str | Path,
-    *,
-    chunk_size: int,
-    chunk_prefix: str = "chunk",
-    buffer_size: int = 1024 * 1024,
-) -> list[ChunkInfo]:
-    """Split a file into fixed-size chunks and hash each chunk."""
-    source_path = Path(source_path).resolve()
-    chunks_directory = Path(chunks_directory).resolve()
-
-    if not source_path.is_file():
-        raise FileNotFoundError(f"Input file does not exist: {source_path}")
-
-    if chunk_size <= 0:
-        raise ValueError("chunk_size must be greater than zero")
-
-    if buffer_size <= 0:
-        raise ValueError("buffer_size must be greater than zero")
-
-    chunks_directory.mkdir(parents=True, exist_ok=False)
-
-    chunks: list[ChunkInfo] = []
-    offset = 0
-    index = 0
-
-    with source_path.open("rb") as source:
-        while True:
-            chunk_filename = f"{chunk_prefix}-{index:06d}.bin"
-            chunk_path = chunks_directory / chunk_filename
-
-            bytes_written = 0
-            digest = hashlib.sha256()
-
-            with chunk_path.open("xb") as chunk_file:
-                while bytes_written < chunk_size:
-                    bytes_to_read = min(
-                        buffer_size,
-                        chunk_size - bytes_written,
-                    )
-
-                    block = source.read(bytes_to_read)
-
-                    if not block:
-                        break
-
-                    chunk_file.write(block)
-                    digest.update(block)
-                    bytes_written += len(block)
-
-                if bytes_written:
-                    chunk_file.flush()
-                    os.fsync(chunk_file.fileno())
-
-            if bytes_written == 0:
-                chunk_path.unlink()
-                break
-
-            chunks.append(
-                ChunkInfo(
-                    index=index,
-                    filename=chunk_filename,
-                    offset=offset,
-                    size=bytes_written,
-                    sha256=digest.hexdigest(),
-                )
-            )
-
-            offset += bytes_written
-            index += 1
-
-    return chunks
-
-
-def hash_file(chunk_path: Path, buffer_size: int = 1024 * 1024) -> str:
-    sha256 = hashlib.sha256()
-    with open(chunk_path, 'rb') as f:
-        while chunk := f.read(buffer_size):
-            sha256.update(chunk)
-    return sha256.hexdigest()
-
-
-def package_directory_into_chunks(
-    source_directory: str | Path,
-    output_directory: str | Path,
-    *,
-    chunk_size: int = 280 * 1024 * 1024,
-    compression_level: int = 6,
-    keep_tar_file: bool = False,
-) -> ChunkManifest:
-    """
-    Convert a folder into tar, gzip the tar file, and split it into chunks.
-
-    Output structure:
-
-        output_directory/
-        ├── <folder-name>.tar.gz
-        ├── chunk_manifest.json
-        └── chunks/
-            ├── chunk-000000.bin
-            ├── chunk-000001.bin
-            └── ...
-
-    By default, the intermediate uncompressed .tar file is deleted.
-    """
-    source_directory = Path(source_directory).resolve()
-    output_directory = Path(output_directory).resolve()
-
-    if not source_directory.is_dir():
-        raise NotADirectoryError(
-            f"Source directory does not exist: {source_directory}"
-        )
-
-    if output_directory.exists():
-        raise FileExistsError(
-            f"Output directory already exists: {output_directory}"
-        )
-
-    output_directory.mkdir(parents=True)
-
-    archive_base_name = source_directory.name
-    tar_path = output_directory / f"{archive_base_name}.tar"
-    gzip_path = output_directory / f"{archive_base_name}.tar.gz"
-    chunks_directory = output_directory / "chunks"
-    manifest_path = output_directory / "chunk_manifest.json"
-
-    try:
-        create_deterministic_tar(
-            source_directory=source_directory,
-            tar_path=tar_path,
-        )
-
-        gzip_file(
-            source_path=tar_path,
-            gzip_path=gzip_path,
-            compression_level=compression_level,
-        )
-
-        chunks = partition_file(
-            source_path=gzip_path,
-            chunks_directory=chunks_directory,
-            chunk_size=chunk_size,
-        )
-
-        archive_size = gzip_path.stat().st_size
-        chunk_total = sum(chunk.size for chunk in chunks)
-
-        if archive_size != chunk_total:
-            raise RuntimeError(
-                "Chunk sizes do not equal the compressed archive size"
-            )
-
-        manifest = ChunkManifest(
-            format="anacostia-chunk-manifest",
-            version=1,
-            source_directory=source_directory.name,
-            archive_filename=gzip_path.name,
-            archive_size=archive_size,
-            archive_sha256=hash_file(gzip_path),
-            chunk_size=chunk_size,
-            chunk_count=len(chunks),
-            chunks=chunks,
-        )
-
-        with manifest_path.open("x", encoding="utf-8") as manifest_file:
-            json.dump(
-                {
-                    **asdict(manifest),
-                    "chunks": [asdict(chunk) for chunk in chunks],
-                },
-                manifest_file,
-                indent=2,
-            )
-            manifest_file.write("\n")
-
-        if not keep_tar_file:
-            tar_path.unlink()
-
-        return manifest
-
-    except Exception:
-        shutil.rmtree(output_directory, ignore_errors=True)
-        raise
-
-
-if __name__ == "__main__":
-    manifest = package_directory_into_chunks(
-        source_directory="my_dataset",
-        output_directory="transfer_package",
-        chunk_size=280 * 1024 * 1024,  # 280 MiB
-        compression_level=6,
-        keep_tar_file=False,
-    )
-
-    print(f"Archive SHA-256: {manifest.archive_sha256}")
-    print(f"Archive size:    {manifest.archive_size:,} bytes")
-    print(f"Chunk count:     {manifest.chunk_count}")
-
-    for chunk in manifest.chunks:
-        print(
-            f"{chunk.filename}: "
-            f"{chunk.size:,} bytes, "
-            f"SHA-256={chunk.sha256}"
-        )

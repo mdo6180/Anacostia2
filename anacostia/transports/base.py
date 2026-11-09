@@ -1,4 +1,3 @@
-import logging
 import os
 from logging import Logger
 import shutil
@@ -12,9 +11,10 @@ from math import ceil
 from anacostia.utils.logging import log
 from anacostia.utils.connection import ConnectionManager
 from anacostia.utils.types import Artifact
-from anacostia.utils.package import create_deterministic_tar, gzip_file, partition_file, hash_file
+from anacostia.utils.hashing import hash_file
+from anacostia.utils.package import create_deterministic_tar, gzip_file, TransferArtifact, TransferManifest, TransferManifestSignature
 from anacostia.utils.merkle_tree import ProofEntry, generate_proof, merkle_root
-from anacostia.utils.chunk import ChunkInfo, TransferArtifact, TransferManifest, ChunkManifest, TransferManifestSignature
+from anacostia.utils.chunk import ChunkInfo, ChunkManifest, partition_file
 
 sql = str   # alias of the str type for syntax highlighting using the Python Inline Source Syntax Highlighting extension by Sam Willis in VSCode.
 
@@ -409,4 +409,3 @@ class BaseTransport:
             size_bytes=dest_path.stat().st_size,
             destination_stream=dest_stream
         ))
-

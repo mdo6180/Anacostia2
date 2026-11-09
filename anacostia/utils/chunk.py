@@ -1,4 +1,8 @@
 from dataclasses import dataclass
+from pathlib import Path
+import hashlib
+import os
+
 from anacostia.utils.merkle_tree import ProofEntry
 
 
@@ -9,25 +13,6 @@ class ChunkInfo:
     offset: int
     size: int
     sha256: str
-
-@dataclass(frozen=True)
-class TransferArtifact:
-    artifact_hash: str
-    filepath: str
-    size_bytes: int
-    destination_stream: str = None  # Optional field for the destination stream name (database will not have this field)
-
-@dataclass(frozen=True)
-class TransferManifest:
-    transfer_id: str
-    transfer_artifacts: list[TransferArtifact]
-    archive_size: int
-    archive_sha256: str
-    chunk_count: int
-    source_pipeline_name: str
-    destination_pipeline_name: str
-    previous_transfer_id: str = None  # Optional field for the previous transfer ID
-    previous_transfer_sha256: str = None  # Optional field for the previous transfer SHA256
 
 
 @dataclass(frozen=True)
@@ -40,8 +25,76 @@ class ChunkManifest:
     merkle_proof: list[ProofEntry]
 
 
-@dataclass(frozen=True)
-class TransferManifestSignature:
-    transfer_id: str
-    manifest_signature: str
-    manifest_hash: str
+def partition_file(
+    source_path: str | Path,
+    chunks_directory: str | Path,
+    *,
+    chunk_size: int,
+    chunk_prefix: str = "chunk",
+    buffer_size: int = 1024 * 1024,
+) -> list[ChunkInfo]:
+    """Split a file into fixed-size chunks and hash each chunk."""
+    source_path = Path(source_path).resolve()
+    chunks_directory = Path(chunks_directory).resolve()
+
+    if not source_path.is_file():
+        raise FileNotFoundError(f"Input file does not exist: {source_path}")
+
+    if chunk_size <= 0:
+        raise ValueError("chunk_size must be greater than zero")
+
+    if buffer_size <= 0:
+        raise ValueError("buffer_size must be greater than zero")
+
+    chunks_directory.mkdir(parents=True, exist_ok=False)
+
+    chunks: list[ChunkInfo] = []
+    offset = 0
+    index = 0
+
+    with source_path.open("rb") as source:
+        while True:
+            chunk_filename = f"{chunk_prefix}-{index:06d}.bin"
+            chunk_path = chunks_directory / chunk_filename
+
+            bytes_written = 0
+            digest = hashlib.sha256()
+
+            with chunk_path.open("xb") as chunk_file:
+                while bytes_written < chunk_size:
+                    bytes_to_read = min(
+                        buffer_size,
+                        chunk_size - bytes_written,
+                    )
+
+                    block = source.read(bytes_to_read)
+
+                    if not block:
+                        break
+
+                    chunk_file.write(block)
+                    digest.update(block)
+                    bytes_written += len(block)
+
+                if bytes_written:
+                    chunk_file.flush()
+                    os.fsync(chunk_file.fileno())
+
+            if bytes_written == 0:
+                chunk_path.unlink()
+                break
+
+            chunks.append(
+                ChunkInfo(
+                    index=index,
+                    filename=chunk_filename,
+                    offset=offset,
+                    size=bytes_written,
+                    sha256=digest.hexdigest(),
+                )
+            )
+
+            offset += bytes_written
+            index += 1
+
+    return chunks
