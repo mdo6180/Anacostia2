@@ -43,6 +43,11 @@ class Graph:
             self.receiving_directory.mkdir(parents=True, exist_ok=True)
             log(f"Created receiving directory at {self.receiving_directory}.", level="info", logger=self.logger)
 
+        self.chunks_directory = self.db_folder / 'chunks'
+        if not self.chunks_directory.exists():
+            self.chunks_directory.mkdir(parents=True, exist_ok=True)
+            log(f"Created chunks directory at {self.chunks_directory}.", level="info", logger=self.logger)
+
         self.staging_directory = self.db_folder / 'staging'
         if not self.staging_directory.exists():
             self.staging_directory.mkdir(parents=True, exist_ok=True)
