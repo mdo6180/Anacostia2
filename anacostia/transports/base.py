@@ -323,10 +323,15 @@ class BaseTransport:
                     buffer_size=buffer_size
                 )
 
-                """
                 # generate merkle root and proofs for each chunk
-                merkle_root_hash = merkle_root([chunk.sha256 for chunk in chunks])
+                # merkle_root_hash = merkle_root([chunk.sha256 for chunk in chunks])
                 for index, chunk in enumerate(chunks):
+                    chunk_folder = chunks_directory / f"{transfer_id}-{chunk.filename.strip('.bin')}"
+                    chunk_folder.mkdir(parents=True, exist_ok=True)
+                    chunk_file_path = chunk_folder / chunk.filename
+                    shutil.move(str(chunks_directory / chunk.filename), str(chunk_file_path))
+
+                """
                     proof = generate_proof([c.sha256 for c in chunks], index)
                     chunk_manifest = ChunkManifest(
                         transfer_id=transfer_id,
