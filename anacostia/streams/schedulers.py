@@ -11,10 +11,10 @@ def daily_scheduler(hour: int, minute: int, stop_event: threading.Event):
     Example usage:
     ```
     class CustomStream(Stream):
-    def __iter__(self):
-        for _ in daily_scheduler(hour=8, minute=0, stop_event=self.stop_event):
-            # Perform daily polling actions here
-            yield artifact
+        def __iter__(self):
+            for _ in daily_scheduler(hour=8, minute=0, stop_event=self.stop_event):
+                # Perform daily polling actions here
+                yield artifact
     ```
     """
 
