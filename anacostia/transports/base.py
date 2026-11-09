@@ -310,52 +310,6 @@ class BaseTransport:
             approximate_total_size = gzip_size + db_size + 1024  # add 1KB for the transfer manifest and signature files
             num_chunks = ceil(approximate_total_size / partition_size)
 
-            if num_chunks > 1:
-                # partition the .tar.gz file into chunks and hash each chunk
-                chunks_directory = package_path / "chunks"
-                chunks_directory.mkdir(parents=True, exist_ok=True)
-
-                chunks: list[ChunkInfo] = partition_file(
-                    source_path=gzip_path,
-                    chunks_directory=chunks_directory,
-                    chunk_size=partition_size,
-                    buffer_size=buffer_size
-                )
-
-                # generate merkle root and proofs for each chunk
-                hashes = [bytes.fromhex(chunk.sha256) for chunk in chunks]
-                root = merkle_root(hashes).hex()
-                for chunk in chunks:
-                    chunk_folder = chunks_directory / f"{transfer_id}-{chunk.filename.strip('.bin')}"
-                    chunk_folder.mkdir(parents=True, exist_ok=True)
-                    chunk_file_path = chunk_folder / chunk.filename
-                    shutil.move(str(chunks_directory / chunk.filename), str(chunk_file_path))
-
-                    chunk_manifest_path = chunk_folder / "chunk_manifest.json"
-                    with chunk_manifest_path.open("x", encoding="utf-8") as manifest_file:
-                        proof = generate_proof(hashes, leaf_index=chunk.index)
-                        proof = [ProofEntry(side=entry.side, hash=entry.hash.hex()) for entry in proof]
-
-                        chunk_manifest = ChunkManifest(
-                            transfer_id=transfer_id,
-                            chunk_count=num_chunks,
-                            chunk_info=chunk,
-                            merkle_root=root,
-                            merkle_leaf_index=chunk.index,      # Note: leaf index is the index of the chunk in the list of chunks
-                            merkle_proof=proof,
-                        )
-
-                        json.dump(
-                            {
-                                **asdict(chunk_manifest),
-                                "chunk_info": asdict(chunk),
-                                "merkle_proof": [asdict(entry) for entry in proof],
-                            },
-                            manifest_file,
-                            indent=2,
-                        )
-                        manifest_file.write("\n")
-
             # create the transfer manifest
             transfer_manifest = TransferManifest(
                 transfer_id=transfer_id,
@@ -395,6 +349,56 @@ class BaseTransport:
                     indent=4
                 )
                 signature_file.write("\n")
+
+            if num_chunks > 1:
+                # partition the .tar.gz file into chunks and hash each chunk
+                chunks_directory = package_path / "chunks"
+                chunks_directory.mkdir(parents=True, exist_ok=True)
+
+                chunks: list[ChunkInfo] = partition_file(
+                    source_path=gzip_path,
+                    chunks_directory=chunks_directory,
+                    chunk_size=partition_size,
+                    buffer_size=buffer_size
+                )
+
+                # generate merkle root and proofs for each chunk
+                hashes = [bytes.fromhex(chunk.sha256) for chunk in chunks]
+                root = merkle_root(hashes).hex()
+                for chunk in chunks:
+                    chunk_folder = chunks_directory / f"{transfer_id}-{chunk.filename.strip('.bin')}"
+                    chunk_folder.mkdir(parents=True, exist_ok=True)
+                    chunk_file_path = chunk_folder / chunk.filename
+
+                    # Move the chunk file to the chunk folder and copy the transfer manifest and signature files to the chunk folder
+                    shutil.move(str(chunks_directory / chunk.filename), str(chunk_file_path))
+                    shutil.copy2(str(transfer_manifest_path), str(chunk_folder / "transfer_manifest.json"))
+                    shutil.copy2(str(transfer_manifest_signature_path), str(chunk_folder / "signature.json"))
+
+                    chunk_manifest_path = chunk_folder / "chunk_manifest.json"
+                    with chunk_manifest_path.open("x", encoding="utf-8") as manifest_file:
+                        proof = generate_proof(hashes, leaf_index=chunk.index)
+                        proof = [ProofEntry(side=entry.side, hash=entry.hash.hex()) for entry in proof]
+
+                        chunk_manifest = ChunkManifest(
+                            transfer_id=transfer_id,
+                            chunk_count=num_chunks,
+                            chunk_info=chunk,
+                            merkle_root=root,
+                            merkle_leaf_index=chunk.index,      # Note: leaf index is the index of the chunk in the list of chunks
+                            merkle_proof=proof,
+                        )
+
+                        json.dump(
+                            {
+                                **asdict(chunk_manifest),
+                                "chunk_info": asdict(chunk),
+                                "merkle_proof": [asdict(entry) for entry in proof],
+                            },
+                            manifest_file,
+                            indent=2,
+                        )
+                        manifest_file.write("\n")
 
             self.record_transfer(
                 manifest_hash=transfer_manifest_signature.manifest_hash,
