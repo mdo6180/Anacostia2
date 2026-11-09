@@ -69,11 +69,8 @@ class CustomURLStream(URLEndpointStream):
                     data = data_response.json()
 
                     for item in data["items"]:
-                        artifact_location = {
-                            "url": f"{self.data_url}/{item['id']}"
-                        }
                         artifact = Artifact(
-                            location=artifact_location,
+                            location={"url": f"{self.data_url}/{item['id']}"},
                             hash=hash_string(json.dumps(item))
                         )
                         self.register_artifact(
