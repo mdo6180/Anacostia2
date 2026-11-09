@@ -67,25 +67,21 @@ class CustomURLStream(URLEndpointStream):
 
                 if data_response.status_code == 200:
                     data = data_response.json()
-                    items = data["items"]
-                    content = json.dumps(data)
 
-                    artifact_location = {
-                        "url": self.data_url,
-                        "min_id": items[0]["id"] if items else None,
-                        "max_id": items[-1]["id"] if items else None,
-                    }
-
-                    artifact = Artifact(
-                        location=artifact_location,
-                        hash=hash_string(content)
-                    )
-                    self.register_artifact(
-                        artifact, 
-                        metadata={"min_id": artifact_location["min_id"], "max_id": artifact_location["max_id"]}, 
-                        content=content
-                    )
-                    yield artifact
+                    for item in data["items"]:
+                        artifact_location = {
+                            "url": f"{self.data_url}/{item['id']}"
+                        }
+                        artifact = Artifact(
+                            location=artifact_location,
+                            hash=hash_string(json.dumps(item))
+                        )
+                        self.register_artifact(
+                            artifact, 
+                            metadata={"item_id": item["id"]}, 
+                            content=json.dumps(item)
+                        )
+                        yield artifact
 
                 else:
                     log(f"Data endpoint failed with status code: {data_response.status_code}", level="error", logger=self.logger)
@@ -99,7 +95,7 @@ class CustomURLStream(URLEndpointStream):
 
 # Assemble the first stage of the pipeline with a stream, consumer, producer, and transport
 stream = CustomURLStream(name="url_stream", url="http://127.0.0.1:8000", logger=logger, poll_interval=5.0)
-stream_consumer_odd = Consumer(name="stream_consumer_odd", stream=stream, logger=logger)
+stream_consumer_odd = Consumer(name="stream_consumer_odd", stream=stream, bundle_size=2, logger=logger)
 producer = Producer(name="test_producer", directory=producer_path, logger=logger)
 stage = Stage(name="TestNode", consumers=[stream_consumer_odd], producers=[producer], logger=logger)
 
@@ -111,28 +107,25 @@ graph = Graph(name="Pipeline1", nodes=[stage], db_folder=db_folder_path, logger=
 def node_func():
     for bundle in stream_consumer_odd:
         with stage.stage_run() as staging_directory:
-            # Process the bundle and write to the staging directory
-            for artifact in bundle:
-                artifact_hash = artifact.hash
 
-                content = stream.get_artifact_content(artifact_hash)
-                content = json.loads(content)
-                items = [item["name"] for item in content["items"]]
+            artifact_hashes = [artifact.hash for artifact in bundle]
+            artifact_contents = [stream.get_artifact_content(artifact_hash) for artifact_hash in artifact_hashes]
+            items = [json.loads(content) for content in artifact_contents]
 
-                # Write the content to a file in the staging directory
-                output_file_path = staging_directory / f"output_{stage.run_id}.txt"
-                with open(output_file_path, 'w') as f:
-                    for item in items:
-                        f.write(str(item) + "\n")
+            # Write the content to a file in the staging directory
+            output_file_path = staging_directory / f"output_{stage.run_id}.txt"
+            with open(output_file_path, 'w') as f:
+                for item in items:
+                    f.write(item["name"] + "\n")
 
-                # Commit the output artifact to the producer
-                committed_path = producer_path / f"output_{stage.run_id}.txt"
-                committed_artifact = producer.commit_artifact(
-                    artifact_staging_path=output_file_path,
-                    artifact_final_path=committed_path
-                ) 
+            # Commit the output artifact to the producer
+            committed_path = producer_path / f"output_{stage.run_id}.txt"
+            committed_artifact = producer.commit_artifact(
+                artifact_staging_path=output_file_path,
+                artifact_final_path=committed_path
+            ) 
 
-                log(f"Processed items: [{items}] content written to: {output_file_path}", level="info", logger=logger)
+            log(f"Processed items: [{items}] content written to: {output_file_path}", level="info", logger=logger)
 
 
 # 3. Start the pipeline
