@@ -2,7 +2,6 @@ from logging import Logger
 import os
 from pathlib import Path
 from collections.abc import Iterator
-import time
 from typing import Set
 
 from anacostia.streams.base import Stream
@@ -46,7 +45,7 @@ class DirectoryStream(Stream):
         and yield newly discovered artifacts in chronological order.
         """
 
-        while True:
+        while not self.stop_event.is_set():
 
             # Current files in the directory.
             current_paths: Set = {
@@ -85,4 +84,4 @@ class DirectoryStream(Stream):
                 yield artifact  # yield an Artifact object to the consumer
 
             # IMPORTANT: prevent polling from blocking the main thread.
-            time.sleep(self.poll_interval)
+            self.stop_event.wait(self.poll_interval)  # Use stop_event to allow graceful exit

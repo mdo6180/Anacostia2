@@ -167,6 +167,7 @@ class Consumer:
         return self
 
     def stop(self):
+        self.stream.stop()  # signal the stream to stop polling for new artifacts
         self._stop.set()
 
     def get_using_artifacts(self) -> List[Artifact]:

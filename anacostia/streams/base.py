@@ -2,6 +2,7 @@ import logging
 from typing import Any, List
 from collections.abc import Iterator
 import json
+import threading
 
 from anacostia.utils.connection import ConnectionManager
 from anacostia.utils.types import Artifact, JsonDict
@@ -31,6 +32,14 @@ class Stream:
         self.provenance_graph_table_name = "provenance_graph"
 
         self.pipeline_name = None
+
+        self.stop_event = threading.Event()
+
+    def stop(self):
+        """
+        Set the stop_event to signal the stream to stop polling for new artifacts.
+        """
+        self.stop_event.set()
 
     def initialize_db_connection(self, filename: str):
         self.conn_manager = ConnectionManager(db_path=filename, logger=self.logger)

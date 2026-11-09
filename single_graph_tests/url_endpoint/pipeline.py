@@ -2,7 +2,6 @@ import json
 from pathlib import Path
 import argparse
 import logging
-import time
 import requests
 
 from anacostia.streams.url import URLEndpointStream
@@ -61,7 +60,7 @@ class CustomURLStream(URLEndpointStream):
         self.data_url = f"{url}/data"
 
     def __iter__(self):
-        while True:
+        while not self.stop_event.is_set():
             try:
                 data_response = requests.get(self.data_url, timeout=5)
 
@@ -87,7 +86,7 @@ class CustomURLStream(URLEndpointStream):
                 log(f"Data request failed: {e}", level="error", logger=self.logger)
 
             # IMPORTANT: prevent polling from blocking the main thread.
-            time.sleep(self.poll_interval)
+            self.stop_event.wait(self.poll_interval)  # Use stop_event to allow graceful exit
 
 
 # Assemble the first stage of the pipeline with a stream, consumer, producer, and transport
