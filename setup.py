@@ -48,6 +48,7 @@ setup(
         "httpx" 
     ],
     extras_require={
-        "aws": ["boto3"]
+        "aws": ["boto3"],
+        "dev": ["debugpy", "requests"]
     }
 )
