@@ -350,7 +350,21 @@ class BaseTransport:
                 )
                 signature_file.write("\n")
 
-            if num_chunks > 1:
+            self.record_transfer(
+                manifest_hash=transfer_manifest_signature.manifest_hash,
+                manifest_signature=transfer_manifest_signature.manifest_signature,  # Placeholder for actual signature
+                manifest=json.dumps(asdict(transfer_manifest))
+            )
+
+            # Copy database file to the package directory
+            self.conn_manager.copy_database(package_path / "anacostia.db")
+
+            if num_chunks == 1:
+                # Creating the final tar file before sending to receiver pipeline
+                final_tar_path = self.transfers_directory / f"{transfer_id}.tar"
+                create_deterministic_tar(package_path, final_tar_path)
+
+            elif num_chunks > 1:
                 # partition the .tar.gz file into chunks and hash each chunk
                 chunks_directory = package_path / "chunks"
                 chunks_directory.mkdir(parents=True, exist_ok=True)
@@ -375,7 +389,8 @@ class BaseTransport:
                     shutil.copy2(str(transfer_manifest_path), str(chunk_folder / "transfer_manifest.json"))
                     shutil.copy2(str(transfer_manifest_signature_path), str(chunk_folder / "signature.json"))
 
-                    chunk_manifest_path = chunk_folder / "chunk_manifest.json"
+                    # create the chunk manifest file for each chunk folder
+                    chunk_manifest_path = chunk_folder / "chunk.json"
                     with chunk_manifest_path.open("x", encoding="utf-8") as manifest_file:
                         proof = generate_proof(hashes, leaf_index=chunk.index)
                         proof = [ProofEntry(side=entry.side, hash=entry.hash.hex()) for entry in proof]
@@ -400,18 +415,8 @@ class BaseTransport:
                         )
                         manifest_file.write("\n")
 
-            self.record_transfer(
-                manifest_hash=transfer_manifest_signature.manifest_hash,
-                manifest_signature=transfer_manifest_signature.manifest_signature,  # Placeholder for actual signature
-                manifest=json.dumps(asdict(transfer_manifest))
-            )
-
-            # Copy database file to the package directory
-            self.conn_manager.copy_database(package_path / "anacostia.db")
-
-            # Creating the final tar file before sending to receiver pipeline
-            final_tar_path = self.transfers_directory / f"{transfer_id}.tar"
-            create_deterministic_tar(package_path, final_tar_path)
+                    chunk_tar = chunks_directory / f"{chunk_folder.name}.tar"
+                    create_deterministic_tar(chunk_folder, chunk_tar)
 
             self.transfer_artifacts = []
 
