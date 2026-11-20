@@ -94,3 +94,100 @@ def partition_file(
             index += 1
 
     return chunks
+
+
+
+def recombine_file(
+    chunks_directory: str | Path,
+    output_path: str | Path,
+    manifests: list[ChunkManifest],
+    buffer_size: int = 1024 * 1024,
+) -> Path:
+    """Validate and recombine chunks belonging to a single transfer."""
+    chunks_directory = Path(chunks_directory).resolve()
+    output_path = Path(output_path).resolve()
+
+    if not manifests:
+        raise ValueError("No chunk manifests provided")
+
+    if buffer_size <= 0:
+        raise ValueError("buffer_size must be greater than zero")
+
+    manifests = sorted(
+        manifests,
+        key=lambda manifest: manifest.chunk_info.index,
+    )
+
+    reference = manifests[0]
+
+    if len(manifests) != reference.chunk_count:
+        raise ValueError("Incomplete transfer")
+
+    offset = 0
+
+    # Validate manifest consistency.
+    for expected_index, manifest in enumerate(manifests):
+        chunk = manifest.chunk_info
+
+        if manifest.transfer_id != reference.transfer_id:
+            raise ValueError("Transfer ID mismatch")
+
+        if manifest.chunk_count != reference.chunk_count:
+            raise ValueError("Chunk count mismatch")
+
+        if manifest.merkle_root != reference.merkle_root:
+            raise ValueError("Merkle root mismatch")
+
+        if chunk.index != expected_index:
+            raise ValueError("Missing or duplicate chunk index")
+
+        if chunk.offset != offset:
+            raise ValueError("Invalid chunk offset")
+
+        if manifest.merkle_leaf_index != chunk.index:
+            raise ValueError("Merkle leaf index mismatch")
+
+        if chunk.size <= 0:
+            raise ValueError("Invalid chunk size")
+
+        if chunk.filename != f"chunk-{chunk.index:06d}.bin":
+            raise ValueError("Invalid chunk filename")
+
+        offset += chunk.size
+
+    # Reconstruct the original file.
+    output = output_path.open("xb")
+
+    try:
+        with output:
+            for manifest in manifests:
+                chunk = manifest.chunk_info
+                chunk_path = chunks_directory / chunk.filename
+
+                digest = hashlib.sha256()
+                bytes_read = 0
+
+                with chunk_path.open("rb") as chunk_file:
+                    while block := chunk_file.read(buffer_size):
+                        output.write(block)
+                        digest.update(block)
+                        bytes_read += len(block)
+
+                if bytes_read != chunk.size:
+                    raise ValueError(
+                        f"Size mismatch: {chunk.filename}"
+                    )
+
+                if digest.hexdigest() != chunk.sha256:
+                    raise ValueError(
+                        f"Hash mismatch: {chunk.filename}"
+                    )
+
+            output.flush()
+            os.fsync(output.fileno())
+
+    except BaseException:
+        output_path.unlink(missing_ok=True)
+        raise
+
+    return output_path
