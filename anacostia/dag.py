@@ -58,6 +58,11 @@ class Graph:
             self.storage_directory.mkdir(parents=True, exist_ok=True)
             log(f"Created storage directory at {self.storage_directory}.", level="info", logger=self.logger)
 
+        self.junk_directory = self.db_folder / 'junk'
+        if not self.junk_directory.exists():
+            self.junk_directory.mkdir(parents=True, exist_ok=True)
+            log(f"Created junk directory at {self.junk_directory}.", level="info", logger=self.logger)
+
         self.conn_manager = ConnectionManager(self.db_path, logger=self.logger)
         self.conn_manager.create_global_tables()
 
