@@ -92,6 +92,17 @@ class Graph:
                 transport.setup()
                 transport.set_pipeline_name(self.name)  # Set the pipeline name for the transport to the graph's name
 
+    def create_temp_directory(self, transfer_package: Path):
+        chunk_json = transfer_package / "chunk.json"
+        with chunk_json.open("r", encoding="utf-8") as f:
+            chunk_manifest = json.load(f)
+            transfer_id = chunk_manifest["transfer_id"]
+            temp_directory = self.chunks_directory / f"temp_{transfer_id}"
+            if not temp_directory.exists():
+                temp_directory.mkdir(parents=True, exist_ok=True)
+                log(f"Created temporary directory at {temp_directory} for transfer package {transfer_package}.", level="info", logger=self.logger)
+            return temp_directory
+
     def monitor_receiving_directory(self):
         log(f"Monitoring receiving directory at {self.receiving_directory}.", level="info", logger=self.logger)
         while self._stop.is_set() is False:
@@ -103,28 +114,38 @@ class Graph:
                     try:
                         with tarfile.open(transfer_package, "r") as tar:
                             contents = [Path(member.name) for member in tar.getmembers()]
-                            transfer_id = contents[0]   # first member of the tar file is the name of the transfer folder, which is also the transfer_id
+                            transfer_folder = contents[0]   # first member of the tar file is the name of the transfer folder, which is also the transfer_id
 
-                            if transfer_id / "transfer_manifest.json" not in contents:
+                            # if a chunk.json file is found in the tar file, then we can assume this transfer package is a chunked transfer
+                            # and we can move it to the chunks directory.
+                            if transfer_folder / "chunk.json" in contents:
+                                log(f"Transfer package {transfer_package} contains a chunk.json. Moving to chunks directory.", level="info", logger=self.logger)
+
+                                with tar.extractfile(str(transfer_folder / "chunk.json")) as chunk_json_file:
+                                    chunk_manifest = json.load(chunk_json_file)
+                                    transfer_id = chunk_manifest["transfer_id"]
+                                    temp_folder = self.chunks_directory / f"temp_{transfer_id}"
+                                    if not temp_folder.exists():
+                                        temp_folder.mkdir(parents=True, exist_ok=True)
+                                        log(f"Created temporary directory at {temp_folder} for transfer package {transfer_package}.", level="info", logger=self.logger)
+
+                                    transfer_package.rename(temp_folder / transfer_package.name)
+
+                            if transfer_folder / "transfer_manifest.json" not in contents:
                                 log(f"Transfer package {transfer_package} does not contain a transfer_manifest.json. Skipping.", level="warning", logger=self.logger)
                                 continue
 
-                            if transfer_id / "signature.json" not in contents:
+                            if transfer_folder / "signature.json" not in contents:
                                 log(f"Transfer package {transfer_package} does not contain a signature.json. Skipping.", level="warning", logger=self.logger)
                                 continue
 
-                            if transfer_id / "anacostia.db" not in contents:
+                            if transfer_folder / "anacostia.db" not in contents:
                                 log(f"Transfer package {transfer_package} does not contain anacostia.db. Skipping.", level="warning", logger=self.logger)
                                 continue
 
-                            # if no chunk.json file is found in the tar file, then we can assume this transfer package is not a chunked transfer
-                            # and we can immediately move it to the desired stream directory.
-                            if transfer_id / "chunk.json" not in contents:
-                                log(f"Transfer package {transfer_package} does not contain a chunk.json. Moving to stream directory.", level="warning", logger=self.logger)
-
                             with (
-                                tar.extractfile(str(transfer_id / "transfer_manifest.json")) as manifest_file, 
-                                tar.extractfile(str(transfer_id / "signature.json")) as signature_file
+                                tar.extractfile(str(transfer_folder / "transfer_manifest.json")) as manifest_file, 
+                                tar.extractfile(str(transfer_folder / "signature.json")) as signature_file
                             ):
                                 manifest_signature = json.load(signature_file)
                                 expected_sha256 = manifest_signature['manifest_hash']

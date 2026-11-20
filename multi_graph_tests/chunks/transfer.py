@@ -14,12 +14,15 @@ dest_path = tests_path / "pipeline2" / ".anacostia" / "receiving"
 
 if __name__ == "__main__":
     for transport_package in src_path.iterdir():
-        if transport_package.is_file() and transport_package.suffix == ".tar":
-            dest_file_path = dest_path / transport_package.name
+        chunks_folder = transport_package / "chunks"
 
-            if args.copy:
-                shutil.copy2(transport_package, dest_file_path)
-                print(f"Copied {transport_package} to {dest_file_path}")
-            else:
-                transport_package.rename(dest_file_path)
-                print(f"Moved {transport_package} to {dest_file_path}")
+        for chunk in chunks_folder.iterdir():
+            if chunk.is_file() and chunk.suffix == ".tar":
+                dest_chunk_path = dest_path / chunk.name
+
+                if args.copy:
+                    shutil.copy2(chunk, dest_chunk_path)
+                    print(f"Copied {chunk} to {dest_chunk_path}")
+                else:
+                    chunk.rename(dest_chunk_path)
+                    print(f"Moved {chunk} to {dest_chunk_path}")
