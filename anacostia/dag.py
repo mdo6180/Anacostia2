@@ -291,6 +291,14 @@ class Graph:
 
         log(f"Stopped monitoring staging directory at {self.staging_directory}.", level="info", logger=self.logger)
 
+    def monitor_chunks_directory(self):
+        log(f"Monitoring chunks directory at {self.chunks_directory}.", level="info", logger=self.logger)
+        while self._stop.is_set() is False:
+
+            time.sleep(0.2)  # Sleep for a short duration to avoid busy waiting
+
+        log(f"Stopped monitoring chunks directory at {self.chunks_directory}.", level="info", logger=self.logger)
+
     def start(self):
         log(f"Starting graph '{self.name}' with {len(self.nodes)} nodes.", level="info", logger=self.logger)
         for node in self.nodes:
@@ -309,13 +317,21 @@ class Graph:
             daemon=True
         )
         self.staging_directory_monitor_thread.start()
-    
+
+        self.chunks_directory_monitor_thread = threading.Thread(
+            name=f"{self.name}-chunks-monitor",
+            target=self.monitor_chunks_directory,
+            daemon=True
+        )
+        self.chunks_directory_monitor_thread.start()
+
     def join(self):
         for node in self.nodes:
             node.join()
 
         self.receiving_directory_monitor_thread.join()
         self.staging_directory_monitor_thread.join()
+        self.chunks_directory_monitor_thread.join()
 
     def stop(self):
         log(f"Stopping graph '{self.name}' with {len(self.nodes)} nodes.", level="info", logger=self.logger)
