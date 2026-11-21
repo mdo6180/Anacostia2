@@ -97,17 +97,6 @@ class Graph:
                 transport.setup()
                 transport.set_pipeline_name(self.name)  # Set the pipeline name for the transport to the graph's name
 
-    def create_temp_directory(self, transfer_package: Path):
-        chunk_json = transfer_package / "chunk.json"
-        with chunk_json.open("r", encoding="utf-8") as f:
-            chunk_manifest = json.load(f)
-            transfer_id = chunk_manifest["transfer_id"]
-            temp_directory = self.chunks_directory / f"temp_{transfer_id}"
-            if not temp_directory.exists():
-                temp_directory.mkdir(parents=True, exist_ok=True)
-                log(f"Created temporary directory at {temp_directory} for transfer package {transfer_package}.", level="info", logger=self.logger)
-            return temp_directory
-
     def monitor_receiving_directory(self):
         log(f"Monitoring receiving directory at {self.receiving_directory}.", level="info", logger=self.logger)
         while self._stop.is_set() is False:
