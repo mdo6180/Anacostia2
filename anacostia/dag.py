@@ -284,7 +284,11 @@ class Graph:
                             contents = [Path(member.name) for member in tar.getmembers()]
 
                             chunk_folder = contents[0]   # first member of the tar file is the name of the chunk folder, which is also the transfer_id
-                            with tar.extractfile(str(chunk_folder / "transfer_manifest.json")) as manifest_file:
+                            with (
+                                tar.extractfile(str(chunk_folder / "transfer_manifest.json")) as manifest_file,
+                                tar.extractfile(str(chunk_folder / "signature.json")) as signature_file,
+                                tar.extractfile(str(chunk_folder / "chunk.json")) as chunk_manifest_file
+                            ):
                                 manifest = json.load(manifest_file)
                                 destination_pipeline_name = manifest["destination_pipeline_name"]
                                 if destination_pipeline_name != self.name:
@@ -297,6 +301,31 @@ class Graph:
                                 temp_extract_dir = self.chunks_directory / transfer_id
                                 if not temp_extract_dir.exists():
                                     temp_extract_dir.mkdir(parents=True, exist_ok=True)
+
+                                temp_chunks_dir = temp_extract_dir / "chunks"
+                                if not temp_chunks_dir.exists():
+                                    temp_chunks_dir.mkdir(parents=True, exist_ok=True)
+
+                                # Save transfer_manifest.json
+                                with open(temp_extract_dir / "transfer_manifest.json", "w") as f:
+                                    json.dump(manifest, f, indent=4)
+
+                                # Save signature.json
+                                with open(temp_extract_dir / "signature.json", "w") as f:
+                                    json.dump(json.load(signature_file), f, indent=4)
+
+                                # Transfer over chunk.json and chunk-*.bin files to the temp_chunks_dir
+                                chunk_manifest = json.load(chunk_manifest_file)
+                                chunk_filename = Path(chunk_manifest["chunk_info"]["filename"])
+
+                                temp_chunk_json_path = temp_chunks_dir / f"{chunk_filename.stem}.json"
+                                with open(temp_chunk_json_path, "w") as f:
+                                    json.dump(chunk_manifest, f, indent=4)
+
+                                # Extract the chunk binary file to the temp_chunks_dir
+                                with tar.extractfile(str(chunk_folder / chunk_filename)) as chunk_file:
+                                    with open(temp_chunks_dir / chunk_filename.name, "wb") as f:
+                                        shutil.copyfileobj(chunk_file, f)
 
                     except Exception as e:
                         log(f"Failed to process chunk package {chunk_tar}: {e}", level="error", logger=self.logger)
