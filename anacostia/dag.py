@@ -17,6 +17,7 @@ from anacostia.utils.connection import ConnectionManager, AttachedConnectionMana
 from anacostia.utils.logging import log
 from anacostia.utils.hashing import hash_file_object
 from anacostia.utils.extraction import inspect_tar_gz, extract_tar_gz
+from anacostia.utils.merkle_tree import ProofEntry, verify_proof
 
 sql = str   # alias of the str type for syntax highlighting using the Python Inline Source Syntax Highlighting extension by Sam Willis in VSCode.
 
@@ -296,6 +297,7 @@ class Graph:
                                     continue
 
                                 transfer_id = manifest["transfer_id"]
+                                chunk_count = manifest["chunk_count"]
 
                                 # create a temporary directory to extract the chunk tar file
                                 temp_extract_dir = self.chunks_directory / transfer_id
@@ -317,6 +319,11 @@ class Graph:
                                 # Transfer over chunk.json and chunk-*.bin files to the temp_chunks_dir
                                 chunk_manifest = json.load(chunk_manifest_file)
                                 chunk_filename = Path(chunk_manifest["chunk_info"]["filename"])
+                                expected_chunk_hash = chunk_manifest["chunk_info"]["sha256"]
+                                merkle_root = chunk_manifest["merkle_root"]
+                                merkle_leaf_index = chunk_manifest["merkle_leaf_index"]
+                                merkle_proof = chunk_manifest["merkle_proof"]
+                                merkle_proof = [ProofEntry(side=entry["side"], hash=bytes.fromhex(entry["hash"])) for entry in merkle_proof]
 
                                 temp_chunk_json_path = temp_chunks_dir / f"{chunk_filename.stem}.json"
                                 with open(temp_chunk_json_path, "w") as f:
@@ -324,6 +331,12 @@ class Graph:
 
                                 # Extract the chunk binary file to the temp_chunks_dir
                                 with tar.extractfile(str(chunk_folder / chunk_filename)) as chunk_file:
+                                    chunk_hash = hash_file_object(chunk_file)
+
+                                    if not verify_proof(bytes.fromhex(chunk_hash), merkle_proof, bytes.fromhex(merkle_root)):
+                                        log(f"Merkle proof verification failed for chunk {chunk_filename} in chunk package {chunk_tar}. Skipping.", level="error", logger=self.logger)
+                                        continue
+
                                     with open(temp_chunks_dir / chunk_filename.name, "wb") as f:
                                         shutil.copyfileobj(chunk_file, f)
 
