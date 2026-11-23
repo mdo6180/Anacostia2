@@ -7,6 +7,8 @@ from logging import Logger
 from pathlib import Path
 import tarfile
 import os
+import hashlib
+import tarfile
 
 from anacostia.streams.base import Stream
 from anacostia.streams.filesystem import DirectoryStream
@@ -44,9 +46,10 @@ class Graph:
             log(f"Created receiving directory at {self.receiving_directory}.", level="info", logger=self.logger)
 
         self.chunks_directory = self.db_folder / 'chunks'
-        if not self.chunks_directory.exists():
-            self.chunks_directory.mkdir(parents=True, exist_ok=True)
-            log(f"Created chunks directory at {self.chunks_directory}.", level="info", logger=self.logger)
+        self.chunks_receiving_directory = self.chunks_directory / 'receiving'
+        if not self.chunks_receiving_directory.exists():
+            self.chunks_receiving_directory.mkdir(parents=True, exist_ok=True)
+            log(f"Created chunks directory and chunks receiving directory at {self.chunks_receiving_directory}.", level="info", logger=self.logger)
 
         self.staging_directory = self.db_folder / 'staging'
         if not self.staging_directory.exists():
@@ -113,17 +116,8 @@ class Graph:
                             # if a chunk.json file is found in the tar file, then we can assume this transfer package is a chunked transfer
                             # and we can move it to the chunks directory.
                             if transfer_folder / "chunk.json" in contents:
-                                log(f"Transfer package {transfer_package} contains a chunk.json. Moving to chunks directory.", level="info", logger=self.logger)
-
-                                with tar.extractfile(str(transfer_folder / "chunk.json")) as chunk_json_file:
-                                    chunk_manifest = json.load(chunk_json_file)
-                                    transfer_id = chunk_manifest["transfer_id"]
-                                    temp_folder = self.chunks_directory / f"temp_{transfer_id}"
-                                    if not temp_folder.exists():
-                                        temp_folder.mkdir(parents=True, exist_ok=True)
-                                        log(f"Created temporary directory at {temp_folder} for transfer package {transfer_package}.", level="info", logger=self.logger)
-
-                                    transfer_package.rename(temp_folder / transfer_package.name)
+                                log(f"Transfer package {transfer_package} contains a chunk.json. Moving to chunks receiving directory.", level="info", logger=self.logger)
+                                transfer_package.rename(self.chunks_receiving_directory / transfer_package.name)
 
                             if transfer_folder / "transfer_manifest.json" not in contents:
                                 log(f"Transfer package {transfer_package} does not contain a transfer_manifest.json. Skipping.", level="warning", logger=self.logger)
@@ -281,12 +275,36 @@ class Graph:
         log(f"Stopped monitoring staging directory at {self.staging_directory}.", level="info", logger=self.logger)
 
     def monitor_chunks_directory(self):
-        log(f"Monitoring chunks directory at {self.chunks_directory}.", level="info", logger=self.logger)
+        log(f"Monitoring chunks directory at {self.chunks_receiving_directory}.", level="info", logger=self.logger)
         while self._stop.is_set() is False:
+            for chunk_tar in self.chunks_receiving_directory.iterdir():
+                if chunk_tar.is_file() and chunk_tar.suffix == ".tar":
+                    try:
+                        with tarfile.open(chunk_tar, "r") as tar:
+                            contents = [Path(member.name) for member in tar.getmembers()]
+
+                            chunk_folder = contents[0]   # first member of the tar file is the name of the chunk folder, which is also the transfer_id
+                            with tar.extractfile(str(chunk_folder / "transfer_manifest.json")) as manifest_file:
+                                manifest = json.load(manifest_file)
+                                destination_pipeline_name = manifest["destination_pipeline_name"]
+                                if destination_pipeline_name != self.name:
+                                    log(f"Destination pipeline '{destination_pipeline_name}' does not match current graph name '{self.name}'. Skipping chunk package {chunk_tar}.", level="error", logger=self.logger)
+                                    continue
+
+                                transfer_id = manifest["transfer_id"]
+
+                                # create a temporary directory to extract the chunk tar file
+                                temp_extract_dir = self.chunks_directory / transfer_id
+                                if not temp_extract_dir.exists():
+                                    temp_extract_dir.mkdir(parents=True, exist_ok=True)
+
+                    except Exception as e:
+                        log(f"Failed to process chunk package {chunk_tar}: {e}", level="error", logger=self.logger)
+                        continue
 
             time.sleep(0.2)  # Sleep for a short duration to avoid busy waiting
 
-        log(f"Stopped monitoring chunks directory at {self.chunks_directory}.", level="info", logger=self.logger)
+        log(f"Stopped monitoring chunks directory at {self.chunks_receiving_directory}.", level="info", logger=self.logger)
 
     def start(self):
         log(f"Starting graph '{self.name}' with {len(self.nodes)} nodes.", level="info", logger=self.logger)
