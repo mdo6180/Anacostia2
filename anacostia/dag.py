@@ -321,7 +321,6 @@ class Graph:
                                 chunk_filename = Path(chunk_manifest["chunk_info"]["filename"])
                                 expected_chunk_hash = chunk_manifest["chunk_info"]["sha256"]
                                 merkle_root = chunk_manifest["merkle_root"]
-                                merkle_leaf_index = chunk_manifest["merkle_leaf_index"]
                                 merkle_proof = chunk_manifest["merkle_proof"]
                                 merkle_proof = [ProofEntry(side=entry["side"], hash=bytes.fromhex(entry["hash"])) for entry in merkle_proof]
 
@@ -332,6 +331,10 @@ class Graph:
                                 # Extract the chunk binary file to the temp_chunks_dir
                                 with tar.extractfile(str(chunk_folder / chunk_filename)) as chunk_file:
                                     chunk_hash = hash_file_object(chunk_file)
+
+                                    if chunk_hash != expected_chunk_hash:
+                                        log(f"SHA-256 hash mismatch for chunk {chunk_filename} in chunk package {chunk_tar}. Expected: {expected_chunk_hash}, Actual: {chunk_hash}. Skipping.", level="error", logger=self.logger)
+                                        continue
 
                                     if not verify_proof(bytes.fromhex(chunk_hash), merkle_proof, bytes.fromhex(merkle_root)):
                                         log(f"Merkle proof verification failed for chunk {chunk_filename} in chunk package {chunk_tar}. Skipping.", level="error", logger=self.logger)
