@@ -324,10 +324,6 @@ class Graph:
                                 merkle_proof = chunk_manifest["merkle_proof"]
                                 merkle_proof = [ProofEntry(side=entry["side"], hash=bytes.fromhex(entry["hash"])) for entry in merkle_proof]
 
-                                temp_chunk_json_path = temp_chunks_dir / f"{chunk_filename.stem}.json"
-                                with open(temp_chunk_json_path, "w") as f:
-                                    json.dump(chunk_manifest, f, indent=4)
-
                                 # Extract the chunk binary file to the temp_chunks_dir
                                 with tar.extractfile(str(chunk_folder / chunk_filename)) as chunk_file:
                                     chunk_hash = hash_file_object(chunk_file)
@@ -342,6 +338,10 @@ class Graph:
 
                                     with open(temp_chunks_dir / chunk_filename.name, "wb") as f:
                                         shutil.copyfileobj(chunk_file, f)
+
+                                temp_chunk_json_path = temp_chunks_dir / f"{chunk_filename.stem}.json"
+                                with open(temp_chunk_json_path, "w") as f:
+                                    json.dump(chunk_manifest, f, indent=4)
 
                     except Exception as e:
                         log(f"Failed to process chunk package {chunk_tar}: {e}", level="error", logger=self.logger)
