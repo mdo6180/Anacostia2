@@ -12,6 +12,7 @@ class RemoteProducer(Producer):
         Upload an artifact to a remote server.
         Implement the logic to upload the artifact to a remote server.
         This could involve making an HTTP request, using an SDK, etc.
+        
         Recommendation: call the `register_artifact` method after a successful upload to register the artifact in the local and global database tables.
 
         :param artifact: The artifact to upload.
