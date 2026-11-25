@@ -79,11 +79,24 @@ class Producer:
     def register_artifact(self, artifact: Artifact, metadata: JsonDict = None, content: Any = None):
         """
         Register an artifact in the local and global database tables.
+        Implement your own logic to handle the artifact registration (hashing, storing, etc.) and then call this method to register the artifact.
 
         Args:
             artifact (Artifact): The artifact to register.
             metadata (JsonDict, optional): Optional metadata associated with the artifact. Defaults to None.
             content (Any, optional): Optional content associated with the artifact. Defaults to None.
+
+        **Usage**:
+        ```
+        class MyProducer(Producer):
+            def register_artifact(
+                self, file_path: Path, metadata: JsonDict = None, content: Any = None
+            ):
+                artifact_hash = hash_file(file_path)
+                artifact_location = json.dumps({"path": str(file_path)})
+                artifact = Artifact(hash=artifact_hash, location=artifact_location)
+                super().register_artifact(artifact, metadata, content)
+        ```
         """
 
         artifact_hash = artifact.hash
